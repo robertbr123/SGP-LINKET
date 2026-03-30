@@ -11,7 +11,7 @@ import psycopg2
 import psycopg2.extras
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [SYNC] %(levelname)s %(message)s",
 )
 log = logging.getLogger(__name__)
@@ -32,6 +32,8 @@ def get_db():
 
 
 def consultar_sgp(cpf: str) -> dict | None:
+    # CPF deve ter 11 dígitos; preserva zeros à esquerda
+    cpf = cpf.zfill(11)
     try:
         resp = requests.post(
             SGP_URL,
@@ -40,11 +42,16 @@ def consultar_sgp(cpf: str) -> dict | None:
         )
         resp.raise_for_status()
         data = resp.json()
+        log.debug("SGP resposta para cpf=%s: %s", cpf, data)
         contratos = data.get("contratos", [])
         if contratos:
             return contratos[0]
+        # Resposta OK mas sem contratos — loga o corpo completo para depuração
+        log.warning("SGP retornou sem contratos para cpf=%s. Resposta: %s", cpf, data)
     except requests.RequestException as e:
-        log.warning("Falha ao consultar SGP para cpf=%s: %s", cpf, e)
+        log.warning("Falha HTTP ao consultar SGP para cpf=%s: %s", cpf, e)
+    except Exception as e:
+        log.warning("Erro inesperado ao consultar SGP para cpf=%s: %s", cpf, e)
     return None
 
 
@@ -91,7 +98,6 @@ def sync_all():
             cpf = c["cpf"]
             contrato = consultar_sgp(cpf)
             if not contrato:
-                log.warning("CPF %s não encontrado no SGP, pulando.", cpf)
                 continue
 
             display = contrato.get("contratoStatusDisplay", "").lower()

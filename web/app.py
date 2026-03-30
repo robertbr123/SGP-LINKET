@@ -131,7 +131,7 @@ def index():
 def novo_cliente():
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
-        cpf = re.sub(r"\D", "", request.form.get("cpf", ""))
+        cpf = re.sub(r"\D", "", request.form.get("cpf", "")).zfill(11)
         ip = request.form.get("ip", "").strip()
         plano = request.form.get("plano", "").strip()
         vel_down = request.form.get("velocidade_down", "10").strip()
