@@ -31,6 +31,9 @@ server default {
         Auth-Type CHAP {
             chap
         }
+        Auth-Type mschap {
+            mschap
+        }
         Auth-Type MS-CHAP {
             mschap
         }
