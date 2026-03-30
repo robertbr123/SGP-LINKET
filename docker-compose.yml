@@ -1,0 +1,86 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: radius_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: radius
+      POSTGRES_USER: radius
+      POSTGRES_PASSWORD: radiuspassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - radius_net
+
+  freeradius:
+    build:
+      context: ./freeradius
+      dockerfile: Dockerfile
+    container_name: radius_freeradius
+    restart: unless-stopped
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_NAME: radius
+      DB_USER: radius
+      DB_PASS: radiuspassword
+    networks:
+      - radius_net
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: radius_web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_NAME: radius
+      DB_USER: radius
+      DB_PASS: radiuspassword
+      SGP_URL: https://linknetam.sgp.net.br/api/ura/consultacliente/
+      SGP_TOKEN: 74b3dfe5-8333-458a-adab-ea2b544d64ad
+      SGP_APP: APP
+      SECRET_KEY: troque-esta-chave-secreta
+    networks:
+      - radius_net
+
+  sync:
+    build:
+      context: ./sync
+      dockerfile: Dockerfile
+    container_name: radius_sync
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_NAME: radius
+      DB_USER: radius
+      DB_PASS: radiuspassword
+      SGP_URL: https://linknetam.sgp.net.br/api/ura/consultacliente/
+      SGP_TOKEN: 74b3dfe5-8333-458a-adab-ea2b544d64ad
+      SGP_APP: APP
+      SYNC_INTERVAL: "300"
+    networks:
+      - radius_net
+
+volumes:
+  postgres_data:
+
+networks:
+  radius_net:
+    driver: bridge

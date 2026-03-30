@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if cliente else 'Novo' }} Cliente — RADIUS Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-md-7">
+<div class="card shadow-sm">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">
+            <i class="bi bi-person-{{ 'gear' if cliente else 'plus' }}"></i>
+            {{ 'Editar Cliente' if cliente else 'Cadastrar Novo Cliente' }}
+        </h5>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Nome completo *</label>
+                <input type="text" name="nome" class="form-control"
+                       value="{{ cliente.nome if cliente else '' }}" required
+                       placeholder="Ex: João da Silva">
+            </div>
+
+            {% if not cliente %}
+            <div class="mb-3">
+                <label class="form-label">CPF *</label>
+                <input type="text" name="cpf" class="form-control" required
+                       placeholder="000.000.000-00" maxlength="14"
+                       oninput="formatCPF(this)">
+                <div class="form-text">
+                    <i class="bi bi-info-circle"></i>
+                    O sistema consultará o SGP automaticamente pelo CPF para obter o login PPPoE e status.
+                </div>
+            </div>
+            {% else %}
+            <div class="mb-3">
+                <label class="form-label">CPF</label>
+                <input type="text" class="form-control" value="{{ cliente.cpf }}" disabled>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Login PPPoE (SGP)</label>
+                <input type="text" class="form-control" value="{{ cliente.pppoe_login or '—' }}" disabled>
+                <div class="form-text">Obtido automaticamente do SGP. Senha sempre: <strong>123</strong></div>
+            </div>
+            {% endif %}
+
+            <div class="mb-3">
+                <label class="form-label">IP do cliente</label>
+                <input type="text" name="ip" class="form-control"
+                       value="{{ cliente.ip if cliente else '' }}"
+                       placeholder="Ex: 10.0.14.2 (ou deixe em branco para buscar do SGP)">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Nome do plano *</label>
+                <input type="text" name="plano" class="form-control"
+                       value="{{ cliente.plano if cliente else '' }}" required
+                       placeholder="Ex: PLANO 50M, FIBRA 100MEGA">
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-6">
+                    <label class="form-label">Velocidade Download (Mbps) *</label>
+                    <div class="input-group">
+                        <input type="number" name="velocidade_down" class="form-control"
+                               value="{{ cliente.velocidade_down if cliente else 10 }}"
+                               min="1" max="10000" required>
+                        <span class="input-group-text">Mbps</span>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Velocidade Upload (Mbps) *</label>
+                    <div class="input-group">
+                        <input type="number" name="velocidade_up" class="form-control"
+                               value="{{ cliente.velocidade_up if cliente else 5 }}"
+                               min="1" max="10000" required>
+                        <span class="input-group-text">Mbps</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if cliente %}
+            <div class="mb-3">
+                <label class="form-label">Status atual</label>
+                <span class="badge rounded-pill badge-{{ cliente.status }} fs-6">
+                    {{ cliente.status | title }}
+                </span>
+                <div class="form-text">Para atualizar o status, use "Sincronizar com SGP" na lista.</div>
+            </div>
+            {% endif %}
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-lg"></i> Salvar
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function formatCPF(input) {
+    let v = input.value.replace(/\D/g, '');
+    v = v.replace(/(\d{3})(\d)/, '$1.$2');
+    v = v.replace(/(\d{3})(\d)/, '$1.$2');
+    v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    input.value = v;
+}
+</script>
+{% endblock %}

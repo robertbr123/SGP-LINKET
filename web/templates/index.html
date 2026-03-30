@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Clientes — RADIUS Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4><i class="bi bi-people-fill"></i> Clientes PPPoE</h4>
+    <a href="{{ url_for('novo_cliente') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Novo Cliente
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Nome</th>
+                    <th>CPF</th>
+                    <th>Login PPPoE</th>
+                    <th>IP</th>
+                    <th>Plano</th>
+                    <th>Down / Up</th>
+                    <th>Status SGP</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in clientes %}
+                <tr>
+                    <td>{{ c.nome }}</td>
+                    <td>{{ c.cpf }}</td>
+                    <td><code>{{ c.pppoe_login or '—' }}</code></td>
+                    <td>{{ c.ip or '—' }}</td>
+                    <td>{{ c.plano }}</td>
+                    <td>{{ c.velocidade_down }}M / {{ c.velocidade_up }}M</td>
+                    <td>
+                        <span class="badge rounded-pill badge-{{ c.status }}">
+                            {{ c.status | title }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <a href="{{ url_for('editar_cliente', cliente_id=c.id) }}"
+                           class="btn btn-sm btn-outline-secondary" title="Editar">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <button class="btn btn-sm btn-outline-info btn-sync"
+                                data-id="{{ c.id }}" title="Sincronizar com SGP">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('excluir_cliente', cliente_id=c.id) }}"
+                              style="display:inline"
+                              onsubmit="return confirm('Remover cliente?')">
+                            <button class="btn btn-sm btn-outline-danger" title="Excluir">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">Nenhum cliente cadastrado.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.btn-sync').forEach(btn => {
+    btn.addEventListener('click', async function () {
+        const id = this.dataset.id;
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+            const r = await fetch(`/cliente/${id}/sincronizar`, { method: 'POST' });
+            const data = await r.json();
+            if (r.ok) {
+                alert(`Sincronizado!\nStatus: ${data.status}\nLogin PPPoE: ${data.pppoe_login}`);
+                location.reload();
+            } else {
+                alert('Erro: ' + (data.error || 'Falha ao sincronizar'));
+            }
+        } catch (e) {
+            alert('Erro de comunicação.');
+        }
+        this.disabled = false;
+        this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+    });
+});
+</script>
+{% endblock %}
