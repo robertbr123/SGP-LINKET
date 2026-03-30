@@ -18,7 +18,11 @@ server default {
         mschap
         suffix
         sql
-        -sql
+        if (notfound) {
+            update control {
+                &Proxy-To-Realm := "sgp_legacy"
+            }
+        }
         expiration
         logintime
         pap
