@@ -3,11 +3,11 @@ sql {
 
     dialect = "postgresql"
 
-    server = "${DB_HOST:-postgres}"
+    server = "$ENV{DB_HOST}"
     port = 5432
-    login = "${DB_USER:-radius}"
-    password = "${DB_PASS:-radiuspassword}"
-    radius_db = "${DB_NAME:-radius}"
+    login = "$ENV{DB_USER}"
+    password = "$ENV{DB_PASS}"
+    radius_db = "$ENV{DB_NAME}"
 
     acct_table1 = "radacct"
     acct_table2 = "radacct"

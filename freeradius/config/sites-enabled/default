@@ -16,11 +16,7 @@ server default {
         preprocess
         chap
         mschap
-        digest
         suffix
-        eap {
-            ok = return
-        }
         sql
         -sql
         expiration
@@ -38,7 +34,6 @@ server default {
         Auth-Type MS-CHAP {
             mschap
         }
-        eap
     }
 
     preacct {
@@ -76,5 +71,5 @@ server default {
     }
 
     pre-proxy {}
-    post-proxy { eap }
+    post-proxy {}
 }
