@@ -80,7 +80,12 @@ CREATE TABLE IF NOT EXISTS radacct (
     acctterminatecause VARCHAR(32) NOT NULL DEFAULT '',
     servicetype VARCHAR(32) DEFAULT NULL,
     framedprotocol VARCHAR(32) DEFAULT NULL,
-    framedipaddress INET DEFAULT NULL
+    framedipaddress INET DEFAULT NULL,
+    framedipv6address INET DEFAULT NULL,
+    framedipv6prefix INET DEFAULT NULL,
+    framedinterfaceid VARCHAR(44) DEFAULT NULL,
+    delegatedipv6prefix INET DEFAULT NULL,
+    class VARCHAR(64) DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS nas (
