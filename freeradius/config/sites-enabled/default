@@ -20,8 +20,9 @@ server default {
         sql
         if (notfound) {
             update control {
-                &Proxy-To-Realm := "sgp_legacy"
+                &Response-Packet-Type := Do-Not-Respond
             }
+            handled
         }
         expiration
         logintime

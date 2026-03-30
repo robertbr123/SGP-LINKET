@@ -23,14 +23,18 @@ services:
       dockerfile: Dockerfile
     container_name: radius_freeradius
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
     depends_on:
       - postgres
     environment:
-      DB_HOST: 127.0.0.1
+      DB_HOST: postgres
       DB_NAME: radius
       DB_USER: radius
       DB_PASS: radiuspassword
+    networks:
+      - radius_net
 
   web:
     build:
