@@ -1,3 +1,22 @@
+-- Tabela de planos
+CREATE TABLE IF NOT EXISTS planos (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    velocidade_down INTEGER NOT NULL DEFAULT 10,
+    velocidade_up INTEGER NOT NULL DEFAULT 5,
+    criado_em TIMESTAMP DEFAULT NOW()
+);
+
+-- Tabela de pools de IP
+CREATE TABLE IF NOT EXISTS pools (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    range_inicio VARCHAR(15) NOT NULL,
+    range_fim VARCHAR(15) NOT NULL,
+    descricao VARCHAR(200),
+    criado_em TIMESTAMP DEFAULT NOW()
+);
+
 -- Tabela de clientes
 CREATE TABLE IF NOT EXISTS clientes (
     id SERIAL PRIMARY KEY,
@@ -7,6 +26,8 @@ CREATE TABLE IF NOT EXISTS clientes (
     plano VARCHAR(100) NOT NULL,
     velocidade_down INTEGER NOT NULL DEFAULT 10,
     velocidade_up INTEGER NOT NULL DEFAULT 5,
+    plano_id INTEGER REFERENCES planos(id) ON DELETE SET NULL,
+    pool_id INTEGER REFERENCES pools(id) ON DELETE SET NULL,
     pppoe_login VARCHAR(100),
     status VARCHAR(20) NOT NULL DEFAULT 'pendente',
     criado_em TIMESTAMP DEFAULT NOW(),

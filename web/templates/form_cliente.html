@@ -51,31 +51,33 @@
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Nome do plano *</label>
-                <input type="text" name="plano" class="form-control"
-                       value="{{ cliente.plano if cliente else '' }}" required
-                       placeholder="Ex: PLANO 50M, FIBRA 100MEGA">
+                <label class="form-label">Plano *</label>
+                <select name="plano_id" class="form-select" required>
+                    <option value="">— Selecione o plano —</option>
+                    {% for p in planos %}
+                    <option value="{{ p.id }}"
+                        {% if cliente and cliente.plano_id == p.id %}selected{% endif %}>
+                        {{ p.nome }} ({{ p.velocidade_down }}M / {{ p.velocidade_up }}M)
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">
+                    <i class="bi bi-info-circle"></i>
+                    Cadastre planos em <a href="{{ url_for('gerenciar_planos') }}">Planos</a>.
+                </div>
             </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-6">
-                    <label class="form-label">Velocidade Download (Mbps) *</label>
-                    <div class="input-group">
-                        <input type="number" name="velocidade_down" class="form-control"
-                               value="{{ cliente.velocidade_down if cliente else 10 }}"
-                               min="1" max="10000" required>
-                        <span class="input-group-text">Mbps</span>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <label class="form-label">Velocidade Upload (Mbps) *</label>
-                    <div class="input-group">
-                        <input type="number" name="velocidade_up" class="form-control"
-                               value="{{ cliente.velocidade_up if cliente else 5 }}"
-                               min="1" max="10000" required>
-                        <span class="input-group-text">Mbps</span>
-                    </div>
-                </div>
+            <div class="mb-3">
+                <label class="form-label">Pool de IP</label>
+                <select name="pool_id" class="form-select">
+                    <option value="">— Sem pool —</option>
+                    {% for po in pools %}
+                    <option value="{{ po.id }}"
+                        {% if cliente and cliente.pool_id == po.id %}selected{% endif %}>
+                        {{ po.nome }} ({{ po.range_inicio }} — {{ po.range_fim }})
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
 
             {% if cliente %}

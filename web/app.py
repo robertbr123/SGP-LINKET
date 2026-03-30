@@ -121,29 +121,65 @@ def remove_radius_user(conn, login: str):
 def index():
     conn = get_db()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT * FROM clientes ORDER BY criado_em DESC")
+        cur.execute("""
+            SELECT c.*, p.nome AS plano_nome, po.nome AS pool_nome
+            FROM clientes c
+            LEFT JOIN planos p ON c.plano_id = p.id
+            LEFT JOIN pools po ON c.pool_id = po.id
+            ORDER BY c.criado_em DESC
+        """)
         clientes = cur.fetchall()
+        # Sessões ativas (online) — acctstoptime IS NULL
+        cur.execute("""
+            SELECT username FROM radacct
+            WHERE acctstoptime IS NULL
+        """)
+        online_users = {row["username"] for row in cur.fetchall()}
     conn.close()
+    for c in clientes:
+        c["online"] = c["pppoe_login"] in online_users if c["pppoe_login"] else False
     return render_template("index.html", clientes=clientes)
 
 
 @app.route("/cliente/novo", methods=["GET", "POST"])
 def novo_cliente():
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM planos ORDER BY nome")
+        planos = cur.fetchall()
+        cur.execute("SELECT * FROM pools ORDER BY nome")
+        pools = cur.fetchall()
+
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         cpf = re.sub(r"\D", "", request.form.get("cpf", ""))
         ip = request.form.get("ip", "").strip()
-        plano = request.form.get("plano", "").strip()
-        vel_down = request.form.get("velocidade_down", "10").strip()
-        vel_up = request.form.get("velocidade_up", "5").strip()
+        plano_id = request.form.get("plano_id", "").strip()
+        pool_id = request.form.get("pool_id", "").strip()
 
-        if not nome or not cpf or not plano:
+        if not nome or not cpf or not plano_id:
             flash("Nome, CPF e Plano são obrigatórios.", "danger")
-            return render_template("form_cliente.html", cliente=None)
+            conn.close()
+            return render_template("form_cliente.html", cliente=None, planos=planos, pools=pools)
 
         if len(cpf) != 11:
             flash(f"CPF inválido: deve ter 11 dígitos (recebido {len(cpf)}).", "danger")
-            return render_template("form_cliente.html", cliente=None)
+            conn.close()
+            return render_template("form_cliente.html", cliente=None, planos=planos, pools=pools)
+
+        # Buscar dados do plano selecionado
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM planos WHERE id = %s", (plano_id,))
+            plano_obj = cur.fetchone()
+
+        if not plano_obj:
+            flash("Plano selecionado não encontrado.", "danger")
+            conn.close()
+            return render_template("form_cliente.html", cliente=None, planos=planos, pools=pools)
+
+        plano_nome = plano_obj["nome"]
+        vel_down = plano_obj["velocidade_down"]
+        vel_up = plano_obj["velocidade_up"]
 
         # Consulta SGP para obter login PPPoE e status
         contrato = consultar_sgp(cpf)
@@ -153,28 +189,21 @@ def novo_cliente():
         if contrato:
             pppoe_login = contrato.get("contratoCentralLogin")
             status = status_from_sgp(contrato)
-            # Usar IP do SGP se não informado
             if not ip:
                 ip = contrato.get("servico_ip", "")
-            # Usar plano do SGP
-            if not plano:
-                plano = contrato.get("servico_plano", plano)
         else:
             flash("Aviso: não foi possível consultar o SGP. Cliente salvo como pendente.", "warning")
 
-        try:
-            vel_down = int(vel_down)
-            vel_up = int(vel_up)
-        except ValueError:
-            vel_down, vel_up = _plano_to_speeds(plano)
+        pool_id_val = int(pool_id) if pool_id else None
 
-        conn = get_db()
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO clientes (nome, cpf, ip, plano, velocidade_down, velocidade_up, pppoe_login, status)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (nome, cpf, ip, plano, vel_down, vel_up, pppoe_login, status),
+                    """INSERT INTO clientes (nome, cpf, ip, plano, velocidade_down, velocidade_up,
+                       plano_id, pool_id, pppoe_login, status)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (nome, cpf, ip, plano_nome, vel_down, vel_up,
+                     int(plano_id), pool_id_val, pppoe_login, status),
                 )
             conn.commit()
 
@@ -190,7 +219,8 @@ def novo_cliente():
 
         return redirect(url_for("index"))
 
-    return render_template("form_cliente.html", cliente=None)
+    conn.close()
+    return render_template("form_cliente.html", cliente=None, planos=planos, pools=pools)
 
 
 @app.route("/cliente/<int:cliente_id>/editar", methods=["GET", "POST"])
@@ -199,6 +229,10 @@ def editar_cliente(cliente_id):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM clientes WHERE id = %s", (cliente_id,))
         cliente = cur.fetchone()
+        cur.execute("SELECT * FROM planos ORDER BY nome")
+        planos = cur.fetchall()
+        cur.execute("SELECT * FROM pools ORDER BY nome")
+        pools = cur.fetchall()
 
     if not cliente:
         flash("Cliente não encontrado.", "danger")
@@ -208,15 +242,33 @@ def editar_cliente(cliente_id):
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         ip = request.form.get("ip", "").strip()
-        plano = request.form.get("plano", "").strip()
-        vel_down = int(request.form.get("velocidade_down", 10))
-        vel_up = int(request.form.get("velocidade_up", 5))
+        plano_id = request.form.get("plano_id", "").strip()
+        pool_id = request.form.get("pool_id", "").strip()
+
+        if not plano_id:
+            flash("Plano é obrigatório.", "danger")
+            conn.close()
+            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM planos WHERE id = %s", (plano_id,))
+            plano_obj = cur.fetchone()
+
+        if not plano_obj:
+            flash("Plano selecionado não encontrado.", "danger")
+            conn.close()
+            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
+
+        plano_nome = plano_obj["nome"]
+        vel_down = plano_obj["velocidade_down"]
+        vel_up = plano_obj["velocidade_up"]
+        pool_id_val = int(pool_id) if pool_id else None
 
         with conn.cursor() as cur:
             cur.execute(
                 """UPDATE clientes SET nome=%s, ip=%s, plano=%s, velocidade_down=%s,
-                   velocidade_up=%s, atualizado_em=NOW() WHERE id=%s""",
-                (nome, ip, plano, vel_down, vel_up, cliente_id),
+                   velocidade_up=%s, plano_id=%s, pool_id=%s, atualizado_em=NOW() WHERE id=%s""",
+                (nome, ip, plano_nome, vel_down, vel_up, int(plano_id), pool_id_val, cliente_id),
             )
         conn.commit()
 
@@ -229,7 +281,7 @@ def editar_cliente(cliente_id):
         return redirect(url_for("index"))
 
     conn.close()
-    return render_template("form_cliente.html", cliente=cliente)
+    return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
 
 
 @app.route("/cliente/<int:cliente_id>/sincronizar", methods=["POST"])
@@ -290,6 +342,103 @@ def excluir_cliente(cliente_id):
     conn.close()
     return redirect(url_for("index"))
 
+
+# ---------------------------------------------------------------------------
+# Planos CRUD
+# ---------------------------------------------------------------------------
+
+@app.route("/planos", methods=["GET", "POST"])
+def gerenciar_planos():
+    conn = get_db()
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()
+        vel_down = request.form.get("velocidade_down", "10").strip()
+        vel_up = request.form.get("velocidade_up", "5").strip()
+
+        if nome and vel_down and vel_up:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO planos (nome, velocidade_down, velocidade_up) VALUES (%s, %s, %s)",
+                        (nome, int(vel_down), int(vel_up)),
+                    )
+                conn.commit()
+                flash("Plano criado com sucesso.", "success")
+            except psycopg2.errors.UniqueViolation:
+                conn.rollback()
+                flash("Já existe um plano com este nome.", "danger")
+        else:
+            flash("Todos os campos são obrigatórios.", "danger")
+
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM planos ORDER BY nome")
+        planos = cur.fetchall()
+
+    conn.close()
+    return render_template("planos.html", planos=planos)
+
+
+@app.route("/planos/<int:plano_id>/excluir", methods=["POST"])
+def excluir_plano(plano_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM planos WHERE id = %s", (plano_id,))
+    conn.commit()
+    conn.close()
+    flash("Plano removido.", "success")
+    return redirect(url_for("gerenciar_planos"))
+
+
+# ---------------------------------------------------------------------------
+# Pools CRUD
+# ---------------------------------------------------------------------------
+
+@app.route("/pools", methods=["GET", "POST"])
+def gerenciar_pools():
+    conn = get_db()
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()
+        range_inicio = request.form.get("range_inicio", "").strip()
+        range_fim = request.form.get("range_fim", "").strip()
+        descricao = request.form.get("descricao", "").strip()
+
+        if nome and range_inicio and range_fim:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO pools (nome, range_inicio, range_fim, descricao) VALUES (%s, %s, %s, %s)",
+                        (nome, range_inicio, range_fim, descricao),
+                    )
+                conn.commit()
+                flash("Pool criado com sucesso.", "success")
+            except psycopg2.errors.UniqueViolation:
+                conn.rollback()
+                flash("Já existe um pool com este nome.", "danger")
+        else:
+            flash("Nome, IP inicial e IP final são obrigatórios.", "danger")
+
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM pools ORDER BY nome")
+        pools = cur.fetchall()
+
+    conn.close()
+    return render_template("pools.html", pools=pools)
+
+
+@app.route("/pools/<int:pool_id>/excluir", methods=["POST"])
+def excluir_pool(pool_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM pools WHERE id = %s", (pool_id,))
+    conn.commit()
+    conn.close()
+    flash("Pool removido.", "success")
+    return redirect(url_for("gerenciar_pools"))
+
+
+# ---------------------------------------------------------------------------
+# NAS CRUD
+# ---------------------------------------------------------------------------
 
 @app.route("/nas", methods=["GET", "POST"])
 def gerenciar_nas():
