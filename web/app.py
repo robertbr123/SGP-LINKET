@@ -131,7 +131,7 @@ def index():
 def novo_cliente():
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
-        cpf = re.sub(r"\D", "", request.form.get("cpf", "")).zfill(11)
+        cpf = re.sub(r"\D", "", request.form.get("cpf", ""))
         ip = request.form.get("ip", "").strip()
         plano = request.form.get("plano", "").strip()
         vel_down = request.form.get("velocidade_down", "10").strip()
@@ -139,6 +139,10 @@ def novo_cliente():
 
         if not nome or not cpf or not plano:
             flash("Nome, CPF e Plano são obrigatórios.", "danger")
+            return render_template("form_cliente.html", cliente=None)
+
+        if len(cpf) != 11:
+            flash(f"CPF inválido: deve ter 11 dígitos (recebido {len(cpf)}).", "danger")
             return render_template("form_cliente.html", cliente=None)
 
         # Consulta SGP para obter login PPPoE e status

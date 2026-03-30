@@ -32,8 +32,6 @@ def get_db():
 
 
 def consultar_sgp(cpf: str) -> dict | None:
-    # CPF deve ter 11 dígitos; preserva zeros à esquerda
-    cpf = cpf.zfill(11)
     try:
         resp = requests.post(
             SGP_URL,
