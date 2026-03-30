@@ -1,45 +1,233 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}RADIUS Manager{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #f0f2f5; }
-        .navbar-brand { font-weight: 700; letter-spacing: 1px; }
-        .badge-ativo { background-color: #198754; }
-        .badge-suspenso { background-color: #dc3545; }
-        .badge-pendente { background-color: #6c757d; }
+        :root {
+            --sidebar-width: 260px;
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-active: #2563eb;
+            --topbar-height: 60px;
+            --body-bg: #f1f5f9;
+            --card-border: #e2e8f0;
+        }
+        * { font-family: 'Inter', sans-serif; }
+        body { background-color: var(--body-bg); margin: 0; overflow-x: hidden; }
+
+        /* ---- Sidebar ---- */
+        .sidebar {
+            position: fixed; top: 0; left: 0; bottom: 0;
+            width: var(--sidebar-width);
+            background: var(--sidebar-bg);
+            z-index: 1040;
+            display: flex; flex-direction: column;
+            transition: transform .25s ease;
+        }
+        .sidebar-brand {
+            height: var(--topbar-height);
+            display: flex; align-items: center; gap: 10px;
+            padding: 0 20px;
+            color: #fff; font-weight: 700; font-size: 1.15rem;
+            letter-spacing: .5px; border-bottom: 1px solid rgba(255,255,255,.08);
+            text-decoration: none;
+        }
+        .sidebar-brand i { font-size: 1.4rem; color: #60a5fa; }
+        .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
+        .sidebar-nav .nav-label {
+            color: #64748b; font-size: .7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 1.2px;
+            padding: 12px 12px 6px; margin-top: 4px;
+        }
+        .sidebar-nav a {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 14px; border-radius: 8px;
+            color: #94a3b8; text-decoration: none;
+            font-size: .875rem; font-weight: 500;
+            transition: all .15s;
+        }
+        .sidebar-nav a:hover { background: var(--sidebar-hover); color: #e2e8f0; }
+        .sidebar-nav a.active { background: var(--sidebar-active); color: #fff; }
+        .sidebar-nav a i { font-size: 1.1rem; width: 22px; text-align: center; }
+        .sidebar-footer {
+            padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.08);
+            color: #475569; font-size: .75rem; text-align: center;
+        }
+
+        /* ---- Main ---- */
+        .main-wrapper {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+        }
+
+        /* ---- Topbar ---- */
+        .topbar {
+            height: var(--topbar-height);
+            background: #fff;
+            border-bottom: 1px solid var(--card-border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px;
+            position: sticky; top: 0; z-index: 1030;
+        }
+        .topbar .page-title { font-size: 1.05rem; font-weight: 600; color: #1e293b; margin: 0; }
+        .topbar .breadcrumb { margin: 0; font-size: .82rem; }
+        .topbar .breadcrumb-item+.breadcrumb-item::before { content: "›"; }
+
+        .main-content { padding: 24px 28px; }
+
+        /* ---- Cards ---- */
+        .card { border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+        .card-header { border-radius: 12px 12px 0 0 !important; }
+
+        /* ---- Stat Cards ---- */
+        .stat-card {
+            background: #fff; border: 1px solid var(--card-border);
+            border-radius: 12px; padding: 20px 24px;
+            display: flex; align-items: center; gap: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.04);
+            transition: transform .15s, box-shadow .15s;
+        }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+        .stat-icon {
+            width: 48px; height: 48px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
+        }
+        .stat-icon.blue  { background: #dbeafe; color: #2563eb; }
+        .stat-icon.green { background: #dcfce7; color: #16a34a; }
+        .stat-icon.red   { background: #fee2e2; color: #dc2626; }
+        .stat-icon.amber { background: #fef3c7; color: #d97706; }
+        .stat-icon.purple{ background: #ede9fe; color: #7c3aed; }
+        .stat-icon.cyan  { background: #cffafe; color: #0891b2; }
+        .stat-info h3 { font-size: 1.5rem; font-weight: 700; margin: 0; color: #1e293b; }
+        .stat-info small { color: #64748b; font-size: .8rem; font-weight: 500; }
+
+        /* ---- Badges ---- */
+        .badge-ativo  { background-color: #16a34a; }
+        .badge-suspenso { background-color: #dc2626; }
+        .badge-pendente { background-color: #64748b; }
+
+        /* ---- Table ---- */
+        .table { font-size: .875rem; }
+        .table thead th { font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; color: #64748b; border-bottom: 2px solid var(--card-border); }
+        .table tbody td { vertical-align: middle; color: #334155; }
+        .table-hover tbody tr:hover { background-color: #f8fafc; }
+
+        /* ---- Online dot ---- */
+        .online-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .online-dot.on  { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.2); }
+        .online-dot.off { background: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,38,.15); }
+
+        /* ---- Form enhancements ---- */
+        .form-label { font-weight: 500; font-size: .875rem; color: #334155; }
+        .form-control, .form-select { border-radius: 8px; border-color: #cbd5e1; font-size: .875rem; }
+        .form-control:focus, .form-select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+        .input-group-text { border-radius: 0 8px 8px 0; font-size: .875rem; }
+
+        /* ---- Buttons ---- */
+        .btn { border-radius: 8px; font-weight: 500; font-size: .875rem; }
+        .btn-primary { background: #2563eb; border-color: #2563eb; }
+        .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+        .btn-success { background: #16a34a; border-color: #16a34a; }
+        .btn-success:hover { background: #15803d; border-color: #15803d; }
+
+        /* ---- Search box ---- */
+        .search-box { position: relative; }
+        .search-box .form-control { padding-left: 38px; background: #f8fafc; }
+        .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+
+        /* ---- Mobile ---- */
+        .sidebar-toggle { display: none; background: none; border: none; color: #1e293b; font-size: 1.4rem; cursor: pointer; }
+        @media (max-width: 991.98px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .main-wrapper { margin-left: 0; }
+            .sidebar-toggle { display: block; }
+            .sidebar-backdrop {
+                display: none; position: fixed; inset: 0;
+                background: rgba(0,0,0,.4); z-index: 1035;
+            }
+            .sidebar-backdrop.show { display: block; }
+        }
     </style>
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-    <div class="container">
-        <a class="navbar-brand" href="{{ url_for('index') }}">
-            <i class="bi bi-wifi"></i> RADIUS Manager
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+    <a class="sidebar-brand" href="{{ url_for('index') }}">
+        <i class="bi bi-broadcast-pin"></i> RADIUS Manager
+    </a>
+    <nav class="sidebar-nav">
+        <div class="nav-label">Principal</div>
+        <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">
+            <i class="bi bi-grid-1x2-fill"></i> Dashboard
         </a>
-        <div class="navbar-nav ms-auto">
-            <a class="nav-link" href="{{ url_for('index') }}"><i class="bi bi-people"></i> Clientes</a>
-            <a class="nav-link" href="{{ url_for('gerenciar_planos') }}"><i class="bi bi-speedometer2"></i> Planos</a>
-            <a class="nav-link" href="{{ url_for('gerenciar_pools') }}"><i class="bi bi-diagram-3"></i> Pools</a>
-            <a class="nav-link" href="{{ url_for('gerenciar_nas') }}"><i class="bi bi-router"></i> NAS</a>
-        </div>
+        <a href="{{ url_for('novo_cliente') }}" class="{{ 'active' if request.endpoint == 'novo_cliente' }}">
+            <i class="bi bi-person-plus-fill"></i> Novo Cliente
+        </a>
+
+        <div class="nav-label">Configurações</div>
+        <a href="{{ url_for('gerenciar_planos') }}" class="{{ 'active' if request.endpoint == 'gerenciar_planos' }}">
+            <i class="bi bi-speedometer2"></i> Planos
+        </a>
+        <a href="{{ url_for('gerenciar_pools') }}" class="{{ 'active' if request.endpoint == 'gerenciar_pools' }}">
+            <i class="bi bi-diagram-3-fill"></i> Pools de IP
+        </a>
+        <a href="{{ url_for('gerenciar_nas') }}" class="{{ 'active' if request.endpoint in ('gerenciar_nas',) }}">
+            <i class="bi bi-router-fill"></i> NAS / MikroTik
+        </a>
+    </nav>
+    <div class="sidebar-footer">
+        RADIUS Manager &copy; 2026
     </div>
-</nav>
-<div class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for cat, msg in messages %}
-            <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">
-                {{ msg }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        {% endfor %}
-    {% endwith %}
-    {% block content %}{% endblock %}
+</aside>
+
+<!-- Backdrop mobile -->
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+
+<!-- Main -->
+<div class="main-wrapper">
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="d-flex align-items-center gap-3">
+            <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+            <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+        </div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Início</a></li>
+                {% block breadcrumb %}{% endblock %}
+            </ol>
+        </nav>
+    </header>
+
+    <!-- Content -->
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for cat, msg in messages %}
+                <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert" style="border-radius:10px">
+                    {{ msg }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('show');
+    document.getElementById('sidebarBackdrop').classList.toggle('show');
+}
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

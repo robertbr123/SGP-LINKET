@@ -1,23 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Planos — RADIUS Manager{% endblock %}
+{% block page_title %}Planos{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Planos</li>
+{% endblock %}
 
 {% block content %}
-<div class="row">
-<div class="col-md-5">
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="bi bi-speedometer2"></i> Novo Plano</h5>
+<div class="row g-4">
+<div class="col-lg-5">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-plus-circle text-primary"></i> Novo Plano</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body p-4">
             <form method="POST">
                 <div class="mb-3">
-                    <label class="form-label">Nome do plano *</label>
+                    <label class="form-label">Nome do plano <span class="text-danger">*</span></label>
                     <input type="text" name="nome" class="form-control" required
                            placeholder="Ex: FIBRA 100M">
                 </div>
-                <div class="row g-3 mb-3">
+                <div class="row g-3 mb-4">
                     <div class="col-6">
-                        <label class="form-label">Download (Mbps) *</label>
+                        <label class="form-label">Download <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <input type="number" name="velocidade_down" class="form-control"
                                    value="10" min="1" max="10000" required>
@@ -25,7 +29,7 @@
                         </div>
                     </div>
                     <div class="col-6">
-                        <label class="form-label">Upload (Mbps) *</label>
+                        <label class="form-label">Upload <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <input type="number" name="velocidade_up" class="form-control"
                                    value="5" min="1" max="10000" required>
@@ -33,46 +37,59 @@
                         </div>
                     </div>
                 </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-plus-circle"></i> Criar Plano
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-plus-lg"></i> Criar Plano
                 </button>
             </form>
         </div>
     </div>
 </div>
 
-<div class="col-md-7">
-    <div class="card shadow-sm">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Planos Cadastrados</h5>
+<div class="col-lg-7">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-speedometer2 text-primary"></i> Planos Cadastrados</h5>
         </div>
         <div class="card-body p-0">
             <table class="table table-hover mb-0">
-                <thead class="table-secondary">
+                <thead>
                     <tr>
                         <th>Nome</th>
-                        <th>Download</th>
-                        <th>Upload</th>
-                        <th></th>
+                        <th class="text-center">Download</th>
+                        <th class="text-center">Upload</th>
+                        <th style="width:50px"></th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for p in planos %}
                     <tr>
-                        <td><strong>{{ p.nome }}</strong></td>
-                        <td>{{ p.velocidade_down }} Mbps</td>
-                        <td>{{ p.velocidade_up }} Mbps</td>
+                        <td class="fw-medium">{{ p.nome }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-success-subtle text-success">
+                                <i class="bi bi-arrow-down"></i> {{ p.velocidade_down }} Mbps
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary-subtle text-primary">
+                                <i class="bi bi-arrow-up"></i> {{ p.velocidade_up }} Mbps
+                            </span>
+                        </td>
                         <td>
                             <form method="POST" action="{{ url_for('excluir_plano', plano_id=p.id) }}"
-                                  onsubmit="return confirm('Remover plano?')">
-                                <button class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-trash"></i>
+                                  onsubmit="return confirm('Remover plano {{ p.nome }}?')">
+                                <button class="btn btn-sm btn-outline-danger" title="Excluir">
+                                    <i class="bi bi-trash3"></i>
                                 </button>
                             </form>
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="4" class="text-center text-muted py-3">Nenhum plano cadastrado.</td></tr>
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox" style="font-size:1.5rem"></i>
+                            <p class="mt-2 mb-0">Nenhum plano cadastrado</p>
+                        </td>
+                    </tr>
                 {% endfor %}
                 </tbody>
             </table>

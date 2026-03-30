@@ -1,48 +1,52 @@
 {% extends "base.html" %}
 {% block title %}NAS / MikroTik — RADIUS Manager{% endblock %}
+{% block page_title %}NAS / MikroTik{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item active">NAS</li>
+{% endblock %}
 
 {% block content %}
-<div class="row">
-<div class="col-md-5">
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="bi bi-router-fill"></i> Adicionar NAS (MikroTik)</h5>
+<div class="row g-4">
+<div class="col-lg-5">
+    <div class="card mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-plus-circle text-primary"></i> Adicionar NAS</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body p-4">
             <form method="POST">
                 <div class="mb-3">
-                    <label class="form-label">IP do MikroTik *</label>
+                    <label class="form-label">IP do MikroTik <span class="text-danger">*</span></label>
                     <input type="text" name="nasname" class="form-control" required
-                           placeholder="Ex: 192.168.1.1">
+                           placeholder="192.168.1.1">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Nome curto</label>
                     <input type="text" name="shortname" class="form-control"
-                           placeholder="Ex: mikrotik-01">
+                           placeholder="mikrotik-01">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Secret RADIUS *</label>
+                    <label class="form-label">Secret RADIUS <span class="text-danger">*</span></label>
                     <input type="text" name="secret" class="form-control" required
                            placeholder="Mesmo configurado no MikroTik">
                 </div>
-                <div class="mb-3">
+                <div class="mb-4">
                     <label class="form-label">Descrição</label>
                     <input type="text" name="description" class="form-control"
                            value="MikroTik PPPoE">
                 </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-plus-circle"></i> Adicionar
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-plus-lg"></i> Adicionar NAS
                 </button>
             </form>
         </div>
     </div>
 
-    <div class="card bg-light border-0">
+    <div class="card border-0" style="background:#f8fafc">
         <div class="card-body">
-            <h6><i class="bi bi-terminal"></i> Configuração MikroTik</h6>
+            <h6 class="fw-semibold mb-2"><i class="bi bi-terminal-fill text-primary"></i> Configuração MikroTik</h6>
             <small class="text-muted">Cole no terminal do MikroTik:</small>
-            <pre class="bg-dark text-success p-2 rounded mt-2" style="font-size:0.75rem">/radius
-add address=&lt;IP_DO_SERVIDOR_RADIUS&gt; secret=&lt;SECRET&gt; service=ppp
+            <pre class="bg-dark text-success p-3 rounded mt-2" style="font-size:.75rem; line-height:1.6">/radius
+add address=&lt;IP_SERVIDOR&gt; secret=&lt;SECRET&gt; service=ppp
 
 /ppp aaa
 set use-radius=yes accounting=yes</pre>
@@ -50,40 +54,45 @@ set use-radius=yes accounting=yes</pre>
     </div>
 </div>
 
-<div class="col-md-7">
-    <div class="card shadow-sm">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="bi bi-list-ul"></i> NAS Cadastrados</h5>
+<div class="col-lg-7">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-router-fill text-primary"></i> NAS Cadastrados</h5>
         </div>
         <div class="card-body p-0">
             <table class="table table-hover mb-0">
-                <thead class="table-secondary">
+                <thead>
                     <tr>
                         <th>IP (NAS)</th>
                         <th>Nome</th>
                         <th>Secret</th>
                         <th>Descrição</th>
-                        <th></th>
+                        <th style="width:50px"></th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for nas in nas_list %}
                     <tr>
-                        <td><code>{{ nas.nasname }}</code></td>
-                        <td>{{ nas.shortname or '—' }}</td>
+                        <td><code class="text-primary">{{ nas.nasname }}</code></td>
+                        <td class="fw-medium">{{ nas.shortname or '—' }}</td>
                         <td><code>{{ nas.secret }}</code></td>
-                        <td>{{ nas.description or '—' }}</td>
+                        <td class="text-muted">{{ nas.description or '—' }}</td>
                         <td>
                             <form method="POST" action="{{ url_for('excluir_nas', nas_id=nas.id) }}"
-                                  onsubmit="return confirm('Remover NAS?')">
-                                <button class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-trash"></i>
+                                  onsubmit="return confirm('Remover NAS {{ nas.nasname }}?')">
+                                <button class="btn btn-sm btn-outline-danger" title="Excluir">
+                                    <i class="bi bi-trash3"></i>
                                 </button>
                             </form>
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="5" class="text-center text-muted py-3">Nenhum NAS cadastrado.</td></tr>
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox" style="font-size:1.5rem"></i>
+                            <p class="mt-2 mb-0">Nenhum NAS cadastrado</p>
+                        </td>
+                    </tr>
                 {% endfor %}
                 </tbody>
             </table>

@@ -135,10 +135,39 @@ def index():
             WHERE acctstoptime IS NULL
         """)
         online_users = {row["username"] for row in cur.fetchall()}
+
+        # Stats
+        cur.execute("SELECT COUNT(*) AS total FROM clientes")
+        total_clientes = cur.fetchone()["total"]
+        cur.execute("SELECT COUNT(*) AS total FROM clientes WHERE status = 'ativo'")
+        total_ativos = cur.fetchone()["total"]
+        cur.execute("SELECT COUNT(*) AS total FROM clientes WHERE status = 'suspenso'")
+        total_suspensos = cur.fetchone()["total"]
+        cur.execute("SELECT COUNT(*) AS total FROM planos")
+        total_planos = cur.fetchone()["total"]
+        cur.execute("SELECT COUNT(*) AS total FROM pools")
+        total_pools = cur.fetchone()["total"]
+        cur.execute("SELECT COUNT(*) AS total FROM nas")
+        total_nas = cur.fetchone()["total"]
+
     conn.close()
+    total_online = 0
     for c in clientes:
         c["online"] = c["pppoe_login"] in online_users if c["pppoe_login"] else False
-    return render_template("index.html", clientes=clientes)
+        if c["online"]:
+            total_online += 1
+
+    stats = {
+        "total_clientes": total_clientes,
+        "total_ativos": total_ativos,
+        "total_suspensos": total_suspensos,
+        "total_online": total_online,
+        "total_offline": total_clientes - total_online,
+        "total_planos": total_planos,
+        "total_pools": total_pools,
+        "total_nas": total_nas,
+    }
+    return render_template("index.html", clientes=clientes, stats=stats)
 
 
 @app.route("/cliente/novo", methods=["GET", "POST"])

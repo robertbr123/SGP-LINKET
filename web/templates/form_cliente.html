@@ -1,20 +1,25 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Editar' if cliente else 'Novo' }} Cliente — RADIUS Manager{% endblock %}
+{% block page_title %}{{ 'Editar Cliente' if cliente else 'Novo Cliente' }}{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Clientes</a></li>
+<li class="breadcrumb-item active">{{ 'Editar' if cliente else 'Novo' }}</li>
+{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-<div class="col-md-7">
-<div class="card shadow-sm">
-    <div class="card-header bg-dark text-white">
-        <h5 class="mb-0">
-            <i class="bi bi-person-{{ 'gear' if cliente else 'plus' }}"></i>
+<div class="col-lg-7 col-md-9">
+<div class="card">
+    <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold">
+            <i class="bi bi-person-{{ 'gear' if cliente else 'plus-fill' }} text-primary"></i>
             {{ 'Editar Cliente' if cliente else 'Cadastrar Novo Cliente' }}
         </h5>
     </div>
-    <div class="card-body">
+    <div class="card-body p-4">
         <form method="POST">
             <div class="mb-3">
-                <label class="form-label">Nome completo *</label>
+                <label class="form-label">Nome completo <span class="text-danger">*</span></label>
                 <input type="text" name="nome" class="form-control"
                        value="{{ cliente.nome if cliente else '' }}" required
                        placeholder="Ex: João da Silva">
@@ -22,24 +27,26 @@
 
             {% if not cliente %}
             <div class="mb-3">
-                <label class="form-label">CPF *</label>
+                <label class="form-label">CPF <span class="text-danger">*</span></label>
                 <input type="text" name="cpf" class="form-control" required
                        placeholder="000.000.000-00" maxlength="14"
                        oninput="formatCPF(this)">
                 <div class="form-text">
                     <i class="bi bi-info-circle"></i>
-                    O sistema consultará o SGP automaticamente pelo CPF para obter o login PPPoE e status.
+                    O sistema consultará o SGP automaticamente pelo CPF.
                 </div>
             </div>
             {% else %}
-            <div class="mb-3">
-                <label class="form-label">CPF</label>
-                <input type="text" class="form-control" value="{{ cliente.cpf }}" disabled>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Login PPPoE (SGP)</label>
-                <input type="text" class="form-control" value="{{ cliente.pppoe_login or '—' }}" disabled>
-                <div class="form-text">Obtido automaticamente do SGP. Senha sempre: <strong>123</strong></div>
+            <div class="row g-3 mb-3">
+                <div class="col-6">
+                    <label class="form-label">CPF</label>
+                    <input type="text" class="form-control bg-light" value="{{ cliente.cpf }}" disabled>
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Login PPPoE</label>
+                    <input type="text" class="form-control bg-light" value="{{ cliente.pppoe_login or '—' }}" disabled>
+                    <div class="form-text">Senha: <strong>123</strong></div>
+                </div>
             </div>
             {% endif %}
 
@@ -47,51 +54,51 @@
                 <label class="form-label">IP do cliente</label>
                 <input type="text" name="ip" class="form-control"
                        value="{{ cliente.ip if cliente else '' }}"
-                       placeholder="Ex: 10.0.14.2 (ou deixe em branco para buscar do SGP)">
+                       placeholder="Ex: 10.0.14.2 (ou deixe vazio para SGP)">
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">Plano *</label>
-                <select name="plano_id" class="form-select" required>
-                    <option value="">— Selecione o plano —</option>
-                    {% for p in planos %}
-                    <option value="{{ p.id }}"
-                        {% if cliente and cliente.plano_id == p.id %}selected{% endif %}>
-                        {{ p.nome }} ({{ p.velocidade_down }}M / {{ p.velocidade_up }}M)
-                    </option>
-                    {% endfor %}
-                </select>
-                <div class="form-text">
-                    <i class="bi bi-info-circle"></i>
-                    Cadastre planos em <a href="{{ url_for('gerenciar_planos') }}">Planos</a>.
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Plano <span class="text-danger">*</span></label>
+                    <select name="plano_id" class="form-select" required>
+                        <option value="">— Selecione —</option>
+                        {% for p in planos %}
+                        <option value="{{ p.id }}"
+                            {% if cliente and cliente.plano_id == p.id %}selected{% endif %}>
+                            {{ p.nome }} ({{ p.velocidade_down }}M / {{ p.velocidade_up }}M)
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Pool de IP</label>
-                <select name="pool_id" class="form-select">
-                    <option value="">— Sem pool —</option>
-                    {% for po in pools %}
-                    <option value="{{ po.id }}"
-                        {% if cliente and cliente.pool_id == po.id %}selected{% endif %}>
-                        {{ po.nome }} ({{ po.range_inicio }} — {{ po.range_fim }})
-                    </option>
-                    {% endfor %}
-                </select>
+                <div class="col-md-6">
+                    <label class="form-label">Pool de IP</label>
+                    <select name="pool_id" class="form-select">
+                        <option value="">— Sem pool —</option>
+                        {% for po in pools %}
+                        <option value="{{ po.id }}"
+                            {% if cliente and cliente.pool_id == po.id %}selected{% endif %}>
+                            {{ po.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
             {% if cliente %}
             <div class="mb-3">
                 <label class="form-label">Status atual</label>
-                <span class="badge rounded-pill badge-{{ cliente.status }} fs-6">
-                    {{ cliente.status | title }}
-                </span>
-                <div class="form-text">Para atualizar o status, use "Sincronizar com SGP" na lista.</div>
+                <div>
+                    <span class="badge rounded-pill badge-{{ cliente.status }} fs-6">
+                        {{ cliente.status | title }}
+                    </span>
+                    <span class="form-text ms-2">Use "Sincronizar" na lista para atualizar.</span>
+                </div>
             </div>
             {% endif %}
 
+            <hr class="my-4">
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success">
+                <button type="submit" class="btn btn-primary">
                     <i class="bi bi-check-lg"></i> Salvar
                 </button>
                 <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancelar</a>

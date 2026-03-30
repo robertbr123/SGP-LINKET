@@ -1,77 +1,90 @@
 {% extends "base.html" %}
 {% block title %}Pools de IP — RADIUS Manager{% endblock %}
+{% block page_title %}Pools de IP{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Pools</li>
+{% endblock %}
 
 {% block content %}
-<div class="row">
-<div class="col-md-5">
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="bi bi-diagram-3-fill"></i> Novo Pool de IP</h5>
+<div class="row g-4">
+<div class="col-lg-5">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-plus-circle text-primary"></i> Novo Pool</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body p-4">
             <form method="POST">
                 <div class="mb-3">
-                    <label class="form-label">Nome do pool *</label>
+                    <label class="form-label">Nome do pool <span class="text-danger">*</span></label>
                     <input type="text" name="nome" class="form-control" required
                            placeholder="Ex: Pool-Residencial">
                 </div>
                 <div class="row g-3 mb-3">
                     <div class="col-6">
-                        <label class="form-label">IP Inicial *</label>
+                        <label class="form-label">IP Inicial <span class="text-danger">*</span></label>
                         <input type="text" name="range_inicio" class="form-control" required
-                               placeholder="Ex: 10.0.0.1">
+                               placeholder="10.0.0.1">
                     </div>
                     <div class="col-6">
-                        <label class="form-label">IP Final *</label>
+                        <label class="form-label">IP Final <span class="text-danger">*</span></label>
                         <input type="text" name="range_fim" class="form-control" required
-                               placeholder="Ex: 10.0.0.254">
+                               placeholder="10.0.0.254">
                     </div>
                 </div>
-                <div class="mb-3">
+                <div class="mb-4">
                     <label class="form-label">Descrição</label>
                     <input type="text" name="descricao" class="form-control"
-                           placeholder="Ex: Pool para clientes residenciais">
+                           placeholder="Ex: Clientes residenciais">
                 </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-plus-circle"></i> Criar Pool
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-plus-lg"></i> Criar Pool
                 </button>
             </form>
         </div>
     </div>
 </div>
 
-<div class="col-md-7">
-    <div class="card shadow-sm">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Pools Cadastrados</h5>
+<div class="col-lg-7">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-diagram-3-fill text-primary"></i> Pools Cadastrados</h5>
         </div>
         <div class="card-body p-0">
             <table class="table table-hover mb-0">
-                <thead class="table-secondary">
+                <thead>
                     <tr>
                         <th>Nome</th>
-                        <th>Range</th>
+                        <th>Range de IP</th>
                         <th>Descrição</th>
-                        <th></th>
+                        <th style="width:50px"></th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for pool in pools %}
                     <tr>
-                        <td><strong>{{ pool.nome }}</strong></td>
-                        <td><code>{{ pool.range_inicio }}</code> — <code>{{ pool.range_fim }}</code></td>
-                        <td>{{ pool.descricao or '—' }}</td>
+                        <td class="fw-medium">{{ pool.nome }}</td>
+                        <td>
+                            <code class="text-primary">{{ pool.range_inicio }}</code>
+                            <i class="bi bi-arrow-right text-muted mx-1" style="font-size:.7rem"></i>
+                            <code class="text-primary">{{ pool.range_fim }}</code>
+                        </td>
+                        <td class="text-muted">{{ pool.descricao or '—' }}</td>
                         <td>
                             <form method="POST" action="{{ url_for('excluir_pool', pool_id=pool.id) }}"
-                                  onsubmit="return confirm('Remover pool?')">
-                                <button class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-trash"></i>
+                                  onsubmit="return confirm('Remover pool {{ pool.nome }}?')">
+                                <button class="btn btn-sm btn-outline-danger" title="Excluir">
+                                    <i class="bi bi-trash3"></i>
                                 </button>
                             </form>
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="4" class="text-center text-muted py-3">Nenhum pool cadastrado.</td></tr>
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox" style="font-size:1.5rem"></i>
+                            <p class="mt-2 mb-0">Nenhum pool cadastrado</p>
+                        </td>
+                    </tr>
                 {% endfor %}
                 </tbody>
             </table>
