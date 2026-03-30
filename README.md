@@ -1,3 +1,20 @@
+# Todos os serviços ao mesmo tempo (com scroll em tempo real)
+docker compose logs -f
+
+# Só o FreeRADIUS
+docker compose logs -f freeradius
+
+# Só o painel web
+docker compose logs -f web
+
+# Só o sync com SGP
+docker compose logs -f sync
+
+# Últimas 100 linhas de um serviço
+docker compose logs --tail=100 freeradius
+
+
+
 # RADIUS Manager — PPPoE para MikroTik com SGP
 
 Sistema completo de autenticação RADIUS para clientes PPPoE em MikroTik, com integração automática ao ERP SGP.
