@@ -53,7 +53,7 @@ def consultar_sgp(cpf: str) -> dict | None:
     return None
 
 
-def upsert_radius_user(conn, login: str, status: str, down: int, up: int):
+def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: str = ""):
     with conn.cursor() as cur:
         cur.execute("DELETE FROM radcheck WHERE username = %s", (login,))
         cur.execute("DELETE FROM radreply WHERE username = %s", (login,))
@@ -68,6 +68,11 @@ def upsert_radius_user(conn, login: str, status: str, down: int, up: int):
                 "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                 (login, "Mikrotik-Rate-Limit", ":=", rate),
             )
+            if ip:
+                cur.execute(
+                    "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                    (login, "Framed-IP-Address", ":=", ip),
+                )
         else:
             cur.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
@@ -115,7 +120,8 @@ def sync_all():
 
             if pppoe_login:
                 upsert_radius_user(conn, pppoe_login, novo_status,
-                                   c["velocidade_down"], c["velocidade_up"])
+                                   c["velocidade_down"], c["velocidade_up"],
+                                   ip_sgp or "")
 
             if changed:
                 log.info("Cliente %s (login=%s): %s → %s",

@@ -76,7 +76,7 @@ def _speed_attr(mbps: int) -> str:
     return f"{mbps}M/{mbps}M"
 
 
-def upsert_radius_user(conn, login: str, status: str, down: int, up: int):
+def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: str = ""):
     """Insere ou atualiza entradas no radcheck e radreply para o usuário PPPoE."""
     with conn.cursor() as cur:
         # Remove entradas antigas
@@ -95,7 +95,12 @@ def upsert_radius_user(conn, login: str, status: str, down: int, up: int):
                 "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                 (login, "Mikrotik-Rate-Limit", ":=", rate),
             )
-            # Framed-IP-Address será preenchido se tivermos o IP do SGP
+            # Framed-IP-Address — IP fixo do cliente
+            if ip:
+                cur.execute(
+                    "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                    (login, "Framed-IP-Address", ":=", ip),
+                )
         else:
             # Usuário suspenso: Auth-Type = Reject
             cur.execute(
@@ -237,7 +242,7 @@ def novo_cliente():
             conn.commit()
 
             if pppoe_login:
-                upsert_radius_user(conn, pppoe_login, status, vel_down, vel_up)
+                upsert_radius_user(conn, pppoe_login, status, vel_down, vel_up, ip)
 
             flash(f"Cliente cadastrado com sucesso! Status SGP: {status}", "success")
         except psycopg2.errors.UniqueViolation:
@@ -303,7 +308,7 @@ def editar_cliente(cliente_id):
 
         pppoe_login = cliente["pppoe_login"]
         if pppoe_login:
-            upsert_radius_user(conn, pppoe_login, cliente["status"], vel_down, vel_up)
+            upsert_radius_user(conn, pppoe_login, cliente["status"], vel_down, vel_up, ip)
 
         flash("Cliente atualizado.", "success")
         conn.close()
@@ -346,7 +351,7 @@ def sincronizar_cliente(cliente_id):
     if pppoe_login:
         upsert_radius_user(
             conn, pppoe_login, novo_status,
-            cliente["velocidade_down"], cliente["velocidade_up"]
+            cliente["velocidade_down"], cliente["velocidade_up"], ip_sgp
         )
 
     conn.close()
