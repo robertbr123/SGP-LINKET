@@ -7,7 +7,7 @@
 
 {% block content %}
 <div class="row g-4">
-<div class="col-lg-5">
+<div class="col-lg-4">
     <div class="card">
         <div class="card-header bg-white py-3">
             <h5 class="mb-0 fw-semibold"><i class="bi bi-plus-circle text-primary"></i> Novo Pool</h5>
@@ -44,7 +44,7 @@
     </div>
 </div>
 
-<div class="col-lg-7">
+<div class="col-lg-8">
     <div class="card">
         <div class="card-header bg-white py-3">
             <h5 class="mb-0 fw-semibold"><i class="bi bi-diagram-3-fill text-primary"></i> Pools Cadastrados</h5>
@@ -55,18 +55,41 @@
                     <tr>
                         <th>Nome</th>
                         <th>Range de IP</th>
+                        <th>Uso</th>
+                        <th>Capacidade</th>
                         <th>Descrição</th>
                         <th style="width:50px"></th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for pool in pools %}
+                    {% set s = pool.stats %}
                     <tr>
                         <td class="fw-medium">{{ pool.nome }}</td>
                         <td>
                             <code class="text-primary">{{ pool.range_inicio }}</code>
                             <i class="bi bi-arrow-right text-muted mx-1" style="font-size:.7rem"></i>
                             <code class="text-primary">{{ pool.range_fim }}</code>
+                        </td>
+                        <td style="min-width:140px">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height:6px;border-radius:4px">
+                                    <div class="progress-bar
+                                        {% if s.percentual >= 90 %}bg-danger
+                                        {% elif s.percentual >= 70 %}bg-warning
+                                        {% else %}bg-success{% endif %}"
+                                        style="width:{{ s.percentual }}%"></div>
+                                </div>
+                                <span style="font-size:.75rem;color:#64748b;white-space:nowrap">
+                                    {{ s.percentual }}%
+                                </span>
+                            </div>
+                            <div style="font-size:.72rem;color:#64748b;margin-top:2px">
+                                {{ s.usados }} usados / {{ s.livres }} livres
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">{{ s.total }} IPs</span>
                         </td>
                         <td class="text-muted">{{ pool.descricao or '—' }}</td>
                         <td>
@@ -80,7 +103,7 @@
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="4" class="text-center py-4 text-muted">
+                        <td colspan="6" class="text-center py-4 text-muted">
                             <i class="bi bi-inbox" style="font-size:1.5rem"></i>
                             <p class="mt-2 mb-0">Nenhum pool cadastrado</p>
                         </td>

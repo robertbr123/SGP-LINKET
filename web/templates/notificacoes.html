@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Notificações — RADIUS Manager{% endblock %}
+{% block page_title %}Notificações{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Notificações</li>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+<div class="col-lg-4">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-plus-circle text-primary"></i> Nova Notificação</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('gerenciar_notificacoes') }}">
+                <div class="mb-3">
+                    <label class="form-label">Tipo <span class="text-danger">*</span></label>
+                    <select name="tipo" class="form-select" required id="tipoSelect"
+                            onchange="updatePlaceholder()">
+                        <option value="">— Selecione —</option>
+                        <option value="webhook">Webhook (HTTP POST)</option>
+                        <option value="email">E-mail (SMTP)</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Destino <span class="text-danger">*</span></label>
+                    <input type="text" name="destino" class="form-control" required
+                           id="destinoInput"
+                           placeholder="URL ou endereço de e-mail">
+                    <div class="form-text" id="destinoHelp"></div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-bell-fill"></i> Adicionar Notificação
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mt-4 border-0" style="background:#f8fafc">
+        <div class="card-body py-3 px-4">
+            <h6 class="fw-semibold mb-2"><i class="bi bi-info-circle text-primary"></i> Como funciona</h6>
+            <p class="text-muted mb-2" style="font-size:.82rem">
+                Notificações são disparadas pelo serviço de sync quando o status de um cliente muda
+                (ex: ativo → suspenso).
+            </p>
+            <hr class="my-2">
+            <p class="text-muted mb-1" style="font-size:.82rem"><strong>Webhook</strong> — envia um HTTP POST com JSON:</p>
+            <pre class="bg-dark text-success p-2 rounded" style="font-size:.72rem">{
+  "event": "status_change",
+  "cliente_nome": "...",
+  "cpf": "...",
+  "pppoe_login": "...",
+  "old_status": "ativo",
+  "new_status": "suspenso"
+}</pre>
+            <p class="text-muted mb-0 mt-2" style="font-size:.82rem">
+                <strong>E-mail</strong> — configure as variáveis SMTP no <code>.env</code>:
+                <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="col-lg-8">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-bell-fill text-primary"></i> Notificações Configuradas</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Destino</th>
+                        <th>Status</th>
+                        <th>Criada em</th>
+                        <th class="text-center" style="width:100px">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for c in configs %}
+                    <tr>
+                        <td>
+                            {% if c.tipo == 'webhook' %}
+                                <span class="badge bg-info text-dark">
+                                    <i class="bi bi-arrow-right-circle"></i> Webhook
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">
+                                    <i class="bi bi-envelope-fill"></i> E-mail
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <code style="font-size:.8rem;word-break:break-all">{{ c.destino }}</code>
+                        </td>
+                        <td>
+                            {% if c.ativo %}
+                                <span class="badge bg-success">Ativa</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Pausada</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted" style="font-size:.82rem">
+                            {{ c.criado_em.strftime('%d/%m/%Y') }}
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                <form method="POST" action="{{ url_for('toggle_notificacao', config_id=c.id) }}"
+                                      style="display:contents">
+                                    <button class="btn btn-outline-{{ 'warning' if c.ativo else 'success' }}"
+                                            title="{{ 'Pausar' if c.ativo else 'Ativar' }}">
+                                        <i class="bi bi-{{ 'pause-fill' if c.ativo else 'play-fill' }}"></i>
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ url_for('excluir_notificacao', config_id=c.id) }}"
+                                      onsubmit="return confirm('Remover esta notificação?')"
+                                      style="display:contents">
+                                    <button class="btn btn-outline-danger" title="Excluir">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">
+                            <i class="bi bi-bell-slash" style="font-size:1.5rem"></i>
+                            <p class="mt-2 mb-0">Nenhuma notificação configurada</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updatePlaceholder() {
+    const tipo = document.getElementById('tipoSelect').value;
+    const input = document.getElementById('destinoInput');
+    const help = document.getElementById('destinoHelp');
+    if (tipo === 'webhook') {
+        input.placeholder = 'https://exemplo.com/webhook';
+        help.textContent = 'URL que receberá o HTTP POST com os dados da mudança.';
+    } else if (tipo === 'email') {
+        input.placeholder = 'alerta@empresa.com';
+        help.textContent = 'E-mail de destino. Requer SMTP configurado no .env.';
+    } else {
+        input.placeholder = 'URL ou endereço de e-mail';
+        help.textContent = '';
+    }
+}
+</script>
+{% endblock %}

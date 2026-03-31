@@ -6,9 +6,9 @@ services:
     container_name: radius_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: radius
-      POSTGRES_USER: radius
-      POSTGRES_PASSWORD: radiuspassword
+      POSTGRES_DB: ${POSTGRES_DB:-radius}
+      POSTGRES_USER: ${POSTGRES_USER:-radius}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radiuspassword}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -32,7 +32,7 @@ services:
       DB_HOST: postgres
       DB_NAME: radius
       DB_USER: radius
-      DB_PASS: radiuspassword
+      DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
     networks:
       - radius_net
 
@@ -50,11 +50,11 @@ services:
       DB_HOST: postgres
       DB_NAME: radius
       DB_USER: radius
-      DB_PASS: radiuspassword
+      DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
       SGP_URL: https://linknetam.sgp.net.br/api/ura/consultacliente/
-      SGP_TOKEN: 74b3dfe5-8333-458a-adab-ea2b544d64ad
-      SGP_APP: APP
-      SECRET_KEY: troque-esta-chave-secreta
+      SGP_TOKEN: ${SGP_TOKEN:-}
+      SGP_APP: ${SGP_APP:-APP}
+      SECRET_KEY: ${SECRET_KEY:-troque-esta-chave-secreta}
     networks:
       - radius_net
 
@@ -70,11 +70,16 @@ services:
       DB_HOST: postgres
       DB_NAME: radius
       DB_USER: radius
-      DB_PASS: radiuspassword
+      DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
       SGP_URL: https://linknetam.sgp.net.br/api/ura/consultacliente/
-      SGP_TOKEN: 74b3dfe5-8333-458a-adab-ea2b544d64ad
-      SGP_APP: APP
-      SYNC_INTERVAL: "300"
+      SGP_TOKEN: ${SGP_TOKEN:-}
+      SGP_APP: ${SGP_APP:-APP}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-300}
+      # Configurações SMTP para notificações por email (opcional)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
     networks:
       - radius_net
 

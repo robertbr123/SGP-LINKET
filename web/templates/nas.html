@@ -29,10 +29,27 @@
                     <input type="text" name="secret" class="form-control" required
                            placeholder="Mesmo configurado no MikroTik">
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="form-label">Descrição</label>
                     <input type="text" name="description" class="form-control"
                            value="MikroTik PPPoE">
+                </div>
+                <hr class="my-3">
+                <p class="text-muted mb-2" style="font-size:.8rem">
+                    <i class="bi bi-info-circle"></i>
+                    Credenciais da API RouterOS (opcional — para consulta de sessões)
+                </p>
+                <div class="row g-3 mb-4">
+                    <div class="col-6">
+                        <label class="form-label">Usuário API</label>
+                        <input type="text" name="mikrotik_user" class="form-control"
+                               placeholder="admin" value="admin">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Senha API</label>
+                        <input type="password" name="mikrotik_pass" class="form-control"
+                               placeholder="••••••••">
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="bi bi-plus-lg"></i> Adicionar NAS
@@ -57,7 +74,14 @@ set use-radius=yes accounting=yes</pre>
 <div class="col-lg-7">
     <div class="card">
         <div class="card-header bg-white py-3">
-            <h5 class="mb-0 fw-semibold"><i class="bi bi-router-fill text-primary"></i> NAS Cadastrados</h5>
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-router-fill text-primary"></i> NAS Cadastrados</h5>
+                {% if not mikrotik_available %}
+                <span class="badge bg-warning text-dark" style="font-size:.72rem">
+                    <i class="bi bi-exclamation-triangle"></i> librouteros não instalado
+                </span>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body p-0">
             <table class="table table-hover mb-0">
@@ -67,7 +91,7 @@ set use-radius=yes accounting=yes</pre>
                         <th>Nome</th>
                         <th>Secret</th>
                         <th>Descrição</th>
-                        <th style="width:50px"></th>
+                        <th class="text-center" style="width:100px">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -77,13 +101,24 @@ set use-radius=yes accounting=yes</pre>
                         <td class="fw-medium">{{ nas.shortname or '—' }}</td>
                         <td><code>{{ nas.secret }}</code></td>
                         <td class="text-muted">{{ nas.description or '—' }}</td>
-                        <td>
-                            <form method="POST" action="{{ url_for('excluir_nas', nas_id=nas.id) }}"
-                                  onsubmit="return confirm('Remover NAS {{ nas.nasname }}?')">
-                                <button class="btn btn-sm btn-outline-danger" title="Excluir">
-                                    <i class="bi bi-trash3"></i>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                {% if mikrotik_available %}
+                                <button class="btn btn-outline-info btn-sessoes"
+                                        data-id="{{ nas.id }}"
+                                        data-ip="{{ nas.nasname }}"
+                                        title="Ver sessões ativas no MikroTik">
+                                    <i class="bi bi-activity"></i>
                                 </button>
-                            </form>
+                                {% endif %}
+                                <form method="POST" action="{{ url_for('excluir_nas', nas_id=nas.id) }}"
+                                      onsubmit="return confirm('Remover NAS {{ nas.nasname }}?')"
+                                      style="display:contents">
+                                    <button class="btn btn-outline-danger" title="Excluir">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 {% else %}
@@ -100,4 +135,109 @@ set use-radius=yes accounting=yes</pre>
     </div>
 </div>
 </div>
+
+<!-- Modal sessões MikroTik -->
+<div class="modal fade" id="modalSessoes" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-semibold">
+                    <i class="bi bi-activity text-primary"></i>
+                    Sessões PPPoE ativas — <span id="nasIpModal"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-2 text-muted">Consultando MikroTik...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.btn-sessoes').forEach(btn => {
+    btn.addEventListener('click', async function () {
+        const nasId = this.dataset.id;
+        const nasIp = this.dataset.ip;
+
+        document.getElementById('nasIpModal').textContent = nasIp;
+        document.getElementById('modalBody').innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2 text-muted">Consultando MikroTik...</p>
+            </div>`;
+
+        const modal = new bootstrap.Modal(document.getElementById('modalSessoes'));
+        modal.show();
+
+        try {
+            const r = await fetch(`/nas/${nasId}/sessoes`);
+            const data = await r.json();
+
+            if (!r.ok) {
+                document.getElementById('modalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle"></i> Erro: ${data.error || 'Falha ao consultar MikroTik'}
+                    </div>`;
+                return;
+            }
+
+            if (!data.sessoes || data.sessoes.length === 0) {
+                document.getElementById('modalBody').innerHTML = `
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-wifi-off" style="font-size:2rem"></i>
+                        <p class="mt-2">Nenhuma sessão PPPoE ativa no momento</p>
+                    </div>`;
+                return;
+            }
+
+            let rows = data.sessoes.map(s => `
+                <tr>
+                    <td><code class="text-primary">${s.name || '—'}</code></td>
+                    <td>${s.address || '—'}</td>
+                    <td>${s.caller_id || s['caller-id'] || '—'}</td>
+                    <td>${s.uptime || '—'}</td>
+                    <td>${formatBytes(s.bytes_in || s['bytes-in'] || 0)} ↓ / ${formatBytes(s.bytes_out || s['bytes-out'] || 0)} ↑</td>
+                    <td>${s.service || '—'}</td>
+                </tr>`).join('');
+
+            document.getElementById('modalBody').innerHTML = `
+                <p class="text-muted mb-3"><strong>${data.total}</strong> sessão(ões) ativa(s)</p>
+                <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Usuário PPPoE</th>
+                            <th>IP</th>
+                            <th>MAC / Caller-ID</th>
+                            <th>Uptime</th>
+                            <th>Tráfego</th>
+                            <th>Serviço</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                </div>`;
+        } catch (e) {
+            document.getElementById('modalBody').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-x-circle"></i> Erro de comunicação com o servidor.
+                </div>`;
+        }
+    });
+});
+
+function formatBytes(bytes) {
+    bytes = parseInt(bytes) || 0;
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+    return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+</script>
 {% endblock %}

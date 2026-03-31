@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Usuários — RADIUS Manager{% endblock %}
+{% block page_title %}Usuários{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Usuários</li>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+<div class="col-lg-4">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-person-plus-fill text-primary"></i> Novo Usuário</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('novo_usuario') }}">
+                <div class="mb-3">
+                    <label class="form-label">Usuário <span class="text-danger">*</span></label>
+                    <input type="text" name="username" class="form-control" required
+                           placeholder="Ex: operador01" autocomplete="off">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Senha <span class="text-danger">*</span></label>
+                    <input type="password" name="senha" class="form-control" required
+                           placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Perfil</label>
+                    <select name="role" class="form-select">
+                        <option value="admin">Admin (acesso total)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-plus-lg"></i> Criar Usuário
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mt-4 border-warning" style="border-left:4px solid #d97706 !important">
+        <div class="card-body py-3 px-4">
+            <h6 class="fw-semibold mb-1 text-warning"><i class="bi bi-shield-exclamation"></i> Usuário padrão</h6>
+            <p class="text-muted mb-0" style="font-size:.82rem">
+                O usuário <strong>admin</strong> é criado automaticamente com senha
+                <strong>admin123</strong>. Altere a senha assim que possível.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="col-lg-8">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-people-fill text-primary"></i> Usuários Cadastrados</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Usuário</th>
+                        <th>Perfil</th>
+                        <th>Último acesso</th>
+                        <th>Status</th>
+                        <th class="text-center" style="width:120px">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for u in usuarios %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="user-avatar" style="width:30px;height:30px;font-size:.75rem;background:#2563eb;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">
+                                    {{ u.username[0].upper() }}
+                                </div>
+                                <span class="fw-medium">{{ u.username }}</span>
+                                {% if u.username == session.usuario_username %}
+                                    <span class="badge bg-primary" style="font-size:.65rem">Você</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">{{ u.role | title }}</span>
+                        </td>
+                        <td class="text-muted" style="font-size:.82rem">
+                            {% if u.ultimo_acesso %}
+                                {{ u.ultimo_acesso.strftime('%d/%m/%Y %H:%M') }}
+                            {% else %}
+                                <span class="text-muted">Nunca</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary btn-alterar-senha"
+                                        data-id="{{ u.id }}"
+                                        data-username="{{ u.username }}"
+                                        title="Alterar senha">
+                                    <i class="bi bi-key"></i>
+                                </button>
+                                {% if u.username != session.usuario_username %}
+                                <form method="POST" action="{{ url_for('excluir_usuario', usuario_id=u.id) }}"
+                                      onsubmit="return confirm('Remover usuário {{ u.username }}?')"
+                                      style="display:contents">
+                                    <button class="btn btn-outline-danger" title="Excluir">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">Nenhum usuário cadastrado</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- Modal alterar senha -->
+<div class="modal fade" id="modalSenha" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-semibold"><i class="bi bi-key text-primary"></i> Alterar Senha</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="formSenha">
+                <div class="modal-body">
+                    <p class="text-muted mb-3" style="font-size:.85rem">
+                        Alterando senha de: <strong id="modalUsername"></strong>
+                    </p>
+                    <label class="form-label">Nova senha <span class="text-danger">*</span></label>
+                    <input type="password" name="nova_senha" class="form-control" required
+                           placeholder="Mínimo 6 caracteres" minlength="6">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.btn-alterar-senha').forEach(btn => {
+    btn.addEventListener('click', function () {
+        const userId = this.dataset.id;
+        const username = this.dataset.username;
+        document.getElementById('formSenha').action = `/usuarios/${userId}/alterar-senha`;
+        document.getElementById('modalUsername').textContent = username;
+        new bootstrap.Modal(document.getElementById('modalSenha')).show();
+    });
+});
+</script>
+{% endblock %}

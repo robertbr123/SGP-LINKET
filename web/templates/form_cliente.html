@@ -17,7 +17,8 @@
         </h5>
     </div>
     <div class="card-body p-4">
-        <form method="POST">
+        <form method="POST" id="formCliente">
+
             <div class="mb-3">
                 <label class="form-label">Nome completo <span class="text-danger">*</span></label>
                 <input type="text" name="nome" class="form-control"
@@ -28,12 +29,18 @@
             {% if not cliente %}
             <div class="mb-3">
                 <label class="form-label">CPF <span class="text-danger">*</span></label>
-                <input type="text" name="cpf" class="form-control" required
-                       placeholder="000.000.000-00" maxlength="14"
-                       oninput="formatCPF(this)">
+                <div class="input-group">
+                    <input type="text" name="cpf" class="form-control" required
+                           placeholder="000.000.000-00" maxlength="14"
+                           oninput="formatCPF(this)" id="cpfInput">
+                    <button type="button" class="btn btn-outline-primary" onclick="consultarCPF()" id="btnConsultarCPF">
+                        <i class="bi bi-search"></i> Verificar CPF
+                    </button>
+                </div>
+                <div id="sgpResult" class="mt-2" style="display:none"></div>
                 <div class="form-text">
                     <i class="bi bi-info-circle"></i>
-                    O sistema consultará o SGP automaticamente pelo CPF.
+                    Clique em "Verificar CPF" para consultar os dados no SGP antes de salvar.
                 </div>
             </div>
             {% else %}
@@ -45,16 +52,23 @@
                 <div class="col-6">
                     <label class="form-label">Login PPPoE</label>
                     <input type="text" class="form-control bg-light" value="{{ cliente.pppoe_login or '—' }}" disabled>
-                    <div class="form-text">Senha: <strong>123</strong></div>
+                    <div class="form-text">Senha RADIUS: <strong>123</strong></div>
                 </div>
             </div>
             {% endif %}
 
             <div class="mb-3">
                 <label class="form-label">IP do cliente</label>
-                <input type="text" name="ip" class="form-control"
-                       value="{{ cliente.ip if cliente else '' }}"
-                       placeholder="Ex: 10.0.14.2 (ou deixe vazio para SGP)">
+                <div class="input-group">
+                    <input type="text" name="ip" class="form-control" id="ipInput"
+                           value="{{ cliente.ip if cliente else '' }}"
+                           placeholder="Ex: 10.0.14.2 (ou deixe vazio para auto-alocar do pool)">
+                    <span class="input-group-text text-muted" style="font-size:.8rem">opcional</span>
+                </div>
+                <div class="form-text">
+                    <i class="bi bi-lightbulb"></i>
+                    Se deixar vazio e selecionar um pool, o IP será alocado automaticamente.
+                </div>
             </div>
 
             <div class="row g-3 mb-3">
@@ -81,6 +95,7 @@
                         </option>
                         {% endfor %}
                     </select>
+                    <div class="form-text">IP vazio + pool selecionado = auto-alocação</div>
                 </div>
             </div>
 
@@ -91,14 +106,19 @@
                     <span class="badge rounded-pill badge-{{ cliente.status }} fs-6">
                         {{ cliente.status | title }}
                     </span>
-                    <span class="form-text ms-2">Use "Sincronizar" na lista para atualizar.</span>
+                    <span class="form-text ms-2">Use "Sincronizar" na lista para atualizar via SGP.</span>
                 </div>
+                {% if cliente.ultimo_sync_em %}
+                <div class="form-text mt-1">
+                    <i class="bi bi-clock"></i> Último sync: {{ cliente.ultimo_sync_em.strftime('%d/%m/%Y %H:%M') }}
+                </div>
+                {% endif %}
             </div>
             {% endif %}
 
             <hr class="my-4">
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary" id="btnSalvar">
                     <i class="bi bi-check-lg"></i> Salvar
                 </button>
                 <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancelar</a>
@@ -114,10 +134,70 @@
 <script>
 function formatCPF(input) {
     let v = input.value.replace(/\D/g, '');
-    v = v.replace(/(\d{3})(\d)/, '$1.$2');
-    v = v.replace(/(\d{3})(\d)/, '$1.$2');
-    v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-    input.value = v;
+    if (v.length > 3)  v = v.slice(0,3) + '.' + v.slice(3);
+    if (v.length > 7)  v = v.slice(0,7) + '.' + v.slice(7);
+    if (v.length > 11) v = v.slice(0,11) + '-' + v.slice(11);
+    input.value = v.slice(0, 14);
 }
+
+async function consultarCPF() {
+    const cpfInput = document.getElementById('cpfInput');
+    const cpf = cpfInput.value.replace(/\D/g, '');
+    const resultDiv = document.getElementById('sgpResult');
+    const btn = document.getElementById('btnConsultarCPF');
+
+    resultDiv.style.display = 'none';
+
+    if (cpf.length !== 11) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="alert alert-warning p-2 mb-0" style="font-size:.85rem"><i class="bi bi-exclamation-triangle"></i> Digite um CPF completo (11 dígitos).</div>';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:14px;height:14px"></span> Consultando...';
+
+    try {
+        const r = await fetch(`/api/cpf/${cpf}`);
+        const data = await r.json();
+
+        resultDiv.style.display = 'block';
+        if (r.ok) {
+            const statusClass = data.status === 'ativo' ? 'success' : 'warning';
+            resultDiv.innerHTML = `
+                <div class="alert alert-${statusClass} p-2 mb-0" style="font-size:.85rem">
+                    <i class="bi bi-check-circle"></i>
+                    <strong>SGP encontrado:</strong>
+                    Login PPPoE: <code>${data.pppoe_login || '—'}</code> &nbsp;|&nbsp;
+                    Status: <strong>${data.status}</strong>
+                    ${data.ip ? ` &nbsp;|&nbsp; IP: <code>${data.ip}</code>` : ''}
+                    ${data.nome ? ` &nbsp;|&nbsp; Nome: ${data.nome}` : ''}
+                </div>`;
+            // Auto-preenche o IP se o campo estiver vazio
+            const ipInput = document.getElementById('ipInput');
+            if (ipInput && !ipInput.value && data.ip) {
+                ipInput.value = data.ip;
+            }
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger p-2 mb-0" style="font-size:.85rem">
+                    <i class="bi bi-x-circle"></i> ${data.error || 'CPF não encontrado no SGP'}
+                </div>`;
+        }
+    } catch (e) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="alert alert-danger p-2 mb-0" style="font-size:.85rem"><i class="bi bi-x-circle"></i> Erro de comunicação com o servidor.</div>';
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-search"></i> Verificar CPF';
+}
+
+// Feedback visual ao submeter o formulário
+document.getElementById('formCliente').addEventListener('submit', function () {
+    const btn = document.getElementById('btnSalvar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" style="width:14px;height:14px"></span>Salvando...';
+});
 </script>
 {% endblock %}

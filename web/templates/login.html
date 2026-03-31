@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — RADIUS Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,.35);
+            padding: 40px 36px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-logo {
+            width: 52px; height: 52px; border-radius: 14px;
+            background: #2563eb;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.6rem; color: #fff; margin: 0 auto 18px;
+        }
+        .login-title {
+            font-size: 1.35rem; font-weight: 700;
+            color: #1e293b; text-align: center; margin-bottom: 4px;
+        }
+        .login-sub {
+            color: #64748b; font-size: .85rem;
+            text-align: center; margin-bottom: 28px;
+        }
+        .form-label { font-weight: 500; font-size: .875rem; color: #334155; }
+        .form-control {
+            border-radius: 8px; border-color: #cbd5e1;
+            font-size: .9rem; padding: 10px 14px;
+        }
+        .form-control:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+        .btn-login {
+            background: #2563eb; border: none; border-radius: 8px;
+            color: #fff; font-weight: 600; font-size: .9rem;
+            padding: 11px; width: 100%; margin-top: 8px;
+            transition: background .15s;
+        }
+        .btn-login:hover { background: #1d4ed8; }
+        .login-footer { color: #94a3b8; font-size: .75rem; text-align: center; margin-top: 28px; }
+        .input-icon { position: relative; }
+        .input-icon i {
+            position: absolute; left: 12px; top: 50%;
+            transform: translateY(-50%); color: #94a3b8;
+        }
+        .input-icon input { padding-left: 36px; }
+    </style>
+</head>
+<body>
+<div class="login-card">
+    <div class="login-logo"><i class="bi bi-broadcast-pin"></i></div>
+    <div class="login-title">RADIUS Manager</div>
+    <div class="login-sub">Faça login para continuar</div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+            <div class="alert alert-{{ cat }} py-2 px-3 mb-3" style="font-size:.85rem;border-radius:8px">
+                {{ msg }}
+            </div>
+        {% endfor %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('login') }}">
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="mb-3">
+            <label class="form-label">Usuário</label>
+            <div class="input-icon">
+                <i class="bi bi-person"></i>
+                <input type="text" name="username" class="form-control" required
+                       placeholder="admin" autofocus autocomplete="username">
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Senha</label>
+            <div class="input-icon">
+                <i class="bi bi-lock"></i>
+                <input type="password" name="senha" class="form-control" required
+                       placeholder="••••••••" autocomplete="current-password">
+            </div>
+        </div>
+
+        <button type="submit" class="btn-login">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
+        </button>
+    </form>
+
+    <div class="login-footer">
+        RADIUS Manager &copy; 2026 &mdash; Acesso restrito
+    </div>
+</div>
+</body>
+</html>

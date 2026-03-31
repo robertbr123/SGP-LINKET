@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}API Keys — RADIUS Manager{% endblock %}
+{% block page_title %}API Keys{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item active">API Keys</li>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+<div class="col-lg-4">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-plus-circle text-primary"></i> Nova API Key</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('nova_api_key') }}">
+                <div class="mb-4">
+                    <label class="form-label">Nome / Descrição <span class="text-danger">*</span></label>
+                    <input type="text" name="nome" class="form-control" required
+                           placeholder="Ex: Integração ERP, Monitor externo">
+                    <div class="form-text">Identifique para qual sistema será usada esta chave.</div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-key-fill"></i> Gerar API Key
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mt-4 border-0" style="background:#f8fafc">
+        <div class="card-body py-3 px-4">
+            <h6 class="fw-semibold mb-2"><i class="bi bi-code-slash text-primary"></i> Como usar</h6>
+            <p class="text-muted mb-2" style="font-size:.82rem">Inclua o header em todas as requisições:</p>
+            <pre class="bg-dark text-success p-2 rounded" style="font-size:.75rem">X-API-Key: sua-chave-aqui</pre>
+            <p class="text-muted mt-2 mb-0" style="font-size:.82rem">Endpoints disponíveis:</p>
+            <ul class="text-muted mt-1 mb-0" style="font-size:.78rem;padding-left:16px">
+                <li><code>GET /api/v1/clientes</code></li>
+                <li><code>GET /api/v1/clientes/&lt;id&gt;</code></li>
+                <li><code>GET /api/v1/clientes/&lt;id&gt;/status</code></li>
+                <li><code>POST /api/v1/clientes/&lt;id&gt;/sincronizar</code></li>
+                <li><code>GET /api/v1/online</code></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="col-lg-8">
+    <div class="card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-key-fill text-primary"></i> Chaves Cadastradas</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Status</th>
+                        <th>Criada em</th>
+                        <th>Último uso</th>
+                        <th class="text-center" style="width:110px">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for k in keys %}
+                    <tr>
+                        <td class="fw-medium">{{ k.nome }}</td>
+                        <td>
+                            {% if k.ativo %}
+                                <span class="badge bg-success">Ativa</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inativa</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted" style="font-size:.82rem">
+                            {{ k.criado_em.strftime('%d/%m/%Y %H:%M') }}
+                        </td>
+                        <td class="text-muted" style="font-size:.82rem">
+                            {% if k.ultimo_uso %}
+                                {{ k.ultimo_uso.strftime('%d/%m/%Y %H:%M') }}
+                            {% else %}
+                                <span class="text-muted">Nunca</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                <form method="POST" action="{{ url_for('toggle_api_key', key_id=k.id) }}"
+                                      style="display:contents">
+                                    <button class="btn btn-outline-{{ 'warning' if k.ativo else 'success' }}"
+                                            title="{{ 'Desativar' if k.ativo else 'Ativar' }}">
+                                        <i class="bi bi-{{ 'pause-fill' if k.ativo else 'play-fill' }}"></i>
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ url_for('excluir_api_key', key_id=k.id) }}"
+                                      onsubmit="return confirm('Remover API Key \'{{ k.nome }}\'? Esta ação não pode ser desfeita.')"
+                                      style="display:contents">
+                                    <button class="btn btn-outline-danger" title="Excluir">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">
+                            <i class="bi bi-key" style="font-size:1.5rem"></i>
+                            <p class="mt-2 mb-0">Nenhuma API Key criada</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}

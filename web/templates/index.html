@@ -65,26 +65,41 @@
 <div class="card">
     <div class="card-header bg-white py-3">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-people-fill text-primary"></i> Clientes PPPoE</h5>
-            </div>
-            <div class="d-flex gap-2 align-items-center">
-                <div class="search-box">
-                    <i class="bi bi-search"></i>
-                    <input type="text" class="form-control form-control-sm" id="searchInput"
-                           placeholder="Buscar cliente..." style="width: 220px;">
-                </div>
-                <select class="form-select form-select-sm" id="filterStatus" style="width: 140px;">
-                    <option value="">Todos status</option>
-                    <option value="online">Online</option>
-                    <option value="offline">Offline</option>
-                    <option value="ativo">Ativo</option>
-                    <option value="suspenso">Suspenso</option>
-                    <option value="pendente">Pendente</option>
-                </select>
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-people-fill text-primary"></i> Clientes PPPoE</h5>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <form method="GET" action="{{ url_for('index') }}" class="d-flex gap-2 align-items-center">
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" name="busca" class="form-control form-control-sm"
+                               placeholder="Buscar cliente..." style="width:200px"
+                               value="{{ paginacao.busca }}">
+                    </div>
+                    <select name="status" class="form-select form-select-sm" style="width:140px"
+                            onchange="this.form.submit()">
+                        <option value="" {% if not paginacao.status %}selected{% endif %}>Todos status</option>
+                        <option value="online"   {% if paginacao.status == 'online' %}selected{% endif %}>Online</option>
+                        <option value="offline"  {% if paginacao.status == 'offline' %}selected{% endif %}>Offline</option>
+                        <option value="ativo"    {% if paginacao.status == 'ativo' %}selected{% endif %}>Ativo</option>
+                        <option value="suspenso" {% if paginacao.status == 'suspenso' %}selected{% endif %}>Suspenso</option>
+                        <option value="pendente" {% if paginacao.status == 'pendente' %}selected{% endif %}>Pendente</option>
+                    </select>
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-search"></i>
+                    </button>
+                    {% if paginacao.busca or paginacao.status %}
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-danger btn-sm" title="Limpar filtros">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                    {% endif %}
+                </form>
                 <a href="{{ url_for('novo_cliente') }}" class="btn btn-primary btn-sm">
                     <i class="bi bi-plus-lg"></i> Novo Cliente
                 </a>
+                <form method="POST" action="{{ url_for('radius_reapply_all') }}">
+                    <button class="btn btn-outline-warning btn-sm" title="Reaplicar RADIUS">
+                        <i class="bi bi-arrow-repeat"></i> Reapply
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -95,25 +110,26 @@
                 <tr>
                     <th style="width:40px"></th>
                     <th>Nome</th>
-                    <th>CPF</th>
                     <th>Login PPPoE</th>
                     <th>IP</th>
                     <th>Plano</th>
                     <th>Velocidade</th>
-                    <th>Pool</th>
                     <th>Status</th>
-                    <th class="text-center" style="width:140px">Ações</th>
+                    <th>Último Sync</th>
+                    <th class="text-center" style="width:120px">Ações</th>
                 </tr>
             </thead>
             <tbody>
             {% for c in clientes %}
-                <tr data-status="{{ 'online' if c.online else 'offline' }} {{ c.status }}">
+                <tr>
                     <td class="text-center">
                         <span class="online-dot {{ 'on' if c.online else 'off' }}"
                               title="{{ 'Online' if c.online else 'Offline' }}"></span>
                     </td>
-                    <td class="fw-medium">{{ c.nome }}</td>
-                    <td class="text-muted">{{ c.cpf }}</td>
+                    <td>
+                        <div class="fw-medium">{{ c.nome }}</div>
+                        <div class="text-muted" style="font-size:.75rem">{{ c.cpf }}</div>
+                    </td>
                     <td><code class="text-primary">{{ c.pppoe_login or '—' }}</code></td>
                     <td><span class="text-muted">{{ c.ip or '—' }}</span></td>
                     <td>
@@ -123,11 +139,21 @@
                         <i class="bi bi-arrow-down text-success"></i> {{ c.velocidade_down }}M
                         <i class="bi bi-arrow-up text-primary ms-1"></i> {{ c.velocidade_up }}M
                     </td>
-                    <td><span class="text-muted">{{ c.pool_nome or '—' }}</span></td>
                     <td>
-                        <span class="badge rounded-pill badge-{{ c.status }}">
-                            {{ c.status | title }}
-                        </span>
+                        <span class="badge rounded-pill badge-{{ c.status }}">{{ c.status | title }}</span>
+                    </td>
+                    <td>
+                        {% if c.ultimo_sync_em %}
+                            <span class="text-muted" style="font-size:.75rem"
+                                  title="{{ c.ultimo_sync_em }}">
+                                <i class="bi bi-clock"></i>
+                                {{ c.ultimo_sync_em.strftime('%d/%m %H:%M') }}
+                            </span>
+                        {% else %}
+                            <span class="text-danger" style="font-size:.75rem" title="Nunca sincronizado">
+                                <i class="bi bi-exclamation-circle"></i> Nunca
+                            </span>
+                        {% endif %}
                     </td>
                     <td class="text-center">
                         <div class="btn-group btn-group-sm">
@@ -151,13 +177,21 @@
                 </tr>
             {% else %}
                 <tr>
-                    <td colspan="10" class="text-center py-5">
+                    <td colspan="9" class="text-center py-5">
                         <div class="text-muted">
                             <i class="bi bi-inbox" style="font-size:2rem"></i>
-                            <p class="mt-2 mb-0">Nenhum cliente cadastrado</p>
+                            <p class="mt-2 mb-0">
+                                {% if paginacao.busca or paginacao.status %}
+                                    Nenhum cliente encontrado com os filtros aplicados.
+                                {% else %}
+                                    Nenhum cliente cadastrado
+                                {% endif %}
+                            </p>
+                            {% if not paginacao.busca and not paginacao.status %}
                             <a href="{{ url_for('novo_cliente') }}" class="btn btn-primary btn-sm mt-3">
                                 <i class="bi bi-plus-lg"></i> Cadastrar Primeiro Cliente
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
@@ -166,41 +200,45 @@
         </table>
         </div>
     </div>
-    {% if clientes %}
-    <div class="card-footer bg-white text-muted py-2 px-3" style="font-size:.8rem">
-        Exibindo <strong id="visibleCount">{{ clientes|length }}</strong> de {{ clientes|length }} clientes
+
+    <!-- Paginação -->
+    <div class="card-footer bg-white py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <small class="text-muted">
+            Exibindo <strong>{{ clientes|length }}</strong> de <strong>{{ paginacao.total }}</strong> clientes
+            {% if paginacao.busca %} — filtro: "<em>{{ paginacao.busca }}</em>"{% endif %}
+        </small>
+        {% if paginacao.total_paginas > 1 %}
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {{ 'disabled' if paginacao.pagina <= 1 }}">
+                    <a class="page-link" href="{{ url_for('index', pagina=paginacao.pagina-1, busca=paginacao.busca, status=paginacao.status) }}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% for p in range(1, paginacao.total_paginas + 1) %}
+                    {% if p == paginacao.pagina or p == 1 or p == paginacao.total_paginas
+                          or (p >= paginacao.pagina - 2 and p <= paginacao.pagina + 2) %}
+                    <li class="page-item {{ 'active' if p == paginacao.pagina }}">
+                        <a class="page-link" href="{{ url_for('index', pagina=p, busca=paginacao.busca, status=paginacao.status) }}">{{ p }}</a>
+                    </li>
+                    {% elif p == paginacao.pagina - 3 or p == paginacao.pagina + 3 %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {{ 'disabled' if paginacao.pagina >= paginacao.total_paginas }}">
+                    <a class="page-link" href="{{ url_for('index', pagina=paginacao.pagina+1, busca=paginacao.busca, status=paginacao.status) }}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Search + Filter
-const searchInput = document.getElementById('searchInput');
-const filterStatus = document.getElementById('filterStatus');
-const tableBody = document.querySelector('#clientTable tbody');
-
-function filterTable() {
-    const search = searchInput.value.toLowerCase();
-    const status = filterStatus.value.toLowerCase();
-    let visible = 0;
-    tableBody.querySelectorAll('tr[data-status]').forEach(row => {
-        const text = row.textContent.toLowerCase();
-        const rowStatus = row.dataset.status;
-        const matchSearch = !search || text.includes(search);
-        const matchStatus = !status || rowStatus.includes(status);
-        const show = matchSearch && matchStatus;
-        row.style.display = show ? '' : 'none';
-        if (show) visible++;
-    });
-    const vc = document.getElementById('visibleCount');
-    if (vc) vc.textContent = visible;
-}
-if (searchInput) searchInput.addEventListener('input', filterTable);
-if (filterStatus) filterStatus.addEventListener('change', filterTable);
-
-// Sync buttons
 document.querySelectorAll('.btn-sync').forEach(btn => {
     btn.addEventListener('click', async function () {
         const id = this.dataset.id;
@@ -213,12 +251,14 @@ document.querySelectorAll('.btn-sync').forEach(btn => {
                 location.reload();
             } else {
                 alert('Erro: ' + (data.error || 'Falha ao sincronizar'));
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
             }
         } catch (e) {
             alert('Erro de comunicação.');
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
         }
-        this.disabled = false;
-        this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
     });
 });
 </script>

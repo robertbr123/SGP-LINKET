@@ -30,11 +30,17 @@ CREATE TABLE IF NOT EXISTS clientes (
     pool_id INTEGER REFERENCES pools(id) ON DELETE SET NULL,
     pppoe_login VARCHAR(100),
     status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+    ultimo_sync_em TIMESTAMP,
     criado_em TIMESTAMP DEFAULT NOW(),
     atualizado_em TIMESTAMP DEFAULT NOW()
 );
 
--- Tabelas nativas do FreeRADIUS (radcheck, radreply, radusergroup, radgroupcheck, radgroupreply)
+-- Índice único parcial: pppoe_login só pode repetir se for NULL ou vazio
+CREATE UNIQUE INDEX IF NOT EXISTS clientes_pppoe_login_unique
+    ON clientes (pppoe_login)
+    WHERE pppoe_login IS NOT NULL AND pppoe_login != '';
+
+-- Tabelas nativas do FreeRADIUS
 CREATE TABLE IF NOT EXISTS radcheck (
     id SERIAL PRIMARY KEY,
     username VARCHAR(64) NOT NULL DEFAULT '',
@@ -109,6 +115,13 @@ CREATE TABLE IF NOT EXISTS radacct (
     class VARCHAR(64) DEFAULT NULL
 );
 
+-- Índices de performance no radacct (consultas frequentes)
+CREATE INDEX IF NOT EXISTS radacct_username_stoptime ON radacct (username, acctstoptime);
+CREATE INDEX IF NOT EXISTS radacct_username ON radacct (username);
+CREATE INDEX IF NOT EXISTS radacct_nasipaddress ON radacct (nasipaddress);
+CREATE INDEX IF NOT EXISTS radacct_starttime ON radacct (acctstarttime DESC);
+CREATE INDEX IF NOT EXISTS radacct_stoptime ON radacct (acctstoptime);
+
 CREATE TABLE IF NOT EXISTS nas (
     id SERIAL PRIMARY KEY,
     nasname VARCHAR(128) NOT NULL,
@@ -118,7 +131,9 @@ CREATE TABLE IF NOT EXISTS nas (
     secret VARCHAR(60) NOT NULL DEFAULT 'secret',
     server VARCHAR(64),
     community VARCHAR(50),
-    description VARCHAR(200) DEFAULT 'RADIUS Client'
+    description VARCHAR(200) DEFAULT 'RADIUS Client',
+    mikrotik_user VARCHAR(64) DEFAULT 'admin',
+    mikrotik_pass VARCHAR(64) DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS radpostauth (
@@ -127,4 +142,36 @@ CREATE TABLE IF NOT EXISTS radpostauth (
     pass VARCHAR(64) NOT NULL DEFAULT '',
     reply VARCHAR(32) NOT NULL DEFAULT '',
     authdate TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS radpostauth_username ON radpostauth (username);
+CREATE INDEX IF NOT EXISTS radpostauth_authdate ON radpostauth (authdate DESC);
+
+-- Usuários do painel web
+CREATE TABLE IF NOT EXISTS usuarios (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(80) NOT NULL UNIQUE,
+    senha_hash VARCHAR(256) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'admin',
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT NOW(),
+    ultimo_acesso TIMESTAMP
+);
+
+-- API Keys para acesso REST externo
+CREATE TABLE IF NOT EXISTS api_keys (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    key_hash VARCHAR(256) NOT NULL UNIQUE,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT NOW(),
+    ultimo_uso TIMESTAMP
+);
+
+-- Configurações de notificações (email / webhook)
+CREATE TABLE IF NOT EXISTS notificacoes_config (
+    id SERIAL PRIMARY KEY,
+    tipo VARCHAR(20) NOT NULL,
+    destino VARCHAR(300) NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT NOW()
 );

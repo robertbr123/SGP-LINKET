@@ -60,10 +60,7 @@
         }
 
         /* ---- Main ---- */
-        .main-wrapper {
-            margin-left: var(--sidebar-width);
-            min-height: 100vh;
-        }
+        .main-wrapper { margin-left: var(--sidebar-width); min-height: 100vh; }
 
         /* ---- Topbar ---- */
         .topbar {
@@ -98,23 +95,26 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 1.3rem;
         }
-        .stat-icon.blue  { background: #dbeafe; color: #2563eb; }
-        .stat-icon.green { background: #dcfce7; color: #16a34a; }
-        .stat-icon.red   { background: #fee2e2; color: #dc2626; }
-        .stat-icon.amber { background: #fef3c7; color: #d97706; }
-        .stat-icon.purple{ background: #ede9fe; color: #7c3aed; }
-        .stat-icon.cyan  { background: #cffafe; color: #0891b2; }
+        .stat-icon.blue   { background: #dbeafe; color: #2563eb; }
+        .stat-icon.green  { background: #dcfce7; color: #16a34a; }
+        .stat-icon.red    { background: #fee2e2; color: #dc2626; }
+        .stat-icon.amber  { background: #fef3c7; color: #d97706; }
+        .stat-icon.purple { background: #ede9fe; color: #7c3aed; }
+        .stat-icon.cyan   { background: #cffafe; color: #0891b2; }
         .stat-info h3 { font-size: 1.5rem; font-weight: 700; margin: 0; color: #1e293b; }
         .stat-info small { color: #64748b; font-size: .8rem; font-weight: 500; }
 
         /* ---- Badges ---- */
-        .badge-ativo  { background-color: #16a34a; }
+        .badge-ativo    { background-color: #16a34a; }
         .badge-suspenso { background-color: #dc2626; }
         .badge-pendente { background-color: #64748b; }
 
         /* ---- Table ---- */
         .table { font-size: .875rem; }
-        .table thead th { font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; color: #64748b; border-bottom: 2px solid var(--card-border); }
+        .table thead th {
+            font-weight: 600; font-size: .78rem; text-transform: uppercase;
+            letter-spacing: .5px; color: #64748b; border-bottom: 2px solid var(--card-border);
+        }
         .table tbody td { vertical-align: middle; color: #334155; }
         .table-hover tbody tr:hover { background-color: #f8fafc; }
 
@@ -123,11 +123,14 @@
         .online-dot.on  { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.2); }
         .online-dot.off { background: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,38,.15); }
 
-        /* ---- Form enhancements ---- */
+        /* ---- Form ---- */
         .form-label { font-weight: 500; font-size: .875rem; color: #334155; }
-        .form-control, .form-select { border-radius: 8px; border-color: #cbd5e1; font-size: .875rem; }
-        .form-control:focus, .form-select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
-        .input-group-text { border-radius: 0 8px 8px 0; font-size: .875rem; }
+        .form-control, .form-select {
+            border-radius: 8px; border-color: #cbd5e1; font-size: .875rem;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+        }
 
         /* ---- Buttons ---- */
         .btn { border-radius: 8px; font-weight: 500; font-size: .875rem; }
@@ -140,6 +143,18 @@
         .search-box { position: relative; }
         .search-box .form-control { padding-left: 38px; background: #f8fafc; }
         .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+
+        /* ---- User badge ---- */
+        .user-badge {
+            display: flex; align-items: center; gap: 8px;
+            color: #334155; font-size: .85rem; font-weight: 500;
+        }
+        .user-avatar {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: #2563eb; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: .8rem; font-weight: 700;
+        }
 
         /* ---- Mobile ---- */
         .sidebar-toggle { display: none; background: none; border: none; color: #1e293b; font-size: 1.4rem; cursor: pointer; }
@@ -179,8 +194,19 @@
         <a href="{{ url_for('gerenciar_pools') }}" class="{{ 'active' if request.endpoint == 'gerenciar_pools' }}">
             <i class="bi bi-diagram-3-fill"></i> Pools de IP
         </a>
-        <a href="{{ url_for('gerenciar_nas') }}" class="{{ 'active' if request.endpoint in ('gerenciar_nas',) }}">
+        <a href="{{ url_for('gerenciar_nas') }}" class="{{ 'active' if request.endpoint == 'gerenciar_nas' }}">
             <i class="bi bi-router-fill"></i> NAS / MikroTik
+        </a>
+
+        <div class="nav-label">Sistema</div>
+        <a href="{{ url_for('gerenciar_usuarios') }}" class="{{ 'active' if request.endpoint == 'gerenciar_usuarios' }}">
+            <i class="bi bi-people-fill"></i> Usuários
+        </a>
+        <a href="{{ url_for('gerenciar_api_keys') }}" class="{{ 'active' if request.endpoint == 'gerenciar_api_keys' }}">
+            <i class="bi bi-key-fill"></i> API Keys
+        </a>
+        <a href="{{ url_for('gerenciar_notificacoes') }}" class="{{ 'active' if request.endpoint == 'gerenciar_notificacoes' }}">
+            <i class="bi bi-bell-fill"></i> Notificações
         </a>
     </nav>
     <div class="sidebar-footer">
@@ -199,12 +225,21 @@
             <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
             <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
         </div>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Início</a></li>
-                {% block breadcrumb %}{% endblock %}
-            </ol>
-        </nav>
+        <div class="d-flex align-items-center gap-3">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Início</a></li>
+                    {% block breadcrumb %}{% endblock %}
+                </ol>
+            </nav>
+            <div class="user-badge">
+                <div class="user-avatar">{{ session.usuario_username[0].upper() if session.usuario_username else 'A' }}</div>
+                <span class="d-none d-md-inline">{{ session.usuario_username or 'admin' }}</span>
+            </div>
+            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-secondary" title="Sair">
+                <i class="bi bi-box-arrow-right"></i>
+            </a>
+        </div>
     </header>
 
     <!-- Content -->
@@ -212,7 +247,7 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for cat, msg in messages %}
                 <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert" style="border-radius:10px">
-                    {{ msg }}
+                    {{ msg | safe }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             {% endfor %}
