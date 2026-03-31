@@ -512,5 +512,40 @@ def excluir_nas(nas_id):
     return redirect(url_for("gerenciar_nas"))
 
 
+# ---------------------------------------------------------------------------
+# Diagnóstico RADIUS
+# ---------------------------------------------------------------------------
+
+@app.route("/radius/debug/<username>")
+def radius_debug(username):
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM radcheck WHERE username = %s", (username,))
+        checks = cur.fetchall()
+        cur.execute("SELECT * FROM radreply WHERE username = %s", (username,))
+        replies = cur.fetchall()
+    conn.close()
+    return jsonify({"username": username, "radcheck": checks, "radreply": replies})
+
+
+@app.route("/radius/reapply", methods=["POST"])
+def radius_reapply_all():
+    """Reaplica todos os atributos RADIUS baseado nos dados da tabela clientes."""
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM clientes WHERE pppoe_login IS NOT NULL AND pppoe_login != ''")
+        clientes = cur.fetchall()
+
+    count = 0
+    for c in clientes:
+        upsert_radius_user(conn, c["pppoe_login"], c["status"],
+                           c["velocidade_down"], c["velocidade_up"], c["ip"] or "")
+        count += 1
+
+    conn.close()
+    flash(f"Atributos RADIUS reaplicados para {count} clientes.", "success")
+    return redirect(url_for("index"))
+
+
 if __name__ == "__main__":
     app.run(debug=False)
