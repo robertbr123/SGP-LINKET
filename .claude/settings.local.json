@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find /c/Users/User/Documents/GitHub/SGP-LINKET/web/templates -type f -exec grep -l \"extends\" {})"
+      "Bash(find /c/Users/User/Documents/GitHub/SGP-LINKET/web/templates -type f -exec grep -l \"extends\" {})",
+      "Bash(grep -E \"\\\\.\\(md|txt|rst\\)$\")"
     ]
   }
 }

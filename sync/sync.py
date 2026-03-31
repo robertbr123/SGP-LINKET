@@ -6,17 +6,31 @@ Envia notificações (email/webhook) quando o status muda.
 """
 import os
 import time
+import json
 import smtplib
 import logging
 import requests
 import psycopg2
 import psycopg2.extras
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [SYNC] %(levelname)s %(message)s",
-)
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        obj = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": "sync",
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            obj["exc"] = self.formatException(record.exc_info)
+        return json.dumps(obj, ensure_ascii=False)
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 log = logging.getLogger(__name__)
 
 SGP_URL = os.environ.get("SGP_URL", "https://linknetam.sgp.net.br/api/ura/consultacliente/")
@@ -37,6 +51,21 @@ def get_db():
         user=os.environ.get("DB_USER", "radius"),
         password=os.environ.get("DB_PASS", "radiuspassword"),
     )
+
+
+def get_redis():
+    try:
+        import redis as redis_lib
+        r = redis_lib.Redis(
+            host=os.environ.get("REDIS_HOST", "redis"),
+            port=int(os.environ.get("REDIS_PORT", 6379)),
+            decode_responses=True,
+            socket_connect_timeout=2,
+        )
+        r.ping()
+        return r
+    except Exception:
+        return None
 
 
 def consultar_sgp(cpf: str) -> dict | None:
@@ -149,10 +178,13 @@ def send_notifications(conn, cliente: dict, old_status: str, new_status: str):
 
 def sync_all():
     log.info("Iniciando ciclo de sincronização...")
+    r = get_redis()
     try:
         conn = get_db()
     except Exception as e:
         log.error("Não foi possível conectar ao banco: %s", e)
+        if r:
+            r.set("sync:last_error", f"DB indisponível: {e}", ex=3600)
         return
 
     try:
@@ -207,14 +239,116 @@ def sync_all():
                 cliente_notif["pppoe_login"] = pppoe_login
                 send_notifications(conn, cliente_notif, old_status, novo_status)
 
+        now_iso = datetime.now(timezone.utc).isoformat()
         log.info(
             "Sincronização concluída: %d/%d clientes processados, %d alterados.",
             total, total, atualizados,
         )
+        if r:
+            r.set("sync:last_run", now_iso, ex=86400)
+            r.delete("sync:last_error")
+            r.delete("online_users")  # invalida cache de sessões
     except Exception as e:
         log.error("Erro durante sincronização: %s", e)
+        if r:
+            r.set("sync:last_error", str(e), ex=3600)
     finally:
         conn.close()
+
+
+def check_alertas_consumo(conn):
+    """Verifica alertas de consumo mensal e envia notificações se ultrapassado."""
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT ac.id, ac.cliente_id, ac.limite_gb,
+                       ac.notificar_webhook, ac.notificar_email,
+                       ac.ultimo_alerta_em,
+                       c.nome, c.pppoe_login
+                FROM alertas_consumo ac
+                JOIN clientes c ON c.id = ac.cliente_id
+                WHERE ac.ativo = TRUE AND c.pppoe_login IS NOT NULL
+            """)
+            alertas = cur.fetchall()
+
+        for alerta in alertas:
+            # Só dispara uma vez por mês
+            ultimo = alerta.get("ultimo_alerta_em")
+            if ultimo:
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                if ultimo.year == now.year and ultimo.month == now.month:
+                    continue
+
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0) AS total_bytes
+                    FROM radacct
+                    WHERE username = %s
+                      AND acctstarttime >= date_trunc('month', NOW())
+                """, (alerta["pppoe_login"],))
+                row = cur.fetchone()
+
+            total_bytes = int(row["total_bytes"] or 0)
+            limite_bytes = float(alerta["limite_gb"]) * 1_073_741_824
+            total_gb = total_bytes / 1_073_741_824
+
+            if total_bytes >= limite_bytes:
+                log.info(
+                    "Alerta consumo: cliente=%s consumiu %.2f GB (limite=%.2f GB)",
+                    alerta["nome"], total_gb, alerta["limite_gb"],
+                )
+                msg_text = (
+                    f"Cliente: {alerta['nome']}\n"
+                    f"Login: {alerta['pppoe_login']}\n"
+                    f"Consumo este mês: {total_gb:.2f} GB\n"
+                    f"Limite configurado: {alerta['limite_gb']} GB"
+                )
+
+                # Notificações
+                configs = []
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    if alerta["notificar_webhook"]:
+                        cur.execute("SELECT * FROM notificacoes_config WHERE tipo='webhook' AND ativo=TRUE")
+                        configs += cur.fetchall()
+                    if alerta["notificar_email"]:
+                        cur.execute("SELECT * FROM notificacoes_config WHERE tipo='email' AND ativo=TRUE")
+                        configs += cur.fetchall()
+
+                fake_cliente = {"nome": alerta["nome"], "cpf": "", "pppoe_login": alerta["pppoe_login"]}
+                for cfg in configs:
+                    if cfg["tipo"] == "webhook":
+                        try:
+                            requests.post(cfg["destino"], json={
+                                "event": "consumo_limite",
+                                "cliente_nome": alerta["nome"],
+                                "pppoe_login": alerta["pppoe_login"],
+                                "consumo_gb": round(total_gb, 2),
+                                "limite_gb": float(alerta["limite_gb"]),
+                            }, timeout=5)
+                        except Exception as e:
+                            log.warning("Webhook alerta consumo falhou: %s", e)
+                    elif cfg["tipo"] == "email" and SMTP_HOST and SMTP_USER:
+                        try:
+                            mail = MIMEText(msg_text, "plain", "utf-8")
+                            mail["Subject"] = f"[RADIUS] Limite de consumo: {alerta['nome']}"
+                            mail["From"] = SMTP_USER
+                            mail["To"] = cfg["destino"]
+                            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as srv:
+                                srv.starttls()
+                                srv.login(SMTP_USER, SMTP_PASS)
+                                srv.sendmail(SMTP_USER, cfg["destino"], mail.as_string())
+                        except Exception as e:
+                            log.warning("Email alerta consumo falhou: %s", e)
+
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE alertas_consumo SET ultimo_alerta_em=NOW() WHERE id=%s",
+                        (alerta["id"],),
+                    )
+                conn.commit()
+    except Exception as e:
+        log.warning("Erro ao verificar alertas de consumo: %s", e)
 
 
 if __name__ == "__main__":
@@ -222,4 +356,10 @@ if __name__ == "__main__":
     time.sleep(15)
     while True:
         sync_all()
+        try:
+            conn = get_db()
+            check_alertas_consumo(conn)
+            conn.close()
+        except Exception as e:
+            log.warning("Erro ao checar alertas: %s", e)
         time.sleep(SYNC_INTERVAL)

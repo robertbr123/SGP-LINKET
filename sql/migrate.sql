@@ -55,3 +55,20 @@ CREATE TABLE IF NOT EXISTS notificacoes_config (
     ativo BOOLEAN DEFAULT TRUE,
     criado_em TIMESTAMP DEFAULT NOW()
 );
+
+-- Tabela de alertas de consumo (limites mensais por cliente ou global)
+CREATE TABLE IF NOT EXISTS alertas_consumo (
+    id SERIAL PRIMARY KEY,
+    cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+    limite_gb NUMERIC(10,2) NOT NULL,
+    notificar_webhook BOOLEAN DEFAULT TRUE,
+    notificar_email BOOLEAN DEFAULT TRUE,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT NOW()
+);
+
+-- Índice para busca por cliente
+CREATE INDEX IF NOT EXISTS alertas_consumo_cliente ON alertas_consumo (cliente_id);
+
+-- Coluna para rastrear notificação já enviada no mês corrente
+ALTER TABLE alertas_consumo ADD COLUMN IF NOT EXISTS ultimo_alerta_em TIMESTAMP;

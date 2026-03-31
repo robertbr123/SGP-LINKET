@@ -9,7 +9,7 @@
         <div class="stat-card">
             <div class="stat-icon blue"><i class="bi bi-people-fill"></i></div>
             <div class="stat-info">
-                <h3>{{ stats.total_clientes }}</h3>
+                <h3 id="stat_total_clientes">{{ stats.total_clientes }}</h3>
                 <small>Total Clientes</small>
             </div>
         </div>
@@ -18,7 +18,7 @@
         <div class="stat-card">
             <div class="stat-icon green"><i class="bi bi-wifi"></i></div>
             <div class="stat-info">
-                <h3>{{ stats.total_online }}</h3>
+                <h3 id="stat_total_online">{{ stats.total_online }}</h3>
                 <small>Online</small>
             </div>
         </div>
@@ -27,7 +27,7 @@
         <div class="stat-card">
             <div class="stat-icon red"><i class="bi bi-wifi-off"></i></div>
             <div class="stat-info">
-                <h3>{{ stats.total_offline }}</h3>
+                <h3 id="stat_total_offline">{{ stats.total_offline }}</h3>
                 <small>Offline</small>
             </div>
         </div>
@@ -36,7 +36,7 @@
         <div class="stat-card">
             <div class="stat-icon amber"><i class="bi bi-exclamation-triangle-fill"></i></div>
             <div class="stat-info">
-                <h3>{{ stats.total_suspensos }}</h3>
+                <h3 id="stat_total_suspensos">{{ stats.total_suspensos }}</h3>
                 <small>Suspensos</small>
             </div>
         </div>
@@ -237,7 +237,55 @@
 </div>
 {% endblock %}
 
+<!-- Gráfico sessões 24h -->
+<div class="card mt-4">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-semibold"><i class="bi bi-graph-up text-primary"></i> Sessões ativas por hora (últimas 24h)</h6>
+        <a href="{{ url_for('relatorios') }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-bar-chart-fill"></i> Ver relatório completo
+        </a>
+    </div>
+    <div class="card-body">
+        <canvas id="chartSessoes" height="60"></canvas>
+    </div>
+</div>
+
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+// Gráfico 24h
+(async function() {
+    try {
+        const resp = await fetch('/api/v1/stats/historico');
+        const data = await resp.json();
+        const labels = data.map(d => {
+            try { return new Date(d.hora).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); }
+            catch(e) { return d.hora; }
+        });
+        const values = data.map(d => d.sessoes);
+        new Chart(document.getElementById('chartSessoes'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Sessões únicas',
+                    data: values,
+                    backgroundColor: 'rgba(37,99,235,.7)',
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                    x: { ticks: { maxRotation: 45 } }
+                }
+            }
+        });
+    } catch(e) {}
+})();
+</script>
 <script>
 document.querySelectorAll('.btn-sync').forEach(btn => {
     btn.addEventListener('click', async function () {
@@ -248,14 +296,15 @@ document.querySelectorAll('.btn-sync').forEach(btn => {
             const r = await fetch(`/cliente/${id}/sincronizar`, { method: 'POST' });
             const data = await r.json();
             if (r.ok) {
-                location.reload();
+                showToast('Cliente sincronizado: status <strong>' + data.status + '</strong>', 'success');
+                setTimeout(() => location.reload(), 1200);
             } else {
-                alert('Erro: ' + (data.error || 'Falha ao sincronizar'));
+                showToast('Erro: ' + (data.error || 'Falha ao sincronizar'), 'danger');
                 this.disabled = false;
                 this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
             }
         } catch (e) {
-            alert('Erro de comunicação.');
+            showToast('Erro de comunicação.', 'danger');
             this.disabled = false;
             this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
         }

@@ -1,5 +1,7 @@
 import os
 import re
+import json
+import time
 import hashlib
 import secrets
 import subprocess
@@ -11,10 +13,29 @@ import psycopg2.extras
 from functools import wraps
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, jsonify, session,
+    flash, jsonify, session, Response, stream_with_context,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# ---------------------------------------------------------------------------
+# JSON structured logging
+# ---------------------------------------------------------------------------
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_obj = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            log_obj["exc"] = self.formatException(record.exc_info)
+        return json.dumps(log_obj, ensure_ascii=False)
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -37,6 +58,45 @@ def get_db():
         user=os.environ.get("DB_USER", "radius"),
         password=os.environ.get("DB_PASS", "radiuspassword"),
     )
+
+
+def get_redis():
+    try:
+        import redis as redis_lib
+        r = redis_lib.Redis(
+            host=os.environ.get("REDIS_HOST", "redis"),
+            port=int(os.environ.get("REDIS_PORT", 6379)),
+            decode_responses=True,
+            socket_connect_timeout=2,
+        )
+        r.ping()
+        return r
+    except Exception:
+        return None
+
+
+def get_online_users() -> set:
+    """Retorna set de pppoe_logins ativos. Usa cache Redis por 30s."""
+    r = get_redis()
+    if r:
+        cached = r.get("online_users")
+        if cached:
+            return set(json.loads(cached))
+
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT DISTINCT c.pppoe_login
+            FROM clientes c
+            INNER JOIN radacct ra ON ra.username = c.pppoe_login
+            WHERE ra.acctstoptime IS NULL AND c.pppoe_login IS NOT NULL
+        """)
+        online = {row["pppoe_login"] for row in cur.fetchall()}
+    conn.close()
+
+    if r:
+        r.setex("online_users", 30, json.dumps(list(online)))
+    return online
 
 
 # ---------------------------------------------------------------------------
@@ -343,12 +403,10 @@ def index():
 
     offset = (pagina - 1) * por_pagina
 
+    online_users = get_online_users()
+
     conn = get_db()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        # Sessões ativas
-        cur.execute("SELECT username FROM radacct WHERE acctstoptime IS NULL")
-        online_users = {row["username"] for row in cur.fetchall()}
-
         # Query base com filtros
         where_clauses = []
         params = []
@@ -1276,6 +1334,25 @@ def api_sincronizar_cliente(cliente_id):
     return jsonify({"status": novo_status, "pppoe_login": pppoe_login})
 
 
+@app.route("/api/v1/stats/historico")
+@login_required
+def api_stats_historico():
+    """Dados de sessões agrupadas por hora para Chart.js."""
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT date_trunc('hour', acctstarttime) AS hora,
+                   COUNT(DISTINCT username) AS sessoes
+            FROM radacct
+            WHERE acctstarttime >= NOW() - INTERVAL '24 hours'
+            GROUP BY hora
+            ORDER BY hora
+        """)
+        rows = cur.fetchall()
+    conn.close()
+    return jsonify([{"hora": str(r["hora"]), "sessoes": int(r["sessoes"])} for r in rows])
+
+
 @app.route("/api/v1/online")
 @api_key_required
 def api_online():
@@ -1300,6 +1377,280 @@ def api_online():
         d["framedipaddress"] = str(d["framedipaddress"]) if d.get("framedipaddress") else None
         result.append(d)
     return jsonify({"total": len(result), "sessoes": result})
+
+
+# ---------------------------------------------------------------------------
+# Alertas de consumo
+# ---------------------------------------------------------------------------
+
+@app.route("/alertas-consumo", methods=["GET", "POST"])
+@login_required
+def alertas_consumo():
+    conn = get_db()
+
+    if request.method == "POST":
+        cliente_id = request.form.get("cliente_id", "").strip()
+        limite_gb = request.form.get("limite_gb", "").strip()
+        notificar_webhook = bool(request.form.get("notificar_webhook"))
+        notificar_email = bool(request.form.get("notificar_email"))
+
+        if not cliente_id or not limite_gb:
+            flash("Cliente e limite são obrigatórios.", "danger")
+        else:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO alertas_consumo
+                           (cliente_id, limite_gb, notificar_webhook, notificar_email)
+                           VALUES (%s, %s, %s, %s)""",
+                        (int(cliente_id), float(limite_gb),
+                         notificar_webhook, notificar_email),
+                    )
+                conn.commit()
+                flash("Alerta configurado com sucesso.", "success")
+            except Exception as e:
+                conn.rollback()
+                flash(f"Erro: {e}", "danger")
+
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT ac.*, c.nome AS cliente_nome, c.pppoe_login
+            FROM alertas_consumo ac
+            JOIN clientes c ON c.id = ac.cliente_id
+            ORDER BY ac.criado_em DESC
+        """)
+        alertas = cur.fetchall()
+        cur.execute("SELECT id, nome FROM clientes ORDER BY nome")
+        clientes_lista = cur.fetchall()
+
+    conn.close()
+    return render_template("alertas_consumo.html", alertas=alertas, clientes=clientes_lista)
+
+
+@app.route("/alertas-consumo/<int:alerta_id>/excluir", methods=["POST"])
+@login_required
+def excluir_alerta_consumo(alerta_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM alertas_consumo WHERE id = %s", (alerta_id,))
+    conn.commit()
+    conn.close()
+    flash("Alerta removido.", "success")
+    return redirect(url_for("alertas_consumo"))
+
+
+@app.route("/alertas-consumo/<int:alerta_id>/toggle", methods=["POST"])
+@login_required
+def toggle_alerta_consumo(alerta_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("UPDATE alertas_consumo SET ativo = NOT ativo WHERE id = %s", (alerta_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("alertas_consumo"))
+
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+@app.route("/health")
+def health():
+    status = {"status": "ok", "services": {}}
+
+    # PostgreSQL
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        conn.close()
+        status["services"]["postgres"] = "ok"
+    except Exception as e:
+        status["services"]["postgres"] = f"error: {e}"
+        status["status"] = "degraded"
+
+    # Redis
+    r = get_redis()
+    if r:
+        status["services"]["redis"] = "ok"
+    else:
+        status["services"]["redis"] = "unavailable"
+        status["status"] = "degraded"
+
+    # Sync status (from Redis)
+    if r:
+        last_sync = r.get("sync:last_run")
+        sync_error = r.get("sync:last_error")
+        status["sync"] = {
+            "last_run": last_sync,
+            "last_error": sync_error,
+        }
+
+    http_status = 200 if status["status"] == "ok" else 207
+    return jsonify(status), http_status
+
+
+# ---------------------------------------------------------------------------
+# SSE — stats em tempo real
+# ---------------------------------------------------------------------------
+
+@app.route("/stream/stats")
+@login_required
+def stream_stats():
+    def generate():
+        while True:
+            try:
+                online_users = get_online_users()
+                conn = get_db()
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT COUNT(*) AS n FROM clientes")
+                    total = cur.fetchone()["n"]
+                    cur.execute("SELECT COUNT(*) AS n FROM clientes WHERE status='suspenso'")
+                    suspensos = cur.fetchone()["n"]
+                conn.close()
+
+                total_online = len(online_users)
+                payload = json.dumps({
+                    "total_clientes": total,
+                    "total_online": total_online,
+                    "total_offline": total - total_online,
+                    "total_suspensos": suspensos,
+                })
+
+                r = get_redis()
+                sync_info = {}
+                if r:
+                    sync_info = {
+                        "last_run": r.get("sync:last_run"),
+                        "last_error": r.get("sync:last_error"),
+                    }
+                payload = json.dumps({
+                    "total_clientes": total,
+                    "total_online": total_online,
+                    "total_offline": total - total_online,
+                    "total_suspensos": suspensos,
+                    "sync": sync_info,
+                })
+                yield f"data: {payload}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            time.sleep(15)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Relatórios
+# ---------------------------------------------------------------------------
+
+@app.route("/relatorios")
+@login_required
+def relatorios():
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+
+        # Top 10 consumidores (input + output em bytes)
+        cur.execute("""
+            SELECT ra.username,
+                   c.nome,
+                   c.plano,
+                   SUM(ra.acctinputoctets + ra.acctoutputoctets) AS total_bytes,
+                   SUM(ra.acctinputoctets)  AS download_bytes,
+                   SUM(ra.acctoutputoctets) AS upload_bytes,
+                   COUNT(*) AS num_sessoes
+            FROM radacct ra
+            LEFT JOIN clientes c ON c.pppoe_login = ra.username
+            WHERE ra.acctstarttime >= NOW() - INTERVAL '30 days'
+            GROUP BY ra.username, c.nome, c.plano
+            ORDER BY total_bytes DESC
+            LIMIT 10
+        """)
+        top_consumidores = cur.fetchall()
+
+        # Sessões históricas recentes (últimas 100)
+        cur.execute("""
+            SELECT ra.username, c.nome,
+                   ra.acctstarttime, ra.acctstoptime,
+                   ra.acctsessiontime,
+                   ra.acctinputoctets  AS download_bytes,
+                   ra.acctoutputoctets AS upload_bytes,
+                   ra.framedipaddress,
+                   ra.nasipaddress
+            FROM radacct ra
+            LEFT JOIN clientes c ON c.pppoe_login = ra.username
+            ORDER BY ra.acctstarttime DESC
+            LIMIT 100
+        """)
+        sessoes_historicas = cur.fetchall()
+
+        # Resumo geral do mês
+        cur.execute("""
+            SELECT
+                COUNT(DISTINCT username)                            AS clientes_ativos,
+                COUNT(*)                                            AS total_sessoes,
+                COALESCE(SUM(acctinputoctets + acctoutputoctets),0) AS total_bytes,
+                COALESCE(AVG(acctsessiontime), 0)                   AS avg_session_secs
+            FROM radacct
+            WHERE acctstarttime >= date_trunc('month', NOW())
+        """)
+        resumo_mes = cur.fetchone()
+
+        # Dados para gráfico: online por hora nas últimas 24h
+        cur.execute("""
+            SELECT date_trunc('hour', acctstarttime) AS hora,
+                   COUNT(DISTINCT username) AS qtd
+            FROM radacct
+            WHERE acctstarttime >= NOW() - INTERVAL '24 hours'
+            GROUP BY hora
+            ORDER BY hora
+        """)
+        grafico_24h = cur.fetchall()
+
+    conn.close()
+
+    # Formata bytes para exibição
+    def fmt_bytes(b):
+        b = b or 0
+        if b >= 1_073_741_824:
+            return f"{b/1_073_741_824:.2f} GB"
+        if b >= 1_048_576:
+            return f"{b/1_048_576:.2f} MB"
+        if b >= 1024:
+            return f"{b/1024:.2f} KB"
+        return f"{b} B"
+
+    for row in top_consumidores:
+        row["total_fmt"]    = fmt_bytes(row["total_bytes"])
+        row["download_fmt"] = fmt_bytes(row["download_bytes"])
+        row["upload_fmt"]   = fmt_bytes(row["upload_bytes"])
+
+    for row in sessoes_historicas:
+        row["download_fmt"] = fmt_bytes(row["download_bytes"])
+        row["upload_fmt"]   = fmt_bytes(row["upload_bytes"])
+        secs = row.get("acctsessiontime") or 0
+        h, m = divmod(int(secs) // 60, 60)
+        row["duracao_fmt"] = f"{h}h {m}m" if h else f"{m}m"
+
+    resumo_mes["total_fmt"] = fmt_bytes(resumo_mes["total_bytes"])
+    avg_secs = int(resumo_mes.get("avg_session_secs") or 0)
+    h, m = divmod(avg_secs // 60, 60)
+    resumo_mes["avg_fmt"] = f"{h}h {m}m" if h else f"{m}m"
+
+    grafico_labels = [str(r["hora"]) for r in grafico_24h]
+    grafico_values = [int(r["qtd"]) for r in grafico_24h]
+
+    return render_template(
+        "relatorios.html",
+        top_consumidores=top_consumidores,
+        sessoes_historicas=sessoes_historicas,
+        resumo_mes=resumo_mes,
+        grafico_labels=json.dumps(grafico_labels),
+        grafico_values=json.dumps(grafico_values),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,9 @@
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+# isso faz com que o lxc consiga navegar na internet
+
+
+
 # Todos os serviços ao mesmo tempo (com scroll em tempo real)
 docker compose logs -f
 

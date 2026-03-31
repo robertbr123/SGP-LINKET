@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Relatórios — RADIUS Manager{% endblock %}
+{% block page_title %}Relatórios{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Relatórios</li>{% endblock %}
+
+{% block extra_css %}
+<style>
+.consumo-bar { height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; }
+.consumo-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg,#2563eb,#60a5fa); }
+.session-row td { font-size: .82rem; }
+/* Oculta colunas menos importantes em telas pequenas */
+@media (max-width: 767.98px) {
+    .col-hide-mobile { display: none; }
+    .session-row td { font-size: .78rem; padding: .4rem .5rem; }
+    .stat-card { padding: 14px 16px; }
+    .stat-info h3 { font-size: 1.2rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Resumo do Mês -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-people-fill"></i></div>
+            <div class="stat-info">
+                <h3>{{ resumo_mes.clientes_ativos }}</h3>
+                <small>Clientes com sessão este mês</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-reception-4"></i></div>
+            <div class="stat-info">
+                <h3>{{ resumo_mes.total_sessoes }}</h3>
+                <small>Sessões este mês</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon purple"><i class="bi bi-hdd-fill"></i></div>
+            <div class="stat-info">
+                <h3>{{ resumo_mes.total_fmt }}</h3>
+                <small>Volume total trafegado</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card">
+            <div class="stat-icon cyan"><i class="bi bi-clock-history"></i></div>
+            <div class="stat-info">
+                <h3>{{ resumo_mes.avg_fmt }}</h3>
+                <small>Duração média de sessão</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- Gráfico 24h -->
+    <div class="col-12 col-xl-7">
+        <div class="card">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-graph-up text-primary"></i> Sessões nas últimas 24 horas</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="chart24h"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top consumidores -->
+    <div class="col-12 col-xl-5">
+        <div class="card">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-trophy-fill text-warning"></i> Top 10 Consumidores (30 dias)</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if top_consumidores %}
+                {% set max_bytes = top_consumidores[0].total_bytes or 1 %}
+                <ul class="list-group list-group-flush">
+                    {% for c in top_consumidores %}
+                    <li class="list-group-item px-3 py-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-medium" style="font-size:.83rem">
+                                <span class="text-muted me-1">#{{ loop.index }}</span>
+                                {{ c.nome or c.username }}
+                            </span>
+                            <span class="badge bg-light text-dark border" style="font-size:.75rem">{{ c.total_fmt }}</span>
+                        </div>
+                        <div class="consumo-bar">
+                            <div class="consumo-bar-fill" style="width:{{ ((c.total_bytes or 0) / max_bytes * 100)|int }}%"></div>
+                        </div>
+                        <div class="d-flex gap-3 mt-1" style="font-size:.72rem; color:#64748b">
+                            <span><i class="bi bi-arrow-down text-success"></i> {{ c.download_fmt }}</span>
+                            <span><i class="bi bi-arrow-up text-primary"></i> {{ c.upload_fmt }}</span>
+                            <span><i class="bi bi-collection"></i> {{ c.num_sessoes }} sessões</span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox" style="font-size:2rem"></i>
+                    <p class="mt-2">Nenhum dado de consumo nos últimos 30 dias.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sessões históricas -->
+<div class="card">
+    <div class="card-header bg-white py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-semibold"><i class="bi bi-clock-history text-primary"></i> Histórico de Sessões (últimas 100)</h6>
+            <small class="text-muted">{{ sessoes_historicas|length }} sessões exibidas</small>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Usuário</th>
+                        <th class="col-hide-mobile">Cliente</th>
+                        <th>Início</th>
+                        <th class="col-hide-mobile">Término</th>
+                        <th>Duração</th>
+                        <th>Download</th>
+                        <th class="col-hide-mobile">Upload</th>
+                        <th class="col-hide-mobile">IP</th>
+                        <th class="col-hide-mobile">NAS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for s in sessoes_historicas %}
+                <tr class="session-row">
+                    <td><code class="text-primary">{{ s.username }}</code></td>
+                    <td class="col-hide-mobile">{{ s.nome or '—' }}</td>
+                    <td>{{ s.acctstarttime.strftime('%d/%m %H:%M') if s.acctstarttime else '—' }}</td>
+                    <td class="col-hide-mobile">
+                        {% if s.acctstoptime %}
+                            {{ s.acctstoptime.strftime('%d/%m %H:%M') }}
+                        {% else %}
+                            <span class="badge" style="background:#16a34a">ativa</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ s.duracao_fmt }}</td>
+                    <td><i class="bi bi-arrow-down text-success"></i> {{ s.download_fmt }}</td>
+                    <td class="col-hide-mobile"><i class="bi bi-arrow-up text-primary"></i> {{ s.upload_fmt }}</td>
+                    <td class="col-hide-mobile"><span class="text-muted">{{ s.framedipaddress or '—' }}</span></td>
+                    <td class="col-hide-mobile"><span class="text-muted">{{ s.nasipaddress or '—' }}</span></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">
+                        <i class="bi bi-inbox" style="font-size:1.5rem"></i>
+                        <p class="mt-2 mb-0">Nenhuma sessão registrada.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+const labels = {{ grafico_labels | safe }};
+const values = {{ grafico_values | safe }};
+
+new Chart(document.getElementById('chart24h'), {
+    type: 'line',
+    data: {
+        labels: labels.map(l => {
+            try { return new Date(l).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); }
+            catch(e) { return l; }
+        }),
+        datasets: [{
+            label: 'Sessões únicas por hora',
+            data: values,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37,99,235,.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: true,
+            tension: 0.4,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1 } },
+            x: { ticks: { maxRotation: 45 } }
+        }
+    }
+});
+</script>
+{% endblock %}
