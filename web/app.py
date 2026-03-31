@@ -1,9 +1,13 @@
 import os
 import re
+import subprocess
+import logging
 import requests
 import psycopg2
 import psycopg2.extras
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+
+log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -118,6 +122,49 @@ def remove_radius_user(conn, login: str):
     conn.commit()
 
 
+def disconnect_user(conn, username: str):
+    """Envia Disconnect-Request ao NAS para derrubar a sessão PPPoE ativa."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT ra.acctsessionid, ra.nasipaddress, n.secret
+            FROM radacct ra
+            JOIN nas n ON host(ra.nasipaddress) = n.nasname
+            WHERE ra.username = %s AND ra.acctstoptime IS NULL
+            LIMIT 1
+        """, (username,))
+        session = cur.fetchone()
+
+    if not session:
+        return False
+
+    nas_ip = str(session["nasipaddress"])
+    secret = session["secret"]
+    session_id = session["acctsessionid"]
+
+    try:
+        cmd = [
+            "radclient", "-x", f"{nas_ip}:3799", "disconnect", secret
+        ]
+        input_data = f"Acct-Session-Id = {session_id}\nUser-Name = {username}\n"
+        result = subprocess.run(cmd, input=input_data, capture_output=True,
+                                text=True, timeout=5)
+        log.info("Disconnect %s@%s (session=%s): rc=%d, out=%s",
+                 username, nas_ip, session_id, result.returncode, result.stdout.strip())
+        return result.returncode == 0
+    except Exception as e:
+        log.warning("Falha ao desconectar %s: %s", username, e)
+        return False
+
+
+def check_ip_unique(conn, ip: str, exclude_id: int = 0) -> bool:
+    """Retorna True se o IP não está em uso por outro cliente."""
+    if not ip:
+        return True
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM clientes WHERE ip = %s AND id != %s", (ip, exclude_id))
+        return cur.fetchone() is None
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -230,6 +277,11 @@ def novo_cliente():
 
         pool_id_val = int(pool_id) if pool_id else None
 
+        if not check_ip_unique(conn, ip):
+            flash(f"O IP {ip} já está em uso por outro cliente.", "danger")
+            conn.close()
+            return render_template("form_cliente.html", cliente=None, planos=planos, pools=pools)
+
         try:
             with conn.cursor() as cur:
                 cur.execute(
@@ -298,6 +350,16 @@ def editar_cliente(cliente_id):
         vel_up = plano_obj["velocidade_up"]
         pool_id_val = int(pool_id) if pool_id else None
 
+        if not check_ip_unique(conn, ip, cliente_id):
+            flash(f"O IP {ip} já está em uso por outro cliente.", "danger")
+            conn.close()
+            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
+
+        # Detectar se houve mudança de plano ou IP
+        plano_changed = int(plano_id) != (cliente.get("plano_id") or 0)
+        ip_changed = ip != (cliente.get("ip") or "")
+        needs_disconnect = plano_changed or ip_changed
+
         with conn.cursor() as cur:
             cur.execute(
                 """UPDATE clientes SET nome=%s, ip=%s, plano=%s, velocidade_down=%s,
@@ -310,7 +372,16 @@ def editar_cliente(cliente_id):
         if pppoe_login:
             upsert_radius_user(conn, pppoe_login, cliente["status"], vel_down, vel_up, ip)
 
-        flash("Cliente atualizado.", "success")
+            if needs_disconnect:
+                if disconnect_user(conn, pppoe_login):
+                    flash("Cliente atualizado. Sessão PPPoE derrubada para aplicar alterações.", "success")
+                else:
+                    flash("Cliente atualizado. Não foi possível derrubar a sessão — o cliente precisará reconectar.", "warning")
+            else:
+                flash("Cliente atualizado.", "success")
+        else:
+            flash("Cliente atualizado.", "success")
+
         conn.close()
         return redirect(url_for("index"))
 
