@@ -160,77 +160,15 @@ set use-radius=yes accounting=yes</pre>
 
 {% block scripts %}
 <script>
-document.querySelectorAll('.btn-sessoes').forEach(btn => {
-    btn.addEventListener('click', async function () {
-        const nasId = this.dataset.id;
-        const nasIp = this.dataset.ip;
+function setModalBody(html) {
+    // Único lugar que usa innerHTML — só para estrutura estática sem dados externos
+    document.getElementById('modalBody').innerHTML = html;
+}
 
-        document.getElementById('nasIpModal').textContent = nasIp;
-        document.getElementById('modalBody').innerHTML = `
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary"></div>
-                <p class="mt-2 text-muted">Consultando MikroTik...</p>
-            </div>`;
-
-        const modal = new bootstrap.Modal(document.getElementById('modalSessoes'));
-        modal.show();
-
-        try {
-            const r = await fetch(`/nas/${nasId}/sessoes`);
-            const data = await r.json();
-
-            if (!r.ok) {
-                document.getElementById('modalBody').innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-x-circle"></i> Erro: ${data.error || 'Falha ao consultar MikroTik'}
-                    </div>`;
-                return;
-            }
-
-            if (!data.sessoes || data.sessoes.length === 0) {
-                document.getElementById('modalBody').innerHTML = `
-                    <div class="text-center py-4 text-muted">
-                        <i class="bi bi-wifi-off" style="font-size:2rem"></i>
-                        <p class="mt-2">Nenhuma sessão PPPoE ativa no momento</p>
-                    </div>`;
-                return;
-            }
-
-            let rows = data.sessoes.map(s => `
-                <tr>
-                    <td><code class="text-primary">${s.name || '—'}</code></td>
-                    <td>${s.address || '—'}</td>
-                    <td>${s.caller_id || s['caller-id'] || '—'}</td>
-                    <td>${s.uptime || '—'}</td>
-                    <td>${formatBytes(s.bytes_in || s['bytes-in'] || 0)} ↓ / ${formatBytes(s.bytes_out || s['bytes-out'] || 0)} ↑</td>
-                    <td>${s.service || '—'}</td>
-                </tr>`).join('');
-
-            document.getElementById('modalBody').innerHTML = `
-                <p class="text-muted mb-3"><strong>${data.total}</strong> sessão(ões) ativa(s)</p>
-                <div class="table-responsive">
-                <table class="table table-sm table-hover">
-                    <thead>
-                        <tr>
-                            <th>Usuário PPPoE</th>
-                            <th>IP</th>
-                            <th>MAC / Caller-ID</th>
-                            <th>Uptime</th>
-                            <th>Tráfego</th>
-                            <th>Serviço</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-                </div>`;
-        } catch (e) {
-            document.getElementById('modalBody').innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-x-circle"></i> Erro de comunicação com o servidor.
-                </div>`;
-        }
-    });
-});
+function safeText(val) {
+    // Cria TextNode seguro — sem XSS possível
+    return val == null || val === '' ? '—' : String(val);
+}
 
 function formatBytes(bytes) {
     bytes = parseInt(bytes) || 0;
@@ -239,5 +177,101 @@ function formatBytes(bytes) {
     if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
     return (bytes / 1073741824).toFixed(2) + ' GB';
 }
+
+function buildSessoesTable(data) {
+    const body = document.getElementById('modalBody');
+    body.textContent = '';  // limpa
+
+    const info = document.createElement('p');
+    info.className = 'text-muted mb-3';
+    const strong = document.createElement('strong');
+    strong.textContent = data.total;
+    info.appendChild(strong);
+    info.appendChild(document.createTextNode(' sessão(ões) ativa(s)'));
+    body.appendChild(info);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-responsive';
+
+    const table = document.createElement('table');
+    table.className = 'table table-sm table-hover';
+
+    // Cabeçalho
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Usuário PPPoE','IP','MAC / Caller-ID','Uptime','Tráfego','Serviço'].forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Linhas com textContent — sem XSS
+    const tbody = document.createElement('tbody');
+    data.sessoes.forEach(s => {
+        const tr = document.createElement('tr');
+        const cells = [
+            s.name,
+            s.address,
+            s.caller_id || s['caller-id'],
+            s.uptime,
+            formatBytes(s.bytes_in || s['bytes-in'] || 0) + ' ↓ / ' + formatBytes(s.bytes_out || s['bytes-out'] || 0) + ' ↑',
+            s.service,
+        ];
+        cells.forEach((val, i) => {
+            const td = document.createElement('td');
+            if (i === 0) {
+                const code = document.createElement('code');
+                code.className = 'text-primary';
+                code.textContent = safeText(val);
+                td.appendChild(code);
+            } else {
+                td.textContent = safeText(val);
+            }
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    body.appendChild(wrapper);
+}
+
+document.querySelectorAll('.btn-sessoes').forEach(btn => {
+    btn.addEventListener('click', async function () {
+        const nasId = this.dataset.id;
+        const nasIp = this.dataset.ip;
+
+        document.getElementById('nasIpModal').textContent = nasIp;
+        setModalBody('<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">Consultando MikroTik...</p></div>');
+
+        const modal = new bootstrap.Modal(document.getElementById('modalSessoes'));
+        modal.show();
+
+        try {
+            const r = await fetch(`/nas/${nasId}/sessoes`, {signal: AbortSignal.timeout(10000)});
+            const data = await r.json();
+
+            if (!r.ok) {
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger';
+                alert.textContent = 'Erro: ' + (data.error || 'Falha ao consultar MikroTik');
+                document.getElementById('modalBody').textContent = '';
+                document.getElementById('modalBody').appendChild(alert);
+                return;
+            }
+
+            if (!data.sessoes || data.sessoes.length === 0) {
+                setModalBody('<div class="text-center py-4 text-muted"><i class="bi bi-wifi-off" style="font-size:2rem"></i><p class="mt-2">Nenhuma sessão PPPoE ativa no momento</p></div>');
+                return;
+            }
+
+            buildSessoesTable(data);
+        } catch (e) {
+            setModalBody('<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Erro de comunicação com o servidor.</div>');
+        }
+    });
+});
 </script>
 {% endblock %}

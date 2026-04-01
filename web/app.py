@@ -397,7 +397,7 @@ def logout():
 @login_required
 def index():
     pagina = int(request.args.get("pagina", 1))
-    por_pagina = int(request.args.get("por_pagina", 50))
+    por_pagina = min(int(request.args.get("por_pagina", 50)), 200)
     busca = request.args.get("busca", "").strip()
     filtro_status = request.args.get("status", "").strip()
 
@@ -567,11 +567,6 @@ def novo_cliente():
             conn.close()
             return render_template("form_cliente.html", cliente=None, planos=planos, pools=pools)
 
-        if pppoe_login and not check_pppoe_login_unique(conn, pppoe_login):
-            flash(f"O login PPPoE '{pppoe_login}' já está cadastrado para outro cliente.", "danger")
-            conn.close()
-            return render_template("form_cliente.html", cliente=None, planos=planos, pools=pools)
-
         try:
             with conn.cursor() as cur:
                 cur.execute(
@@ -587,9 +582,13 @@ def novo_cliente():
                 upsert_radius_user(conn, pppoe_login, status, vel_down, vel_up, ip)
 
             flash(f"Cliente cadastrado com sucesso! Status SGP: {status}", "success")
-        except psycopg2.errors.UniqueViolation:
+        except psycopg2.errors.UniqueViolation as e:
             conn.rollback()
-            flash("Já existe um cliente com este CPF.", "danger")
+            msg = str(e)
+            if "pppoe_login" in msg:
+                flash(f"O login PPPoE '{pppoe_login}' já está cadastrado para outro cliente.", "danger")
+            else:
+                flash("Já existe um cliente com este CPF.", "danger")
         finally:
             conn.close()
 
@@ -1152,6 +1151,24 @@ def gerenciar_notificacoes():
         destino = request.form.get("destino", "").strip()
 
         if tipo and destino:
+            # Validação de URL para webhooks (previne SSRF)
+            if tipo == "webhook":
+                from urllib.parse import urlparse
+                parsed = urlparse(destino)
+                blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+                if parsed.scheme not in ("http", "https"):
+                    flash("URL do webhook deve usar http:// ou https://", "danger")
+                    conn.close()
+                    return redirect(url_for("gerenciar_notificacoes"))
+                if parsed.hostname in blocked_hosts:
+                    flash("URL do webhook não pode apontar para localhost.", "danger")
+                    conn.close()
+                    return redirect(url_for("gerenciar_notificacoes"))
+            elif tipo == "email" and "@" not in destino:
+                flash("E-mail inválido.", "danger")
+                conn.close()
+                return redirect(url_for("gerenciar_notificacoes"))
+
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO notificacoes_config (tipo, destino) VALUES (%s, %s)",
@@ -1356,8 +1373,14 @@ def api_stats_historico():
 @app.route("/api/v1/online")
 @api_key_required
 def api_online():
+    pagina = int(request.args.get("pagina", 1))
+    por_pagina = min(int(request.args.get("por_pagina", 100)), 500)
+    offset = (pagina - 1) * por_pagina
+
     conn = get_db()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM radacct WHERE acctstoptime IS NULL")
+        total = cur.fetchone()["n"]
         cur.execute("""
             SELECT ra.username, ra.nasipaddress, ra.acctstarttime,
                    ra.acctinputoctets, ra.acctoutputoctets, ra.framedipaddress,
@@ -1366,7 +1389,8 @@ def api_online():
             LEFT JOIN clientes c ON c.pppoe_login = ra.username
             WHERE ra.acctstoptime IS NULL
             ORDER BY ra.acctstarttime DESC
-        """)
+            LIMIT %s OFFSET %s
+        """, (por_pagina, offset))
         sessoes = cur.fetchall()
     conn.close()
     result = []
@@ -1376,7 +1400,7 @@ def api_online():
         d["nasipaddress"] = str(d["nasipaddress"]) if d.get("nasipaddress") else None
         d["framedipaddress"] = str(d["framedipaddress"]) if d.get("framedipaddress") else None
         result.append(d)
-    return jsonify({"total": len(result), "sessoes": result})
+    return jsonify({"total": total, "pagina": pagina, "por_pagina": por_pagina, "sessoes": result})
 
 
 # ---------------------------------------------------------------------------
@@ -1534,7 +1558,12 @@ def stream_stats():
                 yield f"data: {payload}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
-            time.sleep(15)
+            # Usa gevent.sleep se disponível (não bloqueia o worker)
+            try:
+                from gevent import sleep as gsleep
+                gsleep(15)
+            except ImportError:
+                time.sleep(15)
 
     return Response(
         stream_with_context(generate()),

@@ -176,6 +176,9 @@ def send_notifications(conn, cliente: dict, old_status: str, new_status: str):
                 log.warning("Falha ao enviar email para %s: %s", config["destino"], e)
 
 
+SYNC_MAX_DURATION = int(os.environ.get("SYNC_MAX_DURATION", "600"))  # 10 min padrão
+
+
 def sync_all():
     log.info("Iniciando ciclo de sincronização...")
     r = get_redis()
@@ -197,8 +200,16 @@ def sync_all():
 
         total = len(clientes)
         atualizados = 0
+        sync_start = time.time()
 
         for c in clientes:
+            # Timeout geral: aborta se exceder SYNC_MAX_DURATION segundos
+            if time.time() - sync_start > SYNC_MAX_DURATION:
+                log.warning("Sync abortado: tempo máximo de %ds excedido após %d clientes.", SYNC_MAX_DURATION, atualizados)
+                if r:
+                    r.set("sync:last_error", f"Timeout: ciclo excedeu {SYNC_MAX_DURATION}s", ex=3600)
+                break
+
             cpf = c["cpf"]
             contrato = consultar_sgp(cpf)
             if not contrato:
@@ -351,14 +362,89 @@ def check_alertas_consumo(conn):
         log.warning("Erro ao verificar alertas de consumo: %s", e)
 
 
+OFFLINE_ALERT_DAYS = int(os.environ.get("OFFLINE_ALERT_DAYS", "0"))  # 0 = desativado
+
+
+def check_clientes_offline(conn):
+    """Notifica clientes ativos que não se conectam há OFFLINE_ALERT_DAYS dias."""
+    if OFFLINE_ALERT_DAYS <= 0:
+        return
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT c.id, c.nome, c.pppoe_login, c.cpf,
+                       MAX(ra.acctstarttime) AS ultima_sessao
+                FROM clientes c
+                LEFT JOIN radacct ra ON ra.username = c.pppoe_login
+                WHERE c.status = 'ativo'
+                  AND c.pppoe_login IS NOT NULL
+                GROUP BY c.id, c.nome, c.pppoe_login, c.cpf
+                HAVING MAX(ra.acctstarttime) < NOW() - INTERVAL '%s days'
+                    OR MAX(ra.acctstarttime) IS NULL
+            """, (OFFLINE_ALERT_DAYS,))
+            offline_clientes = cur.fetchall()
+
+        if not offline_clientes:
+            return
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM notificacoes_config WHERE ativo = TRUE")
+            configs = cur.fetchall()
+
+        if not configs:
+            return
+
+        for c in offline_clientes:
+            ultima = c["ultima_sessao"]
+            dias_str = f"há {OFFLINE_ALERT_DAYS}+ dias" if ultima else "nunca conectou"
+            log.info("Cliente offline: %s (login=%s) — %s", c["nome"], c["pppoe_login"], dias_str)
+            msg_text = (
+                f"Cliente: {c['nome']}\n"
+                f"Login PPPoE: {c['pppoe_login']}\n"
+                f"Status: ativo mas offline {dias_str}\n"
+                f"Última sessão: {ultima or 'nenhuma'}"
+            )
+            for cfg in configs:
+                if cfg["tipo"] == "webhook":
+                    try:
+                        requests.post(cfg["destino"], json={
+                            "event": "cliente_offline",
+                            "cliente_nome": c["nome"],
+                            "pppoe_login": c["pppoe_login"],
+                            "ultima_sessao": str(ultima) if ultima else None,
+                            "dias_sem_conexao": OFFLINE_ALERT_DAYS,
+                        }, timeout=5)
+                    except Exception as e:
+                        log.warning("Webhook offline falhou: %s", e)
+                elif cfg["tipo"] == "email" and SMTP_HOST and SMTP_USER:
+                    try:
+                        mail = MIMEText(msg_text, "plain", "utf-8")
+                        mail["Subject"] = f"[RADIUS] Cliente offline: {c['nome']}"
+                        mail["From"] = SMTP_USER
+                        mail["To"] = cfg["destino"]
+                        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as srv:
+                            srv.starttls()
+                            srv.login(SMTP_USER, SMTP_PASS)
+                            srv.sendmail(SMTP_USER, cfg["destino"], mail.as_string())
+                    except Exception as e:
+                        log.warning("Email offline falhou: %s", e)
+
+        log.info("Alerta offline: %d cliente(s) sem conexão há %d+ dias.", len(offline_clientes), OFFLINE_ALERT_DAYS)
+    except Exception as e:
+        log.warning("Erro ao verificar clientes offline: %s", e)
+
+
 if __name__ == "__main__":
     log.info("Serviço de sync iniciado. Intervalo: %ds", SYNC_INTERVAL)
+    if OFFLINE_ALERT_DAYS > 0:
+        log.info("Alertas offline ativados: clientes sem conexão há %d+ dias serão notificados.", OFFLINE_ALERT_DAYS)
     time.sleep(15)
     while True:
         sync_all()
         try:
             conn = get_db()
             check_alertas_consumo(conn)
+            check_clientes_offline(conn)
             conn.close()
         except Exception as e:
             log.warning("Erro ao checar alertas: %s", e)

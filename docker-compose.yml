@@ -92,6 +92,10 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
+      # Alertas: dias sem conexão para notificar (0 = desativado)
+      OFFLINE_ALERT_DAYS: ${OFFLINE_ALERT_DAYS:-0}
+      # Timeout máximo do ciclo de sync em segundos
+      SYNC_MAX_DURATION: ${SYNC_MAX_DURATION:-600}
     networks:
       - radius_net
 

@@ -293,10 +293,13 @@ document.querySelectorAll('.btn-sync').forEach(btn => {
         this.disabled = true;
         this.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:14px;height:14px"></span>';
         try {
-            const r = await fetch(`/cliente/${id}/sincronizar`, { method: 'POST' });
+            const r = await fetch(`/cliente/${id}/sincronizar`, {
+                method: 'POST',
+                signal: AbortSignal.timeout(20000),
+            });
             const data = await r.json();
             if (r.ok) {
-                showToast('Cliente sincronizado: status <strong>' + data.status + '</strong>', 'success');
+                showToast('Sincronizado: status ' + data.status, 'success');
                 setTimeout(() => location.reload(), 1200);
             } else {
                 showToast('Erro: ' + (data.error || 'Falha ao sincronizar'), 'danger');
@@ -304,7 +307,8 @@ document.querySelectorAll('.btn-sync').forEach(btn => {
                 this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
             }
         } catch (e) {
-            showToast('Erro de comunicação.', 'danger');
+            const msg = e.name === 'TimeoutError' ? 'Timeout: servidor demorou demais.' : 'Erro de comunicação.';
+            showToast(msg, 'danger');
             this.disabled = false;
             this.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
         }
