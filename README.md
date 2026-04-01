@@ -2,6 +2,8 @@ lxc.cgroup2.devices.allow: c 10:200 rwm
 lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 # isso faz com que o lxc consiga navegar na internet
 
+# Gerar rash wg-easy
+docker run --rm ghcr.io/wg-easy/wg-easy wgpw 'SUA_SENHA_AQUI'
 
 
 # Todos os serviços ao mesmo tempo (com scroll em tempo real)
