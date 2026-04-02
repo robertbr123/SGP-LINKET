@@ -78,8 +78,34 @@ services:
       DB_USER: radius
       DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
     networks:
-      - radius_net
-      - wg_net
+      radius_net: {}
+      wg_net:
+        ipv4_address: 172.28.0.10
+
+  # Sidecar: redireciona porta 1812/1813 do WireGuard para o FreeRADIUS
+  radius-forward:
+    image: alpine:3.19
+    container_name: radius_forward
+    restart: unless-stopped
+    network_mode: "service:wireguard"
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - wireguard
+      - freeradius
+    command: >
+      sh -c "
+        apk add --no-cache iptables &&
+        while true; do
+          iptables -t nat -C PREROUTING -p udp --dport 1812 -j DNAT --to-destination 172.28.0.10:1812 2>/dev/null ||
+            iptables -t nat -A PREROUTING -p udp --dport 1812 -j DNAT --to-destination 172.28.0.10:1812;
+          iptables -t nat -C PREROUTING -p udp --dport 1813 -j DNAT --to-destination 172.28.0.10:1813 2>/dev/null ||
+            iptables -t nat -A PREROUTING -p udp --dport 1813 -j DNAT --to-destination 172.28.0.10:1813;
+          iptables -C FORWARD -p udp -d 172.28.0.10 -j ACCEPT 2>/dev/null ||
+            iptables -A FORWARD -p udp -d 172.28.0.10 -j ACCEPT;
+          sleep 30;
+        done
+      "
 
   web:
     build:
