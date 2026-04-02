@@ -76,26 +76,64 @@ def get_redis():
 
 
 def get_online_users() -> set:
-    """Retorna set de pppoe_logins ativos. Usa cache Redis por 30s."""
+    """Retorna set de pppoe_logins ativos.
+    Fonte primária: API do MikroTik (todos os NAS com credenciais cadastradas).
+    Fallback: radacct local.
+    Cache Redis por 60s.
+    """
     r = get_redis()
     if r:
         cached = r.get("online_users")
         if cached:
             return set(json.loads(cached))
 
-    conn = get_db()
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT DISTINCT c.pppoe_login
-            FROM clientes c
-            INNER JOIN radacct ra ON ra.username = c.pppoe_login
-            WHERE ra.acctstoptime IS NULL AND c.pppoe_login IS NOT NULL
-        """)
-        online = {row["pppoe_login"] for row in cur.fetchall()}
-    conn.close()
+    online = set()
+
+    # --- Fonte 1: MikroTik API (captura clientes de QUALQUER servidor RADIUS) ---
+    if MIKROTIK_AVAILABLE:
+        conn = get_db()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT nasname, mikrotik_user, mikrotik_pass, mikrotik_port "
+                "FROM nas WHERE mikrotik_user IS NOT NULL AND mikrotik_pass IS NOT NULL "
+                "AND mikrotik_pass != ''"
+            )
+            nas_list = cur.fetchall()
+        conn.close()
+
+        for nas in nas_list:
+            try:
+                api = librouteros.connect(
+                    host=nas["nasname"],
+                    username=nas["mikrotik_user"],
+                    password=nas["mikrotik_pass"],
+                    port=int(nas.get("mikrotik_port") or 8728),
+                    timeout=5,
+                )
+                sessions = list(api("/ppp/active/print"))
+                api.close()
+                for s in sessions:
+                    name = s.get("name", "")
+                    if name:
+                        online.add(name)
+            except Exception:
+                pass  # NAS inacessível — ignora e continua
+
+    # --- Fallback: radacct local (quando MikroTik não disponível ou sem credenciais) ---
+    if not online:
+        conn = get_db()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT DISTINCT c.pppoe_login
+                FROM clientes c
+                INNER JOIN radacct ra ON ra.username = c.pppoe_login
+                WHERE ra.acctstoptime IS NULL AND c.pppoe_login IS NOT NULL
+            """)
+            online = {row["pppoe_login"] for row in cur.fetchall()}
+        conn.close()
 
     if r:
-        r.setex("online_users", 30, json.dumps(list(online)))
+        r.setex("online_users", 60, json.dumps(list(online)))
     return online
 
 
