@@ -732,9 +732,19 @@ def sincronizar_cliente(cliente_id):
     conn.commit()
 
     if pppoe_login:
+        # Preserva senha personalizada — busca do radcheck antes de sobrescrever
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT value FROM radcheck WHERE username = %s AND attribute = 'Cleartext-Password'",
+                (pppoe_login,),
+            )
+            row = cur.fetchone()
+        senha_atual = row[0] if row else "123"
+
         upsert_radius_user(
             conn, pppoe_login, novo_status,
             cliente["velocidade_down"], cliente["velocidade_up"], ip_sgp,
+            senha=senha_atual,
         )
 
     conn.close()
@@ -999,10 +1009,19 @@ def radius_reapply_all():
         cur.execute("SELECT * FROM clientes WHERE pppoe_login IS NOT NULL AND pppoe_login != ''")
         clientes = cur.fetchall()
 
+    # Busca senhas atuais de uma vez para não resetar senhas personalizadas
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT username, value FROM radcheck WHERE attribute = 'Cleartext-Password'"
+        )
+        senhas = {row[0]: row[1] for row in cur.fetchall()}
+
     count = 0
     for c in clientes:
+        senha = senhas.get(c["pppoe_login"], "123")
         upsert_radius_user(conn, c["pppoe_login"], c["status"],
-                           c["velocidade_down"], c["velocidade_up"], c["ip"] or "")
+                           c["velocidade_down"], c["velocidade_up"], c["ip"] or "",
+                           senha=senha)
         count += 1
 
     conn.close()
