@@ -9,6 +9,7 @@ ALTER TABLE clientes ADD COLUMN IF NOT EXISTS ultimo_sync_em TIMESTAMP;
 -- Novas colunas na tabela nas (API MikroTik)
 ALTER TABLE nas ADD COLUMN IF NOT EXISTS mikrotik_user VARCHAR(64) DEFAULT 'admin';
 ALTER TABLE nas ADD COLUMN IF NOT EXISTS mikrotik_pass VARCHAR(64) DEFAULT '';
+ALTER TABLE nas ADD COLUMN IF NOT EXISTS mikrotik_port INTEGER DEFAULT 8728;
 
 -- Índice único para pppoe_login (evita duplicatas silenciosas)
 CREATE UNIQUE INDEX IF NOT EXISTS clientes_pppoe_login_unique

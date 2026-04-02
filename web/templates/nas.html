@@ -17,7 +17,7 @@
                 <div class="mb-3">
                     <label class="form-label">IP do MikroTik <span class="text-danger">*</span></label>
                     <input type="text" name="nasname" class="form-control" required
-                           placeholder="192.168.1.1">
+                           placeholder="192.168.1.1 ou 10.73.91.3">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Nome curto</label>
@@ -37,9 +37,9 @@
                 <hr class="my-3">
                 <p class="text-muted mb-2" style="font-size:.8rem">
                     <i class="bi bi-info-circle"></i>
-                    Credenciais da API RouterOS (opcional — para consulta de sessões)
+                    Credenciais da API RouterOS (para consulta de sessões)
                 </p>
-                <div class="row g-3 mb-4">
+                <div class="row g-3 mb-3">
                     <div class="col-6">
                         <label class="form-label">Usuário API</label>
                         <input type="text" name="mikrotik_user" class="form-control"
@@ -50,6 +50,12 @@
                         <input type="password" name="mikrotik_pass" class="form-control"
                                placeholder="••••••••">
                     </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Porta API RouterOS</label>
+                    <input type="number" name="mikrotik_port" class="form-control"
+                           placeholder="8728" value="8728">
+                    <div class="form-text">Padrão: 8728. Verifique em /ip service no MikroTik.</div>
                 </div>
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="bi bi-plus-lg"></i> Adicionar NAS
@@ -90,8 +96,8 @@ set use-radius=yes accounting=yes</pre>
                         <th>IP (NAS)</th>
                         <th>Nome</th>
                         <th>Secret</th>
-                        <th>Descrição</th>
-                        <th class="text-center" style="width:100px">Ações</th>
+                        <th>Porta API</th>
+                        <th class="text-center" style="width:120px">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -100,7 +106,11 @@ set use-radius=yes accounting=yes</pre>
                         <td><code class="text-primary">{{ nas.nasname }}</code></td>
                         <td class="fw-medium">{{ nas.shortname or '—' }}</td>
                         <td><code>{{ nas.secret }}</code></td>
-                        <td class="text-muted">{{ nas.description or '—' }}</td>
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                {{ nas.mikrotik_port or 8728 }}
+                            </span>
+                        </td>
                         <td class="text-center">
                             <div class="btn-group btn-group-sm">
                                 {% if mikrotik_available %}
@@ -111,6 +121,18 @@ set use-radius=yes accounting=yes</pre>
                                     <i class="bi bi-activity"></i>
                                 </button>
                                 {% endif %}
+                                <button class="btn btn-outline-secondary btn-editar"
+                                        data-id="{{ nas.id }}"
+                                        data-nasname="{{ nas.nasname }}"
+                                        data-shortname="{{ nas.shortname or '' }}"
+                                        data-secret="{{ nas.secret }}"
+                                        data-description="{{ nas.description or '' }}"
+                                        data-mikrotik_user="{{ nas.mikrotik_user or 'admin' }}"
+                                        data-mikrotik_pass="{{ nas.mikrotik_pass or '' }}"
+                                        data-mikrotik_port="{{ nas.mikrotik_port or 8728 }}"
+                                        title="Editar NAS">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
                                 <form method="POST" action="{{ url_for('excluir_nas', nas_id=nas.id) }}"
                                       onsubmit="return confirm('Remover NAS {{ nas.nasname }}?')"
                                       style="display:contents">
@@ -134,6 +156,71 @@ set use-radius=yes accounting=yes</pre>
         </div>
     </div>
 </div>
+</div>
+
+<!-- Modal Editar NAS -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-semibold">
+                    <i class="bi bi-pencil text-primary"></i> Editar NAS
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEditar" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">IP do MikroTik <span class="text-danger">*</span></label>
+                        <input type="text" name="nasname" id="edit_nasname" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nome curto</label>
+                        <input type="text" name="shortname" id="edit_shortname" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Secret RADIUS <span class="text-danger">*</span></label>
+                        <input type="text" name="secret" id="edit_secret" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrição</label>
+                        <input type="text" name="description" id="edit_description" class="form-control">
+                    </div>
+                    <hr>
+                    <p class="text-muted mb-2" style="font-size:.8rem">
+                        <i class="bi bi-info-circle"></i> Credenciais API RouterOS
+                    </p>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Usuário API</label>
+                            <input type="text" name="mikrotik_user" id="edit_mikrotik_user" class="form-control">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Senha API</label>
+                            <div class="input-group">
+                                <input type="password" name="mikrotik_pass" id="edit_mikrotik_pass" class="form-control">
+                                <button type="button" class="btn btn-outline-secondary"
+                                        onclick="toggleEditSenha()">
+                                    <i class="bi bi-eye" id="editSenhaIcon"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Porta API RouterOS</label>
+                        <input type="number" name="mikrotik_port" id="edit_mikrotik_port" class="form-control">
+                        <div class="form-text">Verifique em <code>/ip service print</code> no MikroTik.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- Modal sessões MikroTik -->
@@ -160,13 +247,38 @@ set use-radius=yes accounting=yes</pre>
 
 {% block scripts %}
 <script>
+function toggleEditSenha() {
+    const f = document.getElementById('edit_mikrotik_pass');
+    const icon = document.getElementById('editSenhaIcon');
+    if (f.type === 'password') {
+        f.type = 'text';
+        icon.className = 'bi bi-eye-slash';
+    } else {
+        f.type = 'password';
+        icon.className = 'bi bi-eye';
+    }
+}
+
+document.querySelectorAll('.btn-editar').forEach(btn => {
+    btn.addEventListener('click', function () {
+        const id = this.dataset.id;
+        document.getElementById('formEditar').action = `/nas/${id}/editar`;
+        document.getElementById('edit_nasname').value      = this.dataset.nasname;
+        document.getElementById('edit_shortname').value   = this.dataset.shortname;
+        document.getElementById('edit_secret').value      = this.dataset.secret;
+        document.getElementById('edit_description').value = this.dataset.description;
+        document.getElementById('edit_mikrotik_user').value = this.dataset.mikrotik_user;
+        document.getElementById('edit_mikrotik_pass').value = this.dataset.mikrotik_pass;
+        document.getElementById('edit_mikrotik_port').value = this.dataset.mikrotik_port;
+        new bootstrap.Modal(document.getElementById('modalEditar')).show();
+    });
+});
+
 function setModalBody(html) {
-    // Único lugar que usa innerHTML — só para estrutura estática sem dados externos
     document.getElementById('modalBody').innerHTML = html;
 }
 
 function safeText(val) {
-    // Cria TextNode seguro — sem XSS possível
     return val == null || val === '' ? '—' : String(val);
 }
 
@@ -180,7 +292,7 @@ function formatBytes(bytes) {
 
 function buildSessoesTable(data) {
     const body = document.getElementById('modalBody');
-    body.textContent = '';  // limpa
+    body.textContent = '';
 
     const info = document.createElement('p');
     info.className = 'text-muted mb-3';
@@ -196,7 +308,6 @@ function buildSessoesTable(data) {
     const table = document.createElement('table');
     table.className = 'table table-sm table-hover';
 
-    // Cabeçalho
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
     ['Usuário PPPoE','IP','MAC / Caller-ID','Uptime','Tráfego','Serviço'].forEach(h => {
@@ -207,7 +318,6 @@ function buildSessoesTable(data) {
     thead.appendChild(headerRow);
     table.appendChild(thead);
 
-    // Linhas com textContent — sem XSS
     const tbody = document.createElement('tbody');
     data.sessoes.forEach(s => {
         const tr = document.createElement('tr');

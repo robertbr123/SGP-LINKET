@@ -917,13 +917,15 @@ def gerenciar_nas():
         mikrotik_user = request.form.get("mikrotik_user", "admin").strip()
         mikrotik_pass = request.form.get("mikrotik_pass", "").strip()
 
+        mikrotik_port = int(request.form.get("mikrotik_port", 8728) or 8728)
+
         if nasname and secret:
             with conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO nas (nasname, shortname, type, secret, description,
-                       mikrotik_user, mikrotik_pass)
-                       VALUES (%s, %s, 'other', %s, %s, %s, %s)""",
-                    (nasname, shortname, secret, description, mikrotik_user, mikrotik_pass),
+                       mikrotik_user, mikrotik_pass, mikrotik_port)
+                       VALUES (%s, %s, 'other', %s, %s, %s, %s, %s)""",
+                    (nasname, shortname, secret, description, mikrotik_user, mikrotik_pass, mikrotik_port),
                 )
             conn.commit()
             flash("NAS adicionado com sucesso.", "success")
@@ -934,6 +936,32 @@ def gerenciar_nas():
 
     conn.close()
     return render_template("nas.html", nas_list=nas_list, mikrotik_available=MIKROTIK_AVAILABLE)
+
+
+@app.route("/nas/<int:nas_id>/editar", methods=["POST"])
+@login_required
+def editar_nas(nas_id):
+    conn = get_db()
+    nasname = request.form.get("nasname", "").strip()
+    shortname = request.form.get("shortname", "").strip()
+    secret = request.form.get("secret", "").strip()
+    description = request.form.get("description", "").strip()
+    mikrotik_user = request.form.get("mikrotik_user", "admin").strip()
+    mikrotik_pass = request.form.get("mikrotik_pass", "").strip()
+    mikrotik_port = int(request.form.get("mikrotik_port", 8728) or 8728)
+
+    if nasname and secret:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE nas SET nasname=%s, shortname=%s, secret=%s, description=%s,
+                   mikrotik_user=%s, mikrotik_pass=%s, mikrotik_port=%s
+                   WHERE id=%s""",
+                (nasname, shortname, secret, description, mikrotik_user, mikrotik_pass, mikrotik_port, nas_id),
+            )
+        conn.commit()
+        flash("NAS atualizado com sucesso.", "success")
+    conn.close()
+    return redirect(url_for("gerenciar_nas"))
 
 
 @app.route("/nas/<int:nas_id>/excluir", methods=["POST"])
@@ -967,12 +995,14 @@ def nas_sessoes(nas_id):
     mt_user = nas.get("mikrotik_user") or "admin"
     mt_pass = nas.get("mikrotik_pass") or ""
 
+    mt_port = int(nas.get("mikrotik_port") or 8728)
+
     try:
         api = librouteros.connect(
             host=nas["nasname"],
             username=mt_user,
             password=mt_pass,
-            port=8728,
+            port=mt_port,
             timeout=5,
         )
         raw = list(api("/ppp/active/print"))
