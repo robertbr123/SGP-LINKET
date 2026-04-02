@@ -137,6 +137,7 @@ services:
       REDIS_PORT: 6379
     networks:
       - radius_net
+      - wg_net
 
   sync:
     build:
