@@ -88,7 +88,17 @@ def consultar_sgp(cpf: str) -> dict | None:
     return None
 
 
-def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: str = ""):
+def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: str = "", senha: str = ""):
+    # Preserva senha personalizada — busca do banco se não foi fornecida
+    if not senha:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT value FROM radcheck WHERE username = %s AND attribute = 'Cleartext-Password'",
+                (login,),
+            )
+            row = cur.fetchone()
+        senha = row[0] if row else "123"
+
     with conn.cursor() as cur:
         cur.execute("DELETE FROM radcheck WHERE username = %s", (login,))
         cur.execute("DELETE FROM radreply WHERE username = %s", (login,))
@@ -96,7 +106,7 @@ def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: st
         if status == "ativo":
             cur.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
-                (login, "Cleartext-Password", ":=", "123"),
+                (login, "Cleartext-Password", ":=", senha),
             )
             rate = f"{up}M/{down}M"
             cur.execute(
