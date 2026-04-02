@@ -117,12 +117,16 @@ services:
       dockerfile: Dockerfile
     container_name: radius_web
     restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
     ports:
       - "5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      wireguard:
         condition: service_started
     environment:
       DB_HOST: postgres
