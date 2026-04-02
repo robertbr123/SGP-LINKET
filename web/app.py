@@ -195,7 +195,7 @@ def status_from_sgp(contrato: dict) -> str:
 # RADIUS helpers
 # ---------------------------------------------------------------------------
 
-def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: str = ""):
+def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: str = "", senha: str = "123"):
     with conn.cursor() as cur:
         cur.execute("DELETE FROM radcheck WHERE username = %s", (login,))
         cur.execute("DELETE FROM radreply WHERE username = %s", (login,))
@@ -203,7 +203,7 @@ def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: st
         if status == "ativo":
             cur.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
-                (login, "Cleartext-Password", ":=", "123"),
+                (login, "Cleartext-Password", ":=", senha or "123"),
             )
             rate = f"{up}M/{down}M"
             cur.execute(
@@ -615,16 +615,30 @@ def editar_cliente(cliente_id):
         conn.close()
         return redirect(url_for("index"))
 
+    # Busca a senha atual do radcheck para exibir no formulário
+    senha_radius_atual = "123"
+    if cliente.get("pppoe_login"):
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT value FROM radcheck WHERE username = %s AND attribute = 'Cleartext-Password'",
+                (cliente["pppoe_login"],),
+            )
+            row = cur.fetchone()
+            if row:
+                senha_radius_atual = row[0]
+
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         ip = request.form.get("ip", "").strip()
         plano_id = request.form.get("plano_id", "").strip()
         pool_id = request.form.get("pool_id", "").strip()
+        senha_radius = request.form.get("senha_radius", "").strip()
 
         if not plano_id:
             flash("Plano é obrigatório.", "danger")
             conn.close()
-            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
+            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools,
+                                   senha_radius_atual=senha_radius_atual)
 
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SELECT * FROM planos WHERE id = %s", (plano_id,))
@@ -633,7 +647,8 @@ def editar_cliente(cliente_id):
         if not plano_obj:
             flash("Plano selecionado não encontrado.", "danger")
             conn.close()
-            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
+            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools,
+                                   senha_radius_atual=senha_radius_atual)
 
         plano_nome = plano_obj["nome"]
         vel_down = plano_obj["velocidade_down"]
@@ -643,11 +658,13 @@ def editar_cliente(cliente_id):
         if not check_ip_unique(conn, ip, cliente_id):
             flash(f"O IP {ip} já está em uso por outro cliente.", "danger")
             conn.close()
-            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
+            return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools,
+                                   senha_radius_atual=senha_radius_atual)
 
         plano_changed = int(plano_id) != (cliente.get("plano_id") or 0)
         ip_changed = ip != (cliente.get("ip") or "")
-        needs_disconnect = plano_changed or ip_changed
+        senha_changed = bool(senha_radius) and senha_radius != senha_radius_atual
+        needs_disconnect = plano_changed or ip_changed or senha_changed
 
         with conn.cursor() as cur:
             cur.execute(
@@ -659,7 +676,10 @@ def editar_cliente(cliente_id):
 
         pppoe_login = cliente["pppoe_login"]
         if pppoe_login:
-            upsert_radius_user(conn, pppoe_login, cliente["status"], vel_down, vel_up, ip)
+            # Determina qual senha usar: nova se fornecida, senão mantém a atual
+            senha_para_salvar = senha_radius if senha_changed else senha_radius_atual
+            upsert_radius_user(conn, pppoe_login, cliente["status"], vel_down, vel_up, ip,
+                               senha=senha_para_salvar)
             if needs_disconnect:
                 if disconnect_user(conn, pppoe_login):
                     flash("Cliente atualizado. Sessão PPPoE derrubada para aplicar alterações.", "success")
@@ -674,7 +694,8 @@ def editar_cliente(cliente_id):
         return redirect(url_for("index"))
 
     conn.close()
-    return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools)
+    return render_template("form_cliente.html", cliente=cliente, planos=planos, pools=pools,
+                           senha_radius_atual=senha_radius_atual)
 
 
 @app.route("/cliente/<int:cliente_id>/sincronizar", methods=["POST"])

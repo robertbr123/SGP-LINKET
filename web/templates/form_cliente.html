@@ -52,9 +52,32 @@
                 <div class="col-6">
                     <label class="form-label">Login PPPoE</label>
                     <input type="text" class="form-control bg-light" value="{{ cliente.pppoe_login or '—' }}" disabled>
-                    <div class="form-text">Senha RADIUS: <strong>123</strong></div>
                 </div>
             </div>
+            {% if cliente.pppoe_login %}
+            <div class="mb-3">
+                <label class="form-label">Senha RADIUS</label>
+                <div class="input-group">
+                    <input type="text" name="senha_radius" class="form-control"
+                           id="senhaRadiusInput"
+                           value="{{ senha_radius_atual }}"
+                           placeholder="Senha PPPoE do cliente"
+                           autocomplete="off">
+                    <button type="button" class="btn btn-outline-secondary" onclick="toggleSenha()"
+                            title="Mostrar/ocultar senha" id="btnToggleSenha">
+                        <i class="bi bi-eye" id="senhaIcon"></i>
+                    </button>
+                </div>
+                <div class="form-text">
+                    {% if senha_radius_atual != '123' %}
+                        <span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Senha personalizada ativa.</span>
+                    {% else %}
+                        <i class="bi bi-info-circle"></i> Senha padrão. Altere se necessário.
+                    {% endif %}
+                    Deixe em branco para manter a senha atual.
+                </div>
+            </div>
+            {% endif %}
             {% endif %}
 
             <div class="mb-3">
@@ -191,6 +214,19 @@ async function consultarCPF() {
 
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-search"></i> Verificar CPF';
+}
+
+function toggleSenha() {
+    const input = document.getElementById('senhaRadiusInput');
+    const icon = document.getElementById('senhaIcon');
+    if (!input) return;
+    if (input.type === 'text') {
+        input.type = 'password';
+        icon.className = 'bi bi-eye';
+    } else {
+        input.type = 'text';
+        icon.className = 'bi bi-eye-slash';
+    }
 }
 
 // Feedback visual ao submeter o formulário
