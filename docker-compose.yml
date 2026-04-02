@@ -107,6 +107,8 @@ services:
             iptables -t nat -A POSTROUTING -p udp -d 172.28.0.10 --dport 1813 -j MASQUERADE;
           iptables -C FORWARD -p udp -d 172.28.0.10 -j ACCEPT 2>/dev/null ||
             iptables -A FORWARD -p udp -d 172.28.0.10 -j ACCEPT;
+          iptables -t nat -C POSTROUTING -o wg0 -j MASQUERADE 2>/dev/null ||
+            iptables -t nat -A POSTROUTING -o wg0 -j MASQUERADE;
           sleep 30;
         done
       "
