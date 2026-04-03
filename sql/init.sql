@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS nas (
     community VARCHAR(50),
     description VARCHAR(200) DEFAULT 'RADIUS Client',
     mikrotik_user VARCHAR(64) DEFAULT 'admin',
-    mikrotik_pass VARCHAR(64) DEFAULT ''
+    mikrotik_pass VARCHAR(64) DEFAULT '',
+    mikrotik_port INTEGER DEFAULT 8728
 );
 
 CREATE TABLE IF NOT EXISTS radpostauth (
