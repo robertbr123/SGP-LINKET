@@ -54,6 +54,8 @@ server default {
     accounting {
         detail
         sql
+        # Encaminha cópia do accounting ao servidor RADIUS do SGP (tempo real)
+        exec_sgp_acct
         exec
         attr_filter.accounting_response
     }

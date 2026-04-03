@@ -1,0 +1,31 @@
+# =============================================================================
+# mods-enabled/exec_sgp
+#
+# Módulo exec que encaminha cópias dos packets de accounting ao servidor
+# RADIUS do SGP, permitindo que ele mostre os clientes como online.
+#
+# Os atributos do packet são passados como argumentos posicionais ao script
+# via expansão %{attr} do FreeRADIUS (shell_escape = yes garante segurança).
+# =============================================================================
+
+exec exec_sgp_acct {
+    program = "/bin/bash /etc/freeradius/3.0/scripts/forward_acct_to_sgp.sh \
+%{Acct-Status-Type} \
+%{User-Name} \
+%{Acct-Session-Id} \
+%{NAS-IP-Address} \
+%{Framed-IP-Address} \
+%{Acct-Session-Time:-0} \
+%{Acct-Input-Octets:-0} \
+%{Acct-Output-Octets:-0} \
+%{Calling-Station-Id} \
+%{Called-Station-Id} \
+%{Acct-Terminate-Cause} \
+%{Acct-Unique-Session-Id}"
+
+    # Não aguarda a resposta — accounting local não é bloqueado
+    wait = no
+
+    # Escapa chars especiais nos valores dos atributos para segurança de shell
+    shell_escape = yes
+}

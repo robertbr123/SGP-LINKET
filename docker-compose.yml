@@ -30,6 +30,34 @@ services:
       - radius_net
       - wg_net
 
+  # ---------------------------------------------------------------------------
+  # Injeta rota para a rede do SGP (172.16.116.0/24) na tabela do host Linux
+  # via MikroTik (192.168.140.1). Usa network_mode: host para escrever
+  # diretamente no namespace de rede do host. O Docker já tem regras de
+  # MASQUERADE que fazem o tráfego dos containers sair com o IP do servidor
+  # (192.168.140.102), que o MikroTik encaminha pelo L2TP ao SGP.
+  # ---------------------------------------------------------------------------
+  route-sgp:
+    image: alpine:3.19
+    container_name: radius_route_sgp
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Adicionando rota SGP: 172.16.116.0/24 via 192.168.140.1' &&
+        ip route add 172.16.116.0/24 via 192.168.140.1 2>/dev/null || true &&
+        echo 'Rota OK. Monitorando...' &&
+        while true; do
+          ip route show 172.16.116.0/24 | grep -q '172.16.116' || {
+            echo 'Rota sumiu, readicionando...';
+            ip route add 172.16.116.0/24 via 192.168.140.1 2>/dev/null || true;
+          };
+          sleep 60;
+        done
+      "
+
   redis:
     image: redis:7-alpine
     container_name: radius_redis
@@ -72,11 +100,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      route-sgp:
+        condition: service_started
     environment:
       DB_HOST: postgres
       DB_NAME: radius
       DB_USER: radius
       DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
+      # --- Encaminhamento de accounting ao RADIUS do SGP ---
+      # Configure as variáveis abaixo no seu .env conforme o seu SGP
+      SGP_RADIUS_ENABLED: ${SGP_RADIUS_ENABLED:-true}
+      SGP_RADIUS_HOST: ${SGP_RADIUS_HOST:-172.16.116.1}
+      SGP_RADIUS_ACCT_PORT: ${SGP_RADIUS_ACCT_PORT:-2052}
+      SGP_RADIUS_SECRET: ${SGP_RADIUS_SECRET:-sgp@radius}
     networks:
       radius_net: {}
       wg_net:
