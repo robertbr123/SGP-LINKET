@@ -1,0 +1,3 @@
+acct_unique {
+    key = "NAS-IP-Address, NAS-Port, Client-IP-Address, Acct-Session-Id, User-Name"
+}
