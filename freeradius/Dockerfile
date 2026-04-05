@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     freeradius \
     freeradius-postgresql \
     freeradius-utils \
+    freeradius-common \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
