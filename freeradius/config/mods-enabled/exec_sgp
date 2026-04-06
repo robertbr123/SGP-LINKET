@@ -27,15 +27,9 @@ exec exec_sgp_acct {
 %{Service-Type} \
 %{Framed-Protocol}"
 
-    # Aguarda a resposta para herdar variáveis de ambiente do FreeRADIUS
-    wait = yes
-
-    # Redireciona stderr do script para o log do FreeRADIUS
-    output = none
+    # Não aguarda a resposta — accounting local não é bloqueado pelo radclient
+    wait = no
 
     # Escapa chars especiais nos valores dos atributos para segurança de shell
     shell_escape = yes
-
-    # Variáveis de ambiente disponíveis para o script
-    input_pairs = request
 }

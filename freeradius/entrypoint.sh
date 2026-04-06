@@ -13,6 +13,22 @@ if [ -n "${SGP_ROUTE_GW}" ]; then
     ip route add 172.16.117.0/24 via "${SGP_ROUTE_GW}" 2>/dev/null || true
 fi
 
+# Grava configuração SGP em arquivo para o script de accounting (exec wait=no não herda env)
+SGP_CONF="/etc/freeradius/3.0/sgp_env.conf"
+cat > "${SGP_CONF}" <<ENVEOF
+SGP_RADIUS_ENABLED=${SGP_RADIUS_ENABLED:-true}
+SGP_RADIUS_HOST=${SGP_RADIUS_HOST:-172.16.116.1}
+SGP_RADIUS_ACCT_PORT=${SGP_RADIUS_ACCT_PORT:-2052}
+SGP_RADIUS_SECRET=${SGP_RADIUS_SECRET:-sgp@radius}
+SGP_NAS_IP_MAP=${SGP_NAS_IP_MAP:-}
+SGP_NAS_IP_OVERRIDE=${SGP_NAS_IP_OVERRIDE:-172.16.117.12}
+SGP_NAS_ID_MAP=${SGP_NAS_ID_MAP:-}
+SGP_NAS_IDENTIFIER=${SGP_NAS_IDENTIFIER:-}
+SGP_ACCT_DEBUG=${SGP_ACCT_DEBUG:-false}
+ENVEOF
+chmod 644 "${SGP_CONF}"
+echo "[entrypoint] Configuração SGP salva em ${SGP_CONF}"
+
 # Envia Accounting-On ao SGP em background (aguarda 10s para rota estabilizar)
 if [ "${SGP_RADIUS_ENABLED:-true}" = "true" ]; then
     (

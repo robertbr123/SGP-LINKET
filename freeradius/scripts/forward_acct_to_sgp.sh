@@ -21,6 +21,12 @@
 #   SGP_ACCT_DEBUG           - "true" para logar cada envio em stderr (padrão: false)
 # =============================================================================
 
+# Carrega configuração do arquivo (exec wait=no não herda variáveis de ambiente)
+SGP_CONF="/etc/freeradius/3.0/sgp_env.conf"
+if [ -f "${SGP_CONF}" ]; then
+    . "${SGP_CONF}"
+fi
+
 # Sai imediatamente se o encaminhamento estiver desativado
 [ "${SGP_RADIUS_ENABLED:-true}" = "false" ] && exit 0
 
