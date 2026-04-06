@@ -22,10 +22,12 @@ SGP_SECRET="${SGP_RADIUS_SECRET:-sgp@radius}"
 STATUS_TYPE="${1:-on}"
 
 if [ "${STATUS_TYPE}" = "off" ]; then
-    ACCT_STATUS="Accounting-Off"
+    ACCT_STATUS="8"
+    ACCT_LABEL="Accounting-Off"
     echo "[NAS-ACCT] Enviando Accounting-Off para todos os NAS..."
 else
-    ACCT_STATUS="Accounting-On"
+    ACCT_STATUS="7"
+    ACCT_LABEL="Accounting-On"
     echo "[NAS-ACCT] Enviando Accounting-On para todos os NAS..."
 fi
 
@@ -34,15 +36,17 @@ if [ -z "${SGP_NAS_IP_MAP}" ]; then
     NAS_IP="${SGP_NAS_IP_OVERRIDE:-172.16.117.12}"
     NAS_IDENT="${SGP_NAS_IDENTIFIER:-}"
 
-    PACKET=$(printf 'Acct-Status-Type = %s\nNAS-IP-Address = %s\nNAS-Port-Type = Virtual\n' "${ACCT_STATUS}" "${NAS_IP}")
+    PACKET="Acct-Status-Type = ${ACCT_STATUS}
+NAS-IP-Address = ${NAS_IP}"
     if [ -n "${NAS_IDENT}" ]; then
-        PACKET="${PACKET}$(printf 'NAS-Identifier = "%s"\n' "${NAS_IDENT}")"
+        PACKET="${PACKET}
+NAS-Identifier = ${NAS_IDENT}"
     fi
 
     echo "[NAS-ACCT]   NAS ${NAS_IP} (${NAS_IDENT:-sem identificador})..."
     RESULT=$(printf '%s\n' "${PACKET}" | radclient -r 2 -t 5 "${SGP_HOST}:${SGP_PORT}" acct "${SGP_SECRET}" 2>&1)
     if [ $? -eq 0 ]; then
-        echo "[NAS-ACCT]   OK - SGP aceitou ${ACCT_STATUS} para ${NAS_IP}"
+        echo "[NAS-ACCT]   OK - SGP aceitou ${ACCT_LABEL} para ${NAS_IP}"
     else
         echo "[NAS-ACCT]   FALHA - ${RESULT}"
     fi
@@ -60,15 +64,17 @@ echo "${SGP_NAS_IP_MAP}" | tr ',' '\n' | while IFS='=' read -r WG_IP SGP_IP; do
     fi
     [ -z "${NAS_IDENT}" ] && NAS_IDENT="${SGP_NAS_IDENTIFIER:-}"
 
-    PACKET=$(printf 'Acct-Status-Type = %s\nNAS-IP-Address = %s\nNAS-Port-Type = Virtual\n' "${ACCT_STATUS}" "${SGP_IP}")
+    PACKET="Acct-Status-Type = ${ACCT_STATUS}
+NAS-IP-Address = ${SGP_IP}"
     if [ -n "${NAS_IDENT}" ]; then
-        PACKET="${PACKET}$(printf 'NAS-Identifier = "%s"\n' "${NAS_IDENT}")"
+        PACKET="${PACKET}
+NAS-Identifier = ${NAS_IDENT}"
     fi
 
     echo "[NAS-ACCT]   NAS ${SGP_IP} (${NAS_IDENT:-sem identificador}) [WG: ${WG_IP}]..."
     RESULT=$(printf '%s\n' "${PACKET}" | radclient -r 2 -t 5 "${SGP_HOST}:${SGP_PORT}" acct "${SGP_SECRET}" 2>&1)
     if [ $? -eq 0 ]; then
-        echo "[NAS-ACCT]   OK - SGP aceitou ${ACCT_STATUS}"
+        echo "[NAS-ACCT]   OK - SGP aceitou ${ACCT_LABEL}"
     else
         echo "[NAS-ACCT]   FALHA - ${RESULT}"
     fi
