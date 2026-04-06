@@ -52,8 +52,8 @@ services:
     depends_on:
       - wireguard
     environment:
-      # Chave pública do peer MikroTik no WireGuard
-      PEER_KEY: ${SGP_WG_PEER_PUBKEY:-APgGh2ANwfmtsksw9/DM/w7swrN/4hcEJYo2Q/+LTnE=}
+      # Chave pública do peer MikroTik no WireGuard (como aparece em wg show wg0)
+      PEER_KEY: ${SGP_WG_PEER_PUBKEY:-T0IU0nE43dYEtcf+6IvBTVLy4UP5NFXxIglas4UblT0=}
     command: >
       sh -c "
         apk add --no-cache iptables wireguard-tools > /dev/null 2>&1;
