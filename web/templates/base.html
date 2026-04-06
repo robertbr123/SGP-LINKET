@@ -240,6 +240,9 @@
         <a href="{{ url_for('gerenciar_notificacoes') }}" class="{{ 'active' if request.endpoint == 'gerenciar_notificacoes' }}">
             <i class="bi bi-bell-fill"></i> Notificações
         </a>
+        <a href="{{ url_for('backup_restore') }}" class="{{ 'active' if request.endpoint == 'backup_restore' }}">
+            <i class="bi bi-hdd-stack-fill"></i> Backup e Restauração
+        </a>
     </nav>
     <div class="sidebar-footer">
         RADIUS Manager &copy; 2026

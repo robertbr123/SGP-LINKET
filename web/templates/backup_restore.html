@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Backup e Restauração — RADIUS Manager{% endblock %}
+{% block page_title %}Backup e Restauração{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-download text-primary"></i> Exportar Backup</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">
+                    Gera um arquivo JSON com dados de clientes e tabelas relacionadas ao PPPoE/RADIUS.
+                </p>
+                <ul class="text-muted small mb-4">
+                    <li>Inclui: clientes, planos, pools, radcheck, radreply, radusergroup e alertas.</li>
+                    <li>Use este arquivo para restauração em caso de falha ou migração.</li>
+                </ul>
+                <a href="{{ url_for('exportar_backup') }}" class="btn btn-primary">
+                    <i class="bi bi-cloud-download"></i> Baixar Backup Agora
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100 border-warning-subtle">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-upload text-warning"></i> Restaurar Backup</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    Esta ação substitui os dados atuais de clientes e atributos RADIUS.
+                </div>
+                <form method="POST" action="{{ url_for('restaurar_backup') }}" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Arquivo de backup (.json)</label>
+                        <input type="file" class="form-control" name="backup_file" accept=".json,application/json" required>
+                    </div>
+                    <button type="submit" class="btn btn-warning"
+                            onclick="return confirm('Confirma restaurar backup? Os dados atuais de clientes serão substituídos.')">
+                        <i class="bi bi-arrow-clockwise"></i> Restaurar Backup
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

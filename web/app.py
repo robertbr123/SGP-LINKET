@@ -7,6 +7,7 @@ import secrets
 import subprocess
 import ipaddress
 import logging
+from datetime import datetime, timezone
 import requests
 import psycopg2
 import psycopg2.extras
@@ -508,6 +509,19 @@ def index():
         cur.execute("SELECT COUNT(*) AS total FROM nas")
         total_nas = cur.fetchone()["total"]
 
+        # Online apenas entre clientes cadastrados localmente.
+        # Isso evita contagem maior que total_clientes quando o MikroTik traz
+        # sessões de outros logins/sistemas.
+        if online_users:
+            placeholders = ",".join(["%s"] * len(online_users))
+            cur.execute(
+                f"SELECT COUNT(*) AS total FROM clientes WHERE pppoe_login IN ({placeholders})",
+                list(online_users),
+            )
+            total_online_cadastrados = cur.fetchone()["total"]
+        else:
+            total_online_cadastrados = 0
+
     conn.close()
 
     total_online = 0
@@ -522,8 +536,8 @@ def index():
         "total_clientes": total_clientes,
         "total_ativos": total_ativos,
         "total_suspensos": total_suspensos,
-        "total_online": len(online_users),
-        "total_offline": total_clientes - len(online_users),
+        "total_online": total_online_cadastrados,
+        "total_offline": max(0, total_clientes - total_online_cadastrados),
         "total_planos": total_planos,
         "total_pools": total_pools,
         "total_nas": total_nas,
@@ -1095,6 +1109,159 @@ def radius_reapply_all():
     conn.close()
     flash(f"Atributos RADIUS reaplicados para {count} clientes.", "success")
     return redirect(url_for("index"))
+
+
+# ---------------------------------------------------------------------------
+# Backup / Restauracao
+# ---------------------------------------------------------------------------
+
+BACKUP_SCHEMA = {
+    "planos": ["id", "nome", "velocidade_down", "velocidade_up", "criado_em"],
+    "pools": ["id", "nome", "range_inicio", "range_fim", "descricao", "criado_em"],
+    "clientes": [
+        "id", "nome", "cpf", "ip", "plano", "velocidade_down", "velocidade_up",
+        "plano_id", "pool_id", "pppoe_login", "status", "ultimo_sync_em",
+        "criado_em", "atualizado_em",
+    ],
+    "radcheck": ["id", "username", "attribute", "op", "value"],
+    "radreply": ["id", "username", "attribute", "op", "value"],
+    "radusergroup": ["id", "username", "groupname", "priority"],
+    "alertas_consumo": [
+        "id", "cliente_id", "limite_gb", "notificar_webhook", "notificar_email",
+        "ativo", "ultimo_alerta_em", "criado_em",
+    ],
+}
+
+BACKUP_TABLE_ORDER = [
+    "planos",
+    "pools",
+    "clientes",
+    "radcheck",
+    "radreply",
+    "radusergroup",
+    "alertas_consumo",
+]
+
+
+@app.route("/backup")
+@login_required
+def backup_restore():
+    return render_template("backup_restore.html")
+
+
+@app.route("/backup/export")
+@login_required
+def exportar_backup():
+    payload = {
+        "meta": {
+            "version": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source": "radius-manager",
+        },
+        "tables": {},
+    }
+
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            for table in BACKUP_TABLE_ORDER:
+                cols = BACKUP_SCHEMA[table]
+                col_list = ", ".join(cols)
+                cur.execute(f"SELECT {col_list} FROM {table}")
+                payload["tables"][table] = cur.fetchall()
+    finally:
+        conn.close()
+
+    content = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    filename = f"backup_clientes_{time.strftime('%Y%m%d_%H%M%S')}.json"
+    return Response(
+        content,
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.route("/backup/restore", methods=["POST"])
+@login_required
+def restaurar_backup():
+    file = request.files.get("backup_file")
+    if not file or not file.filename:
+        flash("Selecione um arquivo de backup JSON.", "danger")
+        return redirect(url_for("backup_restore"))
+
+    try:
+        raw = file.read()
+        data = json.loads(raw.decode("utf-8"))
+    except Exception:
+        flash("Arquivo inválido. Envie um JSON de backup válido.", "danger")
+        return redirect(url_for("backup_restore"))
+
+    tables = data.get("tables") if isinstance(data, dict) else None
+    if not isinstance(tables, dict):
+        flash("Estrutura inválida: campo 'tables' não encontrado.", "danger")
+        return redirect(url_for("backup_restore"))
+
+    for required in ("planos", "pools", "clientes"):
+        if required not in tables:
+            flash(f"Backup inválido: tabela obrigatória ausente ({required}).", "danger")
+            return redirect(url_for("backup_restore"))
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            # Limpa dados dependentes antes de restaurar
+            cur.execute("DELETE FROM alertas_consumo")
+            cur.execute("DELETE FROM radusergroup")
+            cur.execute("DELETE FROM radreply")
+            cur.execute("DELETE FROM radcheck")
+            cur.execute("DELETE FROM clientes")
+            cur.execute("DELETE FROM pools")
+            cur.execute("DELETE FROM planos")
+
+            # Restaura na ordem correta para manter FKs
+            for table in BACKUP_TABLE_ORDER:
+                rows = tables.get(table, [])
+                if not isinstance(rows, list):
+                    raise ValueError(f"Tabela {table} inválida no backup")
+
+                allowed_cols = BACKUP_SCHEMA[table]
+                col_list = ", ".join(allowed_cols)
+                placeholders = ", ".join(["%s"] * len(allowed_cols))
+                insert_sql = f"INSERT INTO {table} ({col_list}) VALUES ({placeholders})"
+
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    values = [row.get(col) for col in allowed_cols]
+                    cur.execute(insert_sql, values)
+
+            # Reajusta sequences para IDs explícitos restaurados
+            seq_targets = [
+                ("planos", "id"),
+                ("pools", "id"),
+                ("clientes", "id"),
+                ("radcheck", "id"),
+                ("radreply", "id"),
+                ("radusergroup", "id"),
+                ("alertas_consumo", "id"),
+            ]
+            for table, col in seq_targets:
+                cur.execute(
+                    f"SELECT setval(pg_get_serial_sequence('{table}', '{col}'), "
+                    f"COALESCE((SELECT MAX({col}) FROM {table}), 1), "
+                    f"(SELECT COUNT(*) > 0 FROM {table}))"
+                )
+
+        conn.commit()
+        flash("Backup restaurado com sucesso.", "success")
+    except Exception as e:
+        conn.rollback()
+        log.warning("Falha ao restaurar backup: %s", e)
+        flash(f"Falha ao restaurar backup: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(url_for("backup_restore"))
 
 
 # ---------------------------------------------------------------------------
