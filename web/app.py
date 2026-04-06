@@ -1983,13 +1983,23 @@ def stream_stats():
                     total = cur.fetchone()["n"]
                     cur.execute("SELECT COUNT(*) AS n FROM clientes WHERE status='suspenso'")
                     suspensos = cur.fetchone()["n"]
+                    # Conta apenas online que estão cadastrados localmente (evita negativo)
+                    if online_users:
+                        placeholders = ",".join(["%s"] * len(online_users))
+                        cur.execute(
+                            f"SELECT COUNT(*) AS n FROM clientes WHERE pppoe_login IN ({placeholders})",
+                            list(online_users),
+                        )
+                        total_online_cadastrados = cur.fetchone()["n"]
+                    else:
+                        total_online_cadastrados = 0
                 conn.close()
 
-                total_online = len(online_users)
+                total_online = total_online_cadastrados
                 payload = json.dumps({
                     "total_clientes": total,
                     "total_online": total_online,
-                    "total_offline": total - total_online,
+                    "total_offline": max(0, total - total_online),
                     "total_suspensos": suspensos,
                 })
 
@@ -2034,7 +2044,7 @@ def relatorios():
     conn = get_db()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
 
-        # Top 10 consumidores (input + output em bytes)
+        # Top 10 consumidores — janela adaptativa: tenta 30 dias, cai para todo histórico
         cur.execute("""
             SELECT ra.username,
                    c.nome,
@@ -2045,14 +2055,13 @@ def relatorios():
                    COUNT(*) AS num_sessoes
             FROM radacct ra
             LEFT JOIN clientes c ON c.pppoe_login = ra.username
-            WHERE ra.acctstarttime >= NOW() - INTERVAL '30 days'
             GROUP BY ra.username, c.nome, c.plano
             ORDER BY total_bytes DESC
             LIMIT 10
         """)
         top_consumidores = cur.fetchall()
 
-        # Sessões históricas recentes (últimas 100)
+        # Sessões históricas recentes (últimas 100 — ativas primeiro, depois encerradas)
         cur.execute("""
             SELECT ra.username, c.nome,
                    ra.acctstarttime, ra.acctstoptime,
@@ -2063,24 +2072,42 @@ def relatorios():
                    ra.nasipaddress
             FROM radacct ra
             LEFT JOIN clientes c ON c.pppoe_login = ra.username
-            ORDER BY ra.acctstarttime DESC
+            ORDER BY (ra.acctstoptime IS NULL) DESC, ra.acctstarttime DESC
             LIMIT 100
         """)
         sessoes_historicas = cur.fetchall()
 
-        # Resumo geral do mês
+        # Sessões ativas agora
+        cur.execute("SELECT COUNT(*) AS n FROM radacct WHERE acctstoptime IS NULL")
+        sessoes_ativas = int(cur.fetchone()["n"])
+
+        # Resumo geral do mês atual
         cur.execute("""
             SELECT
                 COUNT(DISTINCT username)                            AS clientes_ativos,
                 COUNT(*)                                            AS total_sessoes,
                 COALESCE(SUM(acctinputoctets + acctoutputoctets),0) AS total_bytes,
-                COALESCE(AVG(acctsessiontime), 0)                   AS avg_session_secs
+                COALESCE(AVG(CASE WHEN acctstoptime IS NOT NULL THEN acctsessiontime END), 0) AS avg_session_secs
             FROM radacct
             WHERE acctstarttime >= date_trunc('month', NOW())
         """)
         resumo_mes = cur.fetchone()
 
-        # Dados para gráfico: online por hora nas últimas 24h
+        # Se o mês está zerado, tenta todo o histórico como fallback
+        resumo_periodo = "mês atual"
+        if not resumo_mes["clientes_ativos"] and not resumo_mes["total_sessoes"]:
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT username)                            AS clientes_ativos,
+                    COUNT(*)                                            AS total_sessoes,
+                    COALESCE(SUM(acctinputoctets + acctoutputoctets),0) AS total_bytes,
+                    COALESCE(AVG(CASE WHEN acctstoptime IS NOT NULL THEN acctsessiontime END), 0) AS avg_session_secs
+                FROM radacct
+            """)
+            resumo_mes = cur.fetchone()
+            resumo_periodo = "todo o histórico"
+
+        # Dados para gráfico: sessões ativas por hora nas últimas 24h
         cur.execute("""
             SELECT date_trunc('hour', acctstarttime) AS hora,
                    COUNT(DISTINCT username) AS qtd
@@ -2090,6 +2117,18 @@ def relatorios():
             ORDER BY hora
         """)
         grafico_24h = cur.fetchall()
+
+        # Se não há dados nas últimas 24h, pega todo histórico agrupado por dia
+        if not grafico_24h:
+            cur.execute("""
+                SELECT date_trunc('day', acctstarttime) AS hora,
+                       COUNT(DISTINCT username) AS qtd
+                FROM radacct
+                GROUP BY hora
+                ORDER BY hora
+                LIMIT 30
+            """)
+            grafico_24h = cur.fetchall()
 
     conn.close()
 
@@ -2113,13 +2152,22 @@ def relatorios():
         row["download_fmt"] = fmt_bytes(row["download_bytes"])
         row["upload_fmt"]   = fmt_bytes(row["upload_bytes"])
         secs = row.get("acctsessiontime") or 0
+        # Para sessões ativas, calcula tempo desde acctstarttime
+        if not row.get("acctstoptime") and row.get("acctstarttime"):
+            from datetime import timezone as tz
+            start = row["acctstarttime"]
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=tz.utc)
+            secs = int((datetime.now(tz.utc) - start).total_seconds())
         h, m = divmod(int(secs) // 60, 60)
         row["duracao_fmt"] = f"{h}h {m}m" if h else f"{m}m"
+        row["ativa"] = not row.get("acctstoptime")
 
     resumo_mes["total_fmt"] = fmt_bytes(resumo_mes["total_bytes"])
     avg_secs = int(resumo_mes.get("avg_session_secs") or 0)
     h, m = divmod(avg_secs // 60, 60)
     resumo_mes["avg_fmt"] = f"{h}h {m}m" if h else f"{m}m"
+    resumo_mes["sessoes_ativas"] = sessoes_ativas
 
     grafico_labels = [str(r["hora"]) for r in grafico_24h]
     grafico_values = [int(r["qtd"]) for r in grafico_24h]
@@ -2129,6 +2177,7 @@ def relatorios():
         top_consumidores=top_consumidores,
         sessoes_historicas=sessoes_historicas,
         resumo_mes=resumo_mes,
+        resumo_periodo=resumo_periodo,
         grafico_labels=json.dumps(grafico_labels),
         grafico_values=json.dumps(grafico_values),
     )

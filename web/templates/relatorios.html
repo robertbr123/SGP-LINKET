@@ -27,14 +27,14 @@
 {% endblock %}
 
 {% block content %}
-<!-- Resumo do Mês -->
+<!-- Resumo do Período -->
 <div class="row g-3 mb-4">
     <div class="col-xl-3 col-md-6">
         <div class="stat-card">
             <div class="stat-icon blue"><i class="bi bi-people-fill"></i></div>
             <div class="stat-info">
                 <h3>{{ resumo_mes.clientes_ativos }}</h3>
-                <small>Clientes com sessão este mês</small>
+                <small>Clientes com sessão ({{ resumo_periodo }})</small>
             </div>
         </div>
     </div>
@@ -42,8 +42,8 @@
         <div class="stat-card">
             <div class="stat-icon green"><i class="bi bi-reception-4"></i></div>
             <div class="stat-info">
-                <h3>{{ resumo_mes.total_sessoes }}</h3>
-                <small>Sessões este mês</small>
+                <h3>{{ resumo_mes.sessoes_ativas }}</h3>
+                <small>Sessões ativas agora</small>
             </div>
         </div>
     </div>
@@ -52,7 +52,7 @@
             <div class="stat-icon purple"><i class="bi bi-hdd-fill"></i></div>
             <div class="stat-info">
                 <h3>{{ resumo_mes.total_fmt }}</h3>
-                <small>Volume total trafegado</small>
+                <small>Volume trafegado ({{ resumo_periodo }})</small>
             </div>
         </div>
     </div>
