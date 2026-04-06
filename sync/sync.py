@@ -392,7 +392,7 @@ def check_clientes_offline(conn):
                 WHERE c.status = 'ativo'
                   AND c.pppoe_login IS NOT NULL
                 GROUP BY c.id, c.nome, c.pppoe_login, c.cpf
-                HAVING MAX(ra.acctstarttime) < NOW() - INTERVAL '%s days'
+                                HAVING MAX(ra.acctstarttime) < NOW() - (%s * INTERVAL '1 day')
                     OR MAX(ra.acctstarttime) IS NULL
             """, (OFFLINE_ALERT_DAYS,))
             offline_clientes = cur.fetchall()

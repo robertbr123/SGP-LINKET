@@ -8,6 +8,14 @@
 .consumo-bar { height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; }
 .consumo-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg,#2563eb,#60a5fa); }
 .session-row td { font-size: .82rem; }
+.semaforo-badge {
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+}
 /* Oculta colunas menos importantes em telas pequenas */
 @media (max-width: 767.98px) {
     .col-hide-mobile { display: none; }
@@ -169,6 +177,99 @@
         </div>
     </div>
 </div>
+
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-broadcast-pin text-primary"></i> Dashboard NOC em tempo real</h6>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="semaforo-badge text-bg-secondary" id="nocOverallStatus">sem dados</span>
+                    <small class="text-muted" id="nocUpdatedAt">atualizando...</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-12 col-md-4">
+                        <div class="stat-card">
+                            <div class="stat-icon green"><i class="bi bi-reception-4"></i></div>
+                            <div class="stat-info">
+                                <h3 id="nocAtivosTotal">0</h3>
+                                <small>Sessões ativas agora</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="stat-card">
+                            <div class="stat-icon amber"><i class="bi bi-arrow-repeat"></i></div>
+                            <div class="stat-info">
+                                <h3 id="nocChurnPct">0%</h3>
+                                <small>Churn de conexão (1h) <span class="semaforo-badge text-bg-secondary ms-1" id="nocChurnStatus">sem dados</span></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="stat-card">
+                            <div class="stat-icon red"><i class="bi bi-shield-exclamation"></i></div>
+                            <div class="stat-info">
+                                <h3 id="nocAaaFalhasPct">0%</h3>
+                                <small>Taxa de falha AAA (1h) <span class="semaforo-badge text-bg-secondary ms-1" id="nocAaaStatus">sem dados</span></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12 col-xl-7">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0" id="nocNasTable">
+                                <thead>
+                                    <tr>
+                                        <th>NAS</th>
+                                        <th>IP</th>
+                                        <th class="text-end">Sessões ativas</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-12 col-xl-5">
+                        <div class="border rounded p-3 h-100">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="fw-semibold">Churn (última 1h)</span>
+                                <span class="text-muted" id="nocChurnMeta">starts 0 | stops 0</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-3">
+                                <span class="text-muted">Usuários que reconectaram</span>
+                                <span id="nocReconectaram">0</span>
+                            </div>
+
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="fw-semibold">Top falhas AAA (1h)</span>
+                                <span class="text-muted" id="nocAaaTotais">0 / 0</span>
+                            </div>
+                            <ul class="list-group list-group-flush" id="nocAaaTopList">
+                                <li class="list-group-item px-0 text-muted">Sem falhas recentes.</li>
+                            </ul>
+
+                            <hr class="my-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="fw-semibold">Mini série temporal AAA (60 min)</span>
+                                <span class="text-muted" id="nocAaaSerieHint">falhas por minuto</span>
+                            </div>
+                            <div style="height: 140px;">
+                                <canvas id="nocAaa60mChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -204,5 +305,129 @@ new Chart(document.getElementById('chart24h'), {
         }
     }
 });
+
+function fmtHourMinute(iso) {
+    if (!iso) return '—';
+    try {
+        return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) {
+        return iso;
+    }
+}
+
+function semaforoMeta(status) {
+    if (status === 'red') return { cls: 'text-bg-danger', label: 'critico' };
+    if (status === 'yellow') return { cls: 'text-bg-warning', label: 'alerta' };
+    if (status === 'green') return { cls: 'text-bg-success', label: 'normal' };
+    return { cls: 'text-bg-secondary', label: 'sem dados' };
+}
+
+function setSemaforoBadge(id, status) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const meta = semaforoMeta(status);
+    el.className = `semaforo-badge ${meta.cls}`;
+    el.textContent = meta.label;
+}
+
+const nocAaa60mChart = new Chart(document.getElementById('nocAaa60mChart'), {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Falhas AAA/min',
+            data: [],
+            borderColor: '#dc2626',
+            backgroundColor: 'rgba(220,38,38,.12)',
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { ticks: { maxTicksLimit: 8 } },
+            y: { beginAtZero: true, ticks: { stepSize: 1 } }
+        }
+    }
+});
+
+async function refreshNoc() {
+    try {
+        const resp = await fetch('/api/v1/noc/realtime', { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) throw new Error('Falha ao consultar KPIs NOC');
+
+        const d = await resp.json();
+        document.getElementById('nocAtivosTotal').textContent = d.ativos_total ?? 0;
+
+        const churn = d.churn_1h || {};
+        const churnPct = Number(churn.churn_pct || 0);
+        document.getElementById('nocChurnPct').textContent = `${churnPct.toFixed(2)}%`;
+        document.getElementById('nocChurnMeta').textContent = `starts ${churn.starts_total || 0} | stops ${churn.stops_total || 0}`;
+        document.getElementById('nocReconectaram').textContent = `${churn.usuarios_reconectaram || 0} de ${churn.usuarios_com_start || 0}`;
+        setSemaforoBadge('nocChurnStatus', churn.semaforo);
+
+        const aaa = d.aaa_1h || {};
+        const aaaPct = Number(aaa.taxa_falha_pct || 0);
+        document.getElementById('nocAaaFalhasPct').textContent = `${aaaPct.toFixed(2)}%`;
+        document.getElementById('nocAaaTotais').textContent = `${aaa.falhas_auth || 0} falhas / ${aaa.total_auth || 0} auth`;
+        setSemaforoBadge('nocAaaStatus', aaa.semaforo);
+        setSemaforoBadge('nocOverallStatus', (d.semaforo || {}).overall);
+
+        const thresholds = (d.semaforo || {}).thresholds || {};
+        document.getElementById('nocAaaSerieHint').textContent =
+            `falhas por minuto | AAA alerta >= ${thresholds.aaa_warn_pct ?? 2}% | critico >= ${thresholds.aaa_crit_pct ?? 8}%`;
+
+        const nasBody = document.querySelector('#nocNasTable tbody');
+        const nasRows = Array.isArray(d.nas_sessions) ? d.nas_sessions : [];
+        if (!nasRows.length) {
+            nasBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Sem sessões ativas.</td></tr>';
+        } else {
+            nasBody.innerHTML = nasRows.map(row => `
+                <tr>
+                    <td>${row.nas_nome || '—'}</td>
+                    <td><span class="text-muted">${row.nas_ip || '—'}</span></td>
+                    <td class="text-end fw-semibold">${row.sessoes_ativas || 0}</td>
+                </tr>
+            `).join('');
+        }
+
+        const aaaList = document.getElementById('nocAaaTopList');
+        const topFalhas = Array.isArray(aaa.top_falhas) ? aaa.top_falhas : [];
+        if (!topFalhas.length) {
+            aaaList.innerHTML = '<li class="list-group-item px-0 text-muted">Sem falhas recentes.</li>';
+        } else {
+            aaaList.innerHTML = topFalhas.map(item => `
+                <li class="list-group-item px-0 d-flex justify-content-between">
+                    <code>${item.username || 'desconhecido'}</code>
+                    <span class="badge bg-danger-subtle text-danger border">${item.falhas || 0}</span>
+                </li>
+            `).join('');
+        }
+
+        const serie = Array.isArray(d.aaa_60m) ? d.aaa_60m : [];
+        nocAaa60mChart.data.labels = serie.map(p => {
+            try {
+                return new Date(p.minuto).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                return p.minuto || '';
+            }
+        });
+        nocAaa60mChart.data.datasets[0].data = serie.map(p => Number(p.falhas_auth || 0));
+        nocAaa60mChart.update('none');
+
+        document.getElementById('nocUpdatedAt').textContent = `atualizado ${fmtHourMinute(d.generated_at)}`;
+    } catch (e) {
+        setSemaforoBadge('nocOverallStatus', 'gray');
+        document.getElementById('nocUpdatedAt').textContent = 'falha ao atualizar';
+    }
+}
+
+refreshNoc();
+setInterval(refreshNoc, 15000);
 </script>
 {% endblock %}

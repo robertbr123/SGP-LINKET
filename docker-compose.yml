@@ -177,6 +177,10 @@ services:
       SECRET_KEY: ${SECRET_KEY:-troque-esta-chave-secreta}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      NOC_CHURN_WARN_PCT: ${NOC_CHURN_WARN_PCT:-5}
+      NOC_CHURN_CRIT_PCT: ${NOC_CHURN_CRIT_PCT:-12}
+      NOC_AAA_WARN_PCT: ${NOC_AAA_WARN_PCT:-2}
+      NOC_AAA_CRIT_PCT: ${NOC_AAA_CRIT_PCT:-8}
     networks:
       - radius_net
       - wg_net

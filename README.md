@@ -61,13 +61,14 @@ No terminal do MikroTik (Winbox ou SSH):
 
 ```
 /radius
-add address=<IP_DO_SERVIDOR_RADIUS> secret=radiussecret service=ppp
+add address=<IP_DO_SERVIDOR_RADIUS> secret=radiuspassword service=ppp
 
 /ppp aaa
 set use-radius=yes accounting=yes
 ```
 
-> O `secret` padrão é `radiussecret`. Troque em `docker-compose.yml` (variável não exposta) e no arquivo `freeradius/config/clients.conf`.
+> O `secret` padrão é `radiuspassword` (arquivo `freeradius/config/clients.conf`).
+> Se alterar, mantenha o mesmo valor no MikroTik e no FreeRADIUS.
 
 Depois adicione o IP do MikroTik no painel em **NAS / MikroTik**.
 
@@ -78,6 +79,10 @@ Depois adicione o IP do MikroTik no painel em **NAS / MikroTik**.
 | `SECRET_KEY` | (troque!) | Chave Flask para sessões |
 | `SYNC_INTERVAL` | `300` | Intervalo de sync com SGP (segundos) |
 | `DB_PASS` | `radiuspassword` | Senha do PostgreSQL |
+| `NOC_CHURN_WARN_PCT` | `5` | Semáforo NOC: alerta de churn (%) |
+| `NOC_CHURN_CRIT_PCT` | `12` | Semáforo NOC: crítico de churn (%) |
+| `NOC_AAA_WARN_PCT` | `2` | Semáforo NOC: alerta de falha AAA (%) |
+| `NOC_AAA_CRIT_PCT` | `8` | Semáforo NOC: crítico de falha AAA (%) |
 
 ## Estrutura de arquivos
 
@@ -104,6 +109,6 @@ RADIUS/
 ## Segurança recomendada para produção
 
 - Troque `SECRET_KEY` e `DB_PASS` no `docker-compose.yml`
-- Troque `radiussecret` no `clients.conf` e no MikroTik
+- Troque o `secret` do RADIUS no `clients.conf` e no MikroTik (mesmo valor em ambos)
 - Coloque o painel web atrás de um proxy reverso (nginx) com HTTPS
 - Restrinja o `clients.conf` apenas ao IP real do seu MikroTik (em vez de `0.0.0.0/0`)

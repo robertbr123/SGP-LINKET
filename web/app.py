@@ -1678,6 +1678,183 @@ def api_online():
     return jsonify({"total": total, "pagina": pagina, "por_pagina": por_pagina, "sessoes": result})
 
 
+@app.route("/api/v1/noc/realtime")
+@login_required
+def api_noc_realtime():
+    """KPIs operacionais em tempo real para o dashboard NOC."""
+    churn_warn_pct = float(os.environ.get("NOC_CHURN_WARN_PCT", "5"))
+    churn_crit_pct = float(os.environ.get("NOC_CHURN_CRIT_PCT", "12"))
+    aaa_warn_pct = float(os.environ.get("NOC_AAA_WARN_PCT", "2"))
+    aaa_crit_pct = float(os.environ.get("NOC_AAA_CRIT_PCT", "8"))
+
+    def semaforo_from_pct(value: float, warn: float, crit: float, no_data: bool = False) -> str:
+        if no_data:
+            return "gray"
+        if value >= crit:
+            return "red"
+        if value >= warn:
+            return "yellow"
+        return "green"
+
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        # Sessões ativas por NAS
+        cur.execute("""
+            SELECT
+                ra.nasipaddress::text AS nas_ip,
+                COALESCE(NULLIF(n.shortname, ''), NULLIF(n.nasname, ''), ra.nasipaddress::text) AS nas_nome,
+                COUNT(*) AS sessoes_ativas
+            FROM radacct ra
+            LEFT JOIN nas n ON host(ra.nasipaddress) = n.nasname
+            WHERE ra.acctstoptime IS NULL
+            GROUP BY ra.nasipaddress, nas_nome
+            ORDER BY sessoes_ativas DESC, nas_nome
+        """)
+        nas_sessions = cur.fetchall()
+
+        cur.execute("SELECT COUNT(*) AS total FROM radacct WHERE acctstoptime IS NULL")
+        ativos_total = int(cur.fetchone()["total"])
+
+        # Churn de conexão (última 1h): usuários com reconexão
+        cur.execute("""
+            WITH starts AS (
+                SELECT username, COUNT(*) AS starts
+                FROM radacct
+                WHERE acctstarttime >= NOW() - INTERVAL '1 hour'
+                GROUP BY username
+            )
+            SELECT
+                COALESCE(SUM(starts), 0) AS starts_total,
+                COUNT(*) AS usuarios_com_start,
+                COALESCE(SUM(CASE WHEN starts > 1 THEN 1 ELSE 0 END), 0) AS usuarios_reconectaram
+            FROM starts
+        """)
+        churn_row = cur.fetchone()
+
+        cur.execute(
+            "SELECT COUNT(*) AS stops_total FROM radacct WHERE acctstoptime >= NOW() - INTERVAL '1 hour'"
+        )
+        stops_total = int(cur.fetchone()["stops_total"])
+
+        usuarios_com_start = int(churn_row["usuarios_com_start"])
+        usuarios_reconectaram = int(churn_row["usuarios_reconectaram"])
+        churn_pct_1h = round((usuarios_reconectaram / usuarios_com_start) * 100, 2) if usuarios_com_start else 0.0
+
+        # Falhas AAA (última 1h)
+        cur.execute("""
+            SELECT
+                COUNT(*) AS total_auth,
+                COALESCE(SUM(CASE WHEN reply <> 'Access-Accept' THEN 1 ELSE 0 END), 0) AS falhas_auth
+            FROM radpostauth
+            WHERE authdate >= NOW() - INTERVAL '1 hour'
+        """)
+        aaa_row = cur.fetchone()
+
+        cur.execute("""
+            SELECT username, COUNT(*) AS falhas
+            FROM radpostauth
+            WHERE authdate >= NOW() - INTERVAL '1 hour'
+              AND reply <> 'Access-Accept'
+            GROUP BY username
+            ORDER BY falhas DESC, username
+            LIMIT 5
+        """)
+        top_falhas_aaa = cur.fetchall()
+
+        # Mini série temporal de falhas AAA (últimos 60 minutos)
+        cur.execute("""
+            WITH buckets AS (
+                SELECT generate_series(
+                    date_trunc('minute', NOW()) - INTERVAL '59 minute',
+                    date_trunc('minute', NOW()),
+                    INTERVAL '1 minute'
+                ) AS minuto
+            ),
+            agg AS (
+                SELECT
+                    date_trunc('minute', authdate) AS minuto,
+                    COUNT(*) AS total_auth,
+                    COALESCE(SUM(CASE WHEN reply <> 'Access-Accept' THEN 1 ELSE 0 END), 0) AS falhas_auth
+                FROM radpostauth
+                WHERE authdate >= NOW() - INTERVAL '60 minute'
+                GROUP BY 1
+            )
+            SELECT
+                b.minuto,
+                COALESCE(a.total_auth, 0) AS total_auth,
+                COALESCE(a.falhas_auth, 0) AS falhas_auth
+            FROM buckets b
+            LEFT JOIN agg a ON a.minuto = b.minuto
+            ORDER BY b.minuto
+        """)
+        aaa_60m_rows = cur.fetchall()
+    conn.close()
+
+    total_auth = int(aaa_row["total_auth"])
+    falhas_auth = int(aaa_row["falhas_auth"])
+    taxa_falha_aaa_1h = round((falhas_auth / total_auth) * 100, 2) if total_auth else 0.0
+    churn_semaforo = semaforo_from_pct(churn_pct_1h, churn_warn_pct, churn_crit_pct, no_data=(usuarios_com_start == 0))
+    aaa_semaforo = semaforo_from_pct(taxa_falha_aaa_1h, aaa_warn_pct, aaa_crit_pct, no_data=(total_auth == 0))
+
+    overall_semaforo = "green"
+    if "red" in (churn_semaforo, aaa_semaforo):
+        overall_semaforo = "red"
+    elif "yellow" in (churn_semaforo, aaa_semaforo):
+        overall_semaforo = "yellow"
+    elif "gray" in (churn_semaforo, aaa_semaforo):
+        overall_semaforo = "gray"
+
+    return jsonify({
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "semaforo": {
+            "overall": overall_semaforo,
+            "thresholds": {
+                "churn_warn_pct": churn_warn_pct,
+                "churn_crit_pct": churn_crit_pct,
+                "aaa_warn_pct": aaa_warn_pct,
+                "aaa_crit_pct": aaa_crit_pct,
+            },
+        },
+        "ativos_total": ativos_total,
+        "nas_sessions": [
+            {
+                "nas_ip": row["nas_ip"],
+                "nas_nome": row["nas_nome"],
+                "sessoes_ativas": int(row["sessoes_ativas"]),
+            }
+            for row in nas_sessions
+        ],
+        "churn_1h": {
+            "starts_total": int(churn_row["starts_total"]),
+            "stops_total": stops_total,
+            "usuarios_com_start": usuarios_com_start,
+            "usuarios_reconectaram": usuarios_reconectaram,
+            "churn_pct": churn_pct_1h,
+            "semaforo": churn_semaforo,
+        },
+        "aaa_1h": {
+            "total_auth": total_auth,
+            "falhas_auth": falhas_auth,
+            "taxa_falha_pct": taxa_falha_aaa_1h,
+            "semaforo": aaa_semaforo,
+            "top_falhas": [
+                {"username": row["username"], "falhas": int(row["falhas"])}
+                for row in top_falhas_aaa
+            ],
+        },
+        "aaa_60m": [
+            {
+                "minuto": row["minuto"].isoformat() if row.get("minuto") else None,
+                "total_auth": int(row["total_auth"]),
+                "falhas_auth": int(row["falhas_auth"]),
+                "taxa_falha_pct": round((int(row["falhas_auth"]) / int(row["total_auth"])) * 100, 2)
+                if int(row["total_auth"]) > 0 else 0.0,
+            }
+            for row in aaa_60m_rows
+        ],
+    })
+
+
 # ---------------------------------------------------------------------------
 # Alertas de consumo
 # ---------------------------------------------------------------------------
