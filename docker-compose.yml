@@ -113,6 +113,14 @@ services:
       SGP_RADIUS_HOST: ${SGP_RADIUS_HOST:-172.16.116.1}
       SGP_RADIUS_ACCT_PORT: ${SGP_RADIUS_ACCT_PORT:-2052}
       SGP_RADIUS_SECRET: ${SGP_RADIUS_SECRET:-sgp@radius}
+      # IP do MikroTik na rede L2TP do SGP — ESSENCIAL para o SGP
+      # reconhecer o NAS e marcar clientes como online.
+      # Deve ser o mesmo IP cadastrado como NAS/concentrador no SGP.
+      SGP_NAS_IP_OVERRIDE: ${SGP_NAS_IP_OVERRIDE:-172.16.117.12}
+      # Identificador textual do NAS — deve bater com "Nome Identificador" no SGP
+      SGP_NAS_IDENTIFIER: ${SGP_NAS_IDENTIFIER:-ONDELINE_NET}
+      # Debug: "true" loga cada packet de accounting encaminhado ao SGP
+      SGP_ACCT_DEBUG: ${SGP_ACCT_DEBUG:-false}
     networks:
       radius_net: {}
       wg_net:

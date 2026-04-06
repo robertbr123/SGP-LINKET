@@ -21,7 +21,11 @@ exec exec_sgp_acct {
 %{Calling-Station-Id} \
 %{Called-Station-Id} \
 %{Acct-Terminate-Cause} \
-%{Acct-Unique-Session-Id}"
+%{Acct-Unique-Session-Id} \
+%{NAS-Port-Type} \
+%{NAS-Port} \
+%{Service-Type} \
+%{Framed-Protocol}"
 
     # Não aguarda a resposta — accounting local não é bloqueado
     wait = no
