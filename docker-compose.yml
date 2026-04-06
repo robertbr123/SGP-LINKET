@@ -27,34 +27,52 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv4.ip_forward=1
     networks:
-      - radius_net
-      - wg_net
+      radius_net: {}
+      wg_net:
+        ipv4_address: 172.28.0.2
 
   # ---------------------------------------------------------------------------
-  # Injeta rota para a rede do SGP (172.16.116.0/24) na tabela do host Linux
-  # via MikroTik (192.168.140.1). Usa network_mode: host para escrever
-  # diretamente no namespace de rede do host. O Docker já tem regras de
-  # MASQUERADE que fazem o tráfego dos containers sair com o IP do servidor
-  # (192.168.140.102), que o MikroTik encaminha pelo L2TP ao SGP.
+  # Sidecar: configura roteamento para a rede do SGP via WireGuard → MikroTik → L2TP.
+  # Roda no namespace de rede do WireGuard para ter acesso à interface wg0.
+  #
+  # 1. Adiciona as redes do SGP (172.16.116.0/24, 172.16.117.0/24) aos
+  #    AllowedIPs do peer MikroTik no WireGuard, para que pacotes destinados
+  #    ao SGP sejam roteados pelo túnel WireGuard até o MikroTik.
+  # 2. Adiciona rotas locais para essas redes via wg0.
+  # 3. Aplica masquerade (SNAT) para que o MikroTik veja o tráfego vindo
+  #    de 10.73.91.1 (IP do WireGuard), que está nos AllowedIPs do peer.
   # ---------------------------------------------------------------------------
   route-sgp:
     image: alpine:3.19
     container_name: radius_route_sgp
-    network_mode: "host"
+    network_mode: "service:wireguard"
     cap_add:
       - NET_ADMIN
     restart: unless-stopped
+    depends_on:
+      - wireguard
+    environment:
+      # Chave pública do peer MikroTik no WireGuard
+      PEER_KEY: ${SGP_WG_PEER_PUBKEY:-APgGh2ANwfmtsksw9/DM/w7swrN/4hcEJYo2Q/+LTnE=}
     command: >
       sh -c "
-        echo 'Adicionando rota SGP: 172.16.116.0/24 via 192.168.140.1' &&
-        ip route add 172.16.116.0/24 via 192.168.140.1 2>/dev/null || true &&
-        echo 'Rota OK. Monitorando...' &&
+        apk add --no-cache iptables wireguard-tools > /dev/null 2>&1;
+        echo '[route-sgp] Configurando roteamento SGP via WireGuard...';
         while true; do
-          ip route show 172.16.116.0/24 | grep -q '172.16.116' || {
-            echo 'Rota sumiu, readicionando...';
-            ip route add 172.16.116.0/24 via 192.168.140.1 2>/dev/null || true;
-          };
-          sleep 60;
+          CURRENT=$$(wg show wg0 allowed-ips 2>/dev/null | grep \"$$PEER_KEY\" | awk '{print $$2}' | tr '\t' ',');
+          if [ -n \"$$PEER_KEY\" ] && ! echo \"$$CURRENT\" | grep -q '172.16.116.0/24'; then
+            NEW=\"$$CURRENT,172.16.116.0/24,172.16.117.0/24\";
+            NEW=$$(echo \"$$NEW\" | sed 's/,,/,/g; s/^,//; s/,$$//');
+            wg set wg0 peer \"$$PEER_KEY\" allowed-ips \"$$NEW\" 2>/dev/null &&
+              echo '[route-sgp] AllowedIPs do peer MikroTik atualizados com redes SGP';
+          fi;
+          ip route replace 172.16.116.0/24 dev wg0 2>/dev/null;
+          ip route replace 172.16.117.0/24 dev wg0 2>/dev/null;
+          iptables -t nat -C POSTROUTING -o wg0 -d 172.16.116.0/24 -j MASQUERADE 2>/dev/null ||
+            iptables -t nat -A POSTROUTING -o wg0 -d 172.16.116.0/24 -j MASQUERADE;
+          iptables -t nat -C POSTROUTING -o wg0 -d 172.16.117.0/24 -j MASQUERADE 2>/dev/null ||
+            iptables -t nat -A POSTROUTING -o wg0 -d 172.16.117.0/24 -j MASQUERADE;
+          sleep 30;
         done
       "
 
@@ -94,6 +112,8 @@ services:
       dockerfile: Dockerfile
     container_name: radius_freeradius
     restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
     ports:
       - "1812:1812/udp"
       - "1813:1813/udp"
@@ -107,6 +127,8 @@ services:
       DB_NAME: radius
       DB_USER: radius
       DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
+      # Gateway para a rede do SGP (IP do WireGuard na rede Docker wg_net)
+      SGP_ROUTE_GW: 172.28.0.2
       # --- Encaminhamento de accounting ao RADIUS do SGP ---
       # Configure as variáveis abaixo no seu .env conforme o seu SGP
       SGP_RADIUS_ENABLED: ${SGP_RADIUS_ENABLED:-true}
