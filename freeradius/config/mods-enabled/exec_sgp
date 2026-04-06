@@ -15,9 +15,9 @@ exec exec_sgp_acct {
 %{Acct-Session-Id} \
 %{NAS-IP-Address} \
 %{Framed-IP-Address} \
-%{Acct-Session-Time:-0} \
-%{Acct-Input-Octets:-0} \
-%{Acct-Output-Octets:-0} \
+%{Acct-Session-Time} \
+%{Acct-Input-Octets} \
+%{Acct-Output-Octets} \
 %{Calling-Station-Id} \
 %{Called-Station-Id} \
 %{Acct-Terminate-Cause} \

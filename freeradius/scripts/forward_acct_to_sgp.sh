@@ -6,7 +6,7 @@
 #
 # Variáveis de ambiente (injetadas via docker-compose):
 #   SGP_RADIUS_ENABLED   - "true" para ativar (padrão: true)
-#   SGP_RADIUS_HOST      - IP do servidor RADIUS do SGP (padrão: 192.168.140.1)
+#   SGP_RADIUS_HOST      - IP do servidor RADIUS do SGP (padrão: 172.16.116.1)
 #   SGP_RADIUS_ACCT_PORT - Porta de accounting do SGP (padrão: 2052)
 #   SGP_RADIUS_SECRET    - Secret compartilhado (padrão: sgp@radius)
 # =============================================================================
