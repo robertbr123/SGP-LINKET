@@ -31,7 +31,9 @@ sql {
         idle_timeout = 60
     }
 
-    read_clients = yes
+    # Evita sobrescrever clients.conf com segredos/clientes vindos da tabela nas.
+    # Para este cenário, o cliente principal é definido estaticamente em clients.conf.
+    read_clients = no
     client_table = "nas"
 
     group_attribute = "SQL-Group"
