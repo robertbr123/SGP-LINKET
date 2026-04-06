@@ -66,6 +66,12 @@ server default {
         update reply {
             &User-Name !* ANY
         }
+        # Intervalo de Interim-Update (em segundos).
+        # Faz o MikroTik enviar Accounting Interim-Update periodicamente,
+        # permitindo que o SGP mantenha a contagem de sessões online por NAS.
+        update reply {
+            &Acct-Interim-Interval := 300
+        }
         sql
         exec
         remove_reply_message_if_eap

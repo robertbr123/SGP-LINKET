@@ -276,10 +276,11 @@ A chave que precisamos é a do MikroTik, que aparece em `wg show wg0`.
 |---------|--------|
 | `docker-compose.yml` | Orquestração dos containers e variáveis de ambiente |
 | `freeradius/Dockerfile` | Build do FreeRADIUS com iproute2 e entrypoint |
-| `freeradius/entrypoint.sh` | Adiciona rota SGP antes de iniciar o FreeRADIUS |
+| `freeradius/entrypoint.sh` | Adiciona rota SGP + envia Accounting-On no startup |
 | `freeradius/config/mods-enabled/exec_sgp` | Módulo exec que chama o script de encaminhamento |
-| `freeradius/config/sites-enabled/default` | Seção accounting chama `exec_sgp_acct` |
+| `freeradius/config/sites-enabled/default` | Seção accounting + Acct-Interim-Interval no post-auth |
 | `freeradius/scripts/forward_acct_to_sgp.sh` | Script que monta e envia o pacote ao SGP |
+| `freeradius/scripts/send_accounting_on.sh` | Envia Accounting-On/Off ao SGP para cada NAS |
 | `freeradius/scripts/test_sgp_acct.sh` | Script de teste de conectividade com o SGP |
 
 # Exemplo com 3 MikroTiks no .env:
