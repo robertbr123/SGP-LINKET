@@ -6,103 +6,289 @@
     <title>Login — RADIUS Manager</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * { font-family: 'Inter', sans-serif; }
-        body {
-            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
-            min-height: 100vh;
+        * { font-family: 'Inter', sans-serif; box-sizing: border-box; margin: 0; padding: 0; }
+        body { min-height: 100vh; display: flex; }
+
+        /* ---- Painel esquerdo (branding) ---- */
+        .login-left {
+            width: 45%;
+            background: linear-gradient(160deg, #060d1f 0%, #0f172a 50%, #0c1a35 100%);
             display: flex;
-            align-items: center;
+            flex-direction: column;
             justify-content: center;
+            padding: 60px 52px;
+            position: relative;
+            overflow: hidden;
         }
-        .login-card {
-            background: #fff;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,.35);
-            padding: 40px 36px;
-            width: 100%;
-            max-width: 400px;
+        /* Grade de pontos animada */
+        .login-left::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: radial-gradient(circle, rgba(37,99,235,.18) 1px, transparent 1px);
+            background-size: 28px 28px;
+            animation: gridMove 20s linear infinite;
         }
-        .login-logo {
-            width: 52px; height: 52px; border-radius: 14px;
-            background: #2563eb;
+        .login-left::after {
+            content: '';
+            position: absolute;
+            top: -40%; left: -10%;
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(37,99,235,.12) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        @keyframes gridMove {
+            0%   { background-position: 0 0; }
+            100% { background-position: 28px 28px; }
+        }
+
+        .login-brand {
+            display: flex; align-items: center; gap: 14px;
+            margin-bottom: 56px;
+            position: relative; z-index: 1;
+        }
+        .login-brand-icon {
+            width: 46px; height: 46px;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 1.6rem; color: #fff; margin: 0 auto 18px;
+            font-size: 1.4rem; color: #fff;
+            box-shadow: 0 8px 24px rgba(37,99,235,.35);
         }
-        .login-title {
-            font-size: 1.35rem; font-weight: 700;
-            color: #1e293b; text-align: center; margin-bottom: 4px;
+        .login-brand-name {
+            font-size: 1.15rem; font-weight: 700; color: #f1f5f9;
+            letter-spacing: .3px;
         }
-        .login-sub {
+        .login-brand-name span { color: #60a5fa; }
+
+        .login-headline {
+            font-size: 2.1rem; font-weight: 800; color: #f1f5f9;
+            line-height: 1.25; margin-bottom: 14px;
+            position: relative; z-index: 1;
+            letter-spacing: -.5px;
+        }
+        .login-tagline {
+            color: #475569; font-size: .9rem; line-height: 1.6;
+            margin-bottom: 44px; position: relative; z-index: 1;
+        }
+
+        .login-features { display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
+        .login-feature {
+            display: flex; align-items: center; gap: 12px;
             color: #64748b; font-size: .85rem;
-            text-align: center; margin-bottom: 28px;
         }
-        .form-label { font-weight: 500; font-size: .875rem; color: #334155; }
+        .login-feature-icon {
+            width: 28px; height: 28px; border-radius: 8px;
+            background: rgba(37,99,235,.15);
+            display: flex; align-items: center; justify-content: center;
+            color: #60a5fa; font-size: .8rem; flex-shrink: 0;
+        }
+
+        .login-left-footer {
+            position: absolute; bottom: 24px; left: 52px; right: 52px;
+            color: #1e293b; font-size: .72rem;
+            display: flex; justify-content: space-between;
+            z-index: 1;
+        }
+
+        /* ---- Painel direito (formulário) ---- */
+        .login-right {
+            flex: 1;
+            display: flex; align-items: center; justify-content: center;
+            background: #fff;
+            padding: 40px 24px;
+        }
+        .login-box { width: 100%; max-width: 380px; }
+
+        .login-welcome { font-size: 1.6rem; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+        .login-sub { color: #64748b; font-size: .875rem; margin-bottom: 32px; }
+
+        .form-label { font-weight: 500; font-size: .875rem; color: #334155; display: block; margin-bottom: 6px; }
         .form-control {
-            border-radius: 8px; border-color: #cbd5e1;
+            width: 100%; border-radius: 8px; border: 1px solid #e2e8f0;
             font-size: .9rem; padding: 10px 14px;
+            background: #f8fafc; color: #1e293b;
+            transition: border-color .15s, background .15s, box-shadow .15s;
+            outline: none;
         }
-        .form-control:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+        .form-control:focus {
+            background: #fff; border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+        .input-wrap { position: relative; }
+        .input-wrap .input-icon {
+            position: absolute; left: 12px; top: 50%;
+            transform: translateY(-50%); color: #94a3b8; font-size: .9rem;
+            pointer-events: none;
+        }
+        .input-wrap input { padding-left: 36px; }
+        .input-wrap input.has-toggle { padding-right: 40px; }
+        .toggle-pass {
+            position: absolute; right: 10px; top: 50%;
+            transform: translateY(-50%);
+            border: none; background: none; color: #94a3b8;
+            cursor: pointer; padding: 4px; border-radius: 4px;
+            line-height: 1; transition: color .15s;
+        }
+        .toggle-pass:hover { color: #334155; }
+
         .btn-login {
-            background: #2563eb; border: none; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            border: none; border-radius: 8px;
             color: #fff; font-weight: 600; font-size: .9rem;
             padding: 11px; width: 100%; margin-top: 8px;
-            transition: background .15s;
+            cursor: pointer;
+            transition: opacity .15s, transform .1s;
+            box-shadow: 0 4px 14px rgba(37,99,235,.3);
         }
-        .btn-login:hover { background: #1d4ed8; }
-        .login-footer { color: #94a3b8; font-size: .75rem; text-align: center; margin-top: 28px; }
-        .input-icon { position: relative; }
-        .input-icon i {
-            position: absolute; left: 12px; top: 50%;
-            transform: translateY(-50%); color: #94a3b8;
+        .btn-login:hover { opacity: .92; }
+        .btn-login:active { transform: scale(.99); }
+        .btn-login:disabled { opacity: .65; cursor: not-allowed; }
+
+        .login-footer-right {
+            color: #cbd5e1; font-size: .72rem;
+            text-align: center; margin-top: 32px;
         }
-        .input-icon input { padding-left: 36px; }
+
+        /* Flash messages */
+        .flash-msg {
+            padding: 10px 14px; border-radius: 8px;
+            font-size: .85rem; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 8px;
+            animation: slideIn .2s ease;
+        }
+        .flash-msg.danger { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .flash-msg.success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+        .flash-msg.warning { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+        /* ---- Mobile ---- */
+        @media (max-width: 767.98px) {
+            .login-left { display: none; }
+            .login-right {
+                background: linear-gradient(160deg, #060d1f 0%, #0f172a 60%, #0c1a35 100%);
+                padding: 24px 20px;
+            }
+            .login-box {
+                background: #fff; border-radius: 16px;
+                padding: 32px 24px;
+                box-shadow: 0 24px 64px rgba(0,0,0,.45);
+            }
+        }
     </style>
 </head>
 <body>
-<div class="login-card">
-    <div class="login-logo"><i class="bi bi-broadcast-pin"></i></div>
-    <div class="login-title">RADIUS Manager</div>
-    <div class="login-sub">Faça login para continuar</div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for cat, msg in messages %}
-            <div class="alert alert-{{ cat }} py-2 px-3 mb-3" style="font-size:.85rem;border-radius:8px">
-                {{ msg }}
-            </div>
-        {% endfor %}
-    {% endwith %}
+<!-- ===================== Painel Esquerdo ===================== -->
+<div class="login-left">
+    <div class="login-brand">
+        <div class="login-brand-icon"><i class="bi bi-broadcast-pin"></i></div>
+        <div class="login-brand-name">RADIUS <span>Manager</span></div>
+    </div>
 
-    <form method="POST" action="{{ url_for('login') }}">
-        <input type="hidden" name="next" value="{{ next }}">
+    <div class="login-headline">Gerencie sua rede<br>com precisão.</div>
+    <div class="login-tagline">
+        Controle PPPoE, sincronização SGP<br>e monitoramento NOC em tempo real.
+    </div>
 
-        <div class="mb-3">
-            <label class="form-label">Usuário</label>
-            <div class="input-icon">
-                <i class="bi bi-person"></i>
-                <input type="text" name="username" class="form-control" required
-                       placeholder="admin" autofocus autocomplete="username">
-            </div>
+    <div class="login-features">
+        <div class="login-feature">
+            <div class="login-feature-icon"><i class="bi bi-broadcast-pin"></i></div>
+            FreeRADIUS integrado e configurado
         </div>
-
-        <div class="mb-3">
-            <label class="form-label">Senha</label>
-            <div class="input-icon">
-                <i class="bi bi-lock"></i>
-                <input type="password" name="senha" class="form-control" required
-                       placeholder="••••••••" autocomplete="current-password">
-            </div>
+        <div class="login-feature">
+            <div class="login-feature-icon"><i class="bi bi-arrow-repeat"></i></div>
+            Sincronização automática com SGP
         </div>
+        <div class="login-feature">
+            <div class="login-feature-icon"><i class="bi bi-graph-up"></i></div>
+            Dashboard NOC com KPIs em tempo real
+        </div>
+        <div class="login-feature">
+            <div class="login-feature-icon"><i class="bi bi-bell-fill"></i></div>
+            Alertas de consumo configuráveis
+        </div>
+    </div>
 
-        <button type="submit" class="btn-login">
-            <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
-        </button>
-    </form>
-
-    <div class="login-footer">
-        RADIUS Manager &copy; 2026 &mdash; Acesso restrito
+    <div class="login-left-footer">
+        <span>RADIUS Manager &copy; 2026</span>
+        <span>v1.0</span>
     </div>
 </div>
+
+<!-- ===================== Painel Direito ===================== -->
+<div class="login-right">
+    <div class="login-box">
+        <div class="login-welcome">Bem-vindo de volta</div>
+        <div class="login-sub">Insira suas credenciais para acessar o painel.</div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for cat, msg in messages %}
+            <div class="flash-msg {{ cat }}">
+                <i class="bi bi-{{ 'x-circle-fill' if cat == 'danger' else 'check-circle-fill' if cat == 'success' else 'exclamation-triangle-fill' }}"></i>
+                {{ msg }}
+            </div>
+            {% endfor %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('login') }}" id="loginForm">
+            <input type="hidden" name="next" value="{{ next }}">
+
+            <div class="mb-3">
+                <label class="form-label">Usuário</label>
+                <div class="input-wrap">
+                    <i class="bi bi-person input-icon"></i>
+                    <input type="text" name="username" class="form-control" required
+                           placeholder="admin" autofocus autocomplete="username">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Senha</label>
+                <div class="input-wrap">
+                    <i class="bi bi-lock input-icon"></i>
+                    <input type="password" name="senha" class="form-control has-toggle" required
+                           placeholder="••••••••" autocomplete="current-password" id="senhaInput">
+                    <button type="button" class="toggle-pass" onclick="toggleSenha()" tabindex="-1" title="Mostrar/ocultar senha">
+                        <i class="bi bi-eye" id="senhaIcon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-login" id="btnLogin">
+                <i class="bi bi-box-arrow-in-right"></i>
+                <span id="btnText">Entrar</span>
+            </button>
+        </form>
+
+        <div class="login-footer-right">Acesso restrito ao pessoal autorizado.</div>
+    </div>
+</div>
+
+<script>
+function toggleSenha() {
+    const input = document.getElementById('senhaInput');
+    const icon  = document.getElementById('senhaIcon');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'bi bi-eye-slash';
+    } else {
+        input.type = 'password';
+        icon.className = 'bi bi-eye';
+    }
+}
+
+document.getElementById('loginForm').addEventListener('submit', function () {
+    const btn  = document.getElementById('btnLogin');
+    const txt  = document.getElementById('btnText');
+    btn.disabled = true;
+    txt.textContent = 'Entrando...';
+    btn.insertAdjacentHTML('afterbegin',
+        '<span class="spinner-border spinner-border-sm me-1" style="width:14px;height:14px"></span>');
+});
+</script>
 </body>
 </html>

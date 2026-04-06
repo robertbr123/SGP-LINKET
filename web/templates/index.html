@@ -2,6 +2,48 @@
 {% block title %}Dashboard — RADIUS Manager{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
+{% block extra_css %}
+<style>
+/* Hover actions na tabela */
+#clientTable tbody tr .btn-group { opacity: .35; transition: opacity .18s; }
+#clientTable tbody tr:hover .btn-group { opacity: 1; }
+
+/* Mobile — tabela vira cards */
+@media (max-width: 767.98px) {
+    #clientTable thead { display: none; }
+    #clientTable tbody tr {
+        display: block;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        padding: 10px 14px;
+        background: #fff;
+    }
+    #clientTable tbody tr:hover { background: #f8fafc; }
+    #clientTable tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: none;
+        padding: 5px 0;
+        font-size: .82rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    #clientTable tbody td:last-child { border-bottom: none; padding-top: 8px; }
+    #clientTable tbody td::before {
+        content: attr(data-label);
+        font-weight: 600; color: #94a3b8;
+        font-size: .7rem; text-transform: uppercase;
+        letter-spacing: .5px; flex-shrink: 0; margin-right: 8px;
+    }
+    #clientTable tbody td[data-label=""]::before { display: none; }
+    #clientTable tbody tr .btn-group { opacity: 1; }
+    [data-bs-theme="dark"] #clientTable tbody tr { background: #1e293b; border-color: #334155; }
+    [data-bs-theme="dark"] #clientTable tbody td { border-color: #334155; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- Stats Cards -->
 <div class="row g-3 mb-4">
@@ -9,7 +51,7 @@
         <div class="stat-card">
             <div class="stat-icon blue"><i class="bi bi-people-fill"></i></div>
             <div class="stat-info">
-                <h3 id="stat_total_clientes">{{ stats.total_clientes }}</h3>
+                <h3 id="stat_total_clientes" class="count-up">{{ stats.total_clientes }}</h3>
                 <small>Total Clientes</small>
             </div>
         </div>
@@ -18,7 +60,7 @@
         <div class="stat-card">
             <div class="stat-icon green"><i class="bi bi-wifi"></i></div>
             <div class="stat-info">
-                <h3 id="stat_total_online">{{ stats.total_online }}</h3>
+                <h3 id="stat_total_online" class="count-up">{{ stats.total_online }}</h3>
                 <small>Online</small>
             </div>
         </div>
@@ -27,7 +69,7 @@
         <div class="stat-card">
             <div class="stat-icon red"><i class="bi bi-wifi-off"></i></div>
             <div class="stat-info">
-                <h3 id="stat_total_offline">{{ stats.total_offline }}</h3>
+                <h3 id="stat_total_offline" class="count-up">{{ stats.total_offline }}</h3>
                 <small>Offline</small>
             </div>
         </div>
@@ -36,7 +78,7 @@
         <div class="stat-card">
             <div class="stat-icon amber"><i class="bi bi-exclamation-triangle-fill"></i></div>
             <div class="stat-info">
-                <h3 id="stat_total_suspensos">{{ stats.total_suspensos }}</h3>
+                <h3 id="stat_total_suspensos" class="count-up">{{ stats.total_suspensos }}</h3>
                 <small>Suspensos</small>
             </div>
         </div>
@@ -67,14 +109,14 @@
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0 fw-semibold"><i class="bi bi-people-fill text-primary"></i> Clientes PPPoE</h5>
             <div class="d-flex gap-2 align-items-center flex-wrap">
-                <form method="GET" action="{{ url_for('index') }}" class="d-flex gap-2 align-items-center">
-                    <div class="search-box">
+                <form method="GET" action="{{ url_for('index') }}" class="d-flex gap-2 align-items-center flex-wrap">
+                    <div class="search-box" style="min-width:140px; flex:1">
                         <i class="bi bi-search"></i>
-                        <input type="text" name="busca" class="form-control form-control-sm"
-                               placeholder="Buscar cliente..." style="width:200px"
+                        <input type="text" name="busca" class="form-control form-control-sm w-100"
+                               placeholder="Buscar cliente..."
                                value="{{ paginacao.busca }}">
                     </div>
-                    <select name="status" class="form-select form-select-sm" style="width:140px"
+                    <select name="status" class="form-select form-select-sm" style="min-width:130px; flex:1"
                             onchange="this.form.submit()">
                         <option value="" {% if not paginacao.status %}selected{% endif %}>Todos status</option>
                         <option value="online"   {% if paginacao.status == 'online' %}selected{% endif %}>Online</option>
@@ -122,27 +164,27 @@
             <tbody>
             {% for c in clientes %}
                 <tr>
-                    <td class="text-center">
+                    <td data-label="">
                         <span class="online-dot {{ 'on' if c.online else 'off' }}"
                               title="{{ 'Online' if c.online else 'Offline' }}"></span>
                     </td>
-                    <td>
+                    <td data-label="Nome">
                         <div class="fw-medium">{{ c.nome }}</div>
                         <div class="text-muted" style="font-size:.75rem">{{ c.cpf }}</div>
                     </td>
-                    <td><code class="text-primary">{{ c.pppoe_login or '—' }}</code></td>
-                    <td><span class="text-muted">{{ c.ip or '—' }}</span></td>
-                    <td>
+                    <td data-label="Login"><code class="text-primary">{{ c.pppoe_login or '—' }}</code></td>
+                    <td data-label="IP"><span class="text-muted">{{ c.ip or '—' }}</span></td>
+                    <td data-label="Plano">
                         <span class="badge bg-light text-dark border">{{ c.plano_nome or c.plano }}</span>
                     </td>
-                    <td>
+                    <td data-label="Velocidade">
                         <i class="bi bi-arrow-down text-success"></i> {{ c.velocidade_down }}M
                         <i class="bi bi-arrow-up text-primary ms-1"></i> {{ c.velocidade_up }}M
                     </td>
-                    <td>
+                    <td data-label="Status">
                         <span class="badge rounded-pill badge-{{ c.status }}">{{ c.status | title }}</span>
                     </td>
-                    <td>
+                    <td data-label="Sync">
                         {% if c.ultimo_sync_em %}
                             <span class="text-muted" style="font-size:.75rem"
                                   title="{{ c.ultimo_sync_em }}">
@@ -155,7 +197,7 @@
                             </span>
                         {% endif %}
                     </td>
-                    <td class="text-center">
+                    <td data-label="Ações" class="text-center">
                         <div class="btn-group btn-group-sm">
                             <a href="{{ url_for('editar_cliente', cliente_id=c.id) }}"
                                class="btn btn-outline-secondary" title="Editar">
@@ -235,7 +277,6 @@
         {% endif %}
     </div>
 </div>
-{% endblock %}
 
 <!-- Gráfico sessões 24h -->
 <div class="card mt-4">
@@ -249,6 +290,7 @@
         <canvas id="chartSessoes" height="60"></canvas>
     </div>
 </div>
+{% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>

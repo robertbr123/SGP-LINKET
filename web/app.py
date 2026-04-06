@@ -111,12 +111,14 @@ def get_online_users() -> set:
                     port=int(nas.get("mikrotik_port") or 8728),
                     timeout=5,
                 )
-                sessions = list(api("/ppp/active/print"))
-                api.close()
-                for s in sessions:
-                    name = s.get("name", "")
-                    if name:
-                        online.add(name)
+                try:
+                    sessions = list(api("/ppp/active/print"))
+                    for s in sessions:
+                        name = s.get("name", "")
+                        if name:
+                            online.add(name)
+                finally:
+                    api.close()
             except Exception:
                 pass  # NAS inacessível — ignora e continua
 

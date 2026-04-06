@@ -3,12 +3,39 @@
 {% block page_title %}Erro 404{% endblock %}
 
 {% block content %}
-<div class="text-center py-5">
-    <div style="font-size:5rem;color:#cbd5e1">404</div>
-    <h4 class="fw-semibold text-slate-700 mt-2">Página não encontrada</h4>
-    <p class="text-muted mb-4">A página que você está procurando não existe ou foi movida.</p>
-    <a href="{{ url_for('index') }}" class="btn btn-primary">
-        <i class="bi bi-house-fill me-2"></i>Voltar ao Dashboard
-    </a>
+<div class="d-flex flex-column align-items-center justify-content-center text-center" style="min-height:62vh; padding: 40px 20px">
+
+    <!-- Ilustração SVG -->
+    <div class="mb-3" style="opacity:.55">
+        <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10.5" stroke="#94a3b8" stroke-width="1.2"/>
+            <path d="M8.5 15.5s1.2-1.5 3.5-1.5 3.5 1.5 3.5 1.5" stroke="#94a3b8" stroke-width="1.3" stroke-linecap="round"/>
+            <circle cx="9" cy="10.5" r="1.25" fill="#94a3b8"/>
+            <circle cx="15" cy="10.5" r="1.25" fill="#94a3b8"/>
+        </svg>
+    </div>
+
+    <!-- Número -->
+    <div style="font-size: 5.5rem; font-weight: 800; color: #e2e8f0; line-height: 1; letter-spacing: -4px; margin-bottom: 12px;">
+        404
+    </div>
+
+    <h4 class="fw-semibold mb-2" style="font-size: 1.2rem;">Página não encontrada</h4>
+    <p class="text-muted mb-4" style="max-width: 400px; font-size: .9rem; line-height: 1.6;">
+        A rota que você está procurando não existe, foi movida ou você não tem permissão para acessá-la.
+    </p>
+
+    <div class="d-flex gap-2 flex-wrap justify-content-center">
+        <a href="{{ url_for('index') }}" class="btn btn-primary">
+            <i class="bi bi-house-fill me-2"></i>Voltar ao Dashboard
+        </a>
+        <button onclick="history.back()" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Página anterior
+        </button>
+    </div>
+
+    <div class="mt-5 text-muted" style="font-size: .75rem;">
+        Código de erro: <code>404 Not Found</code>
+    </div>
 </div>
 {% endblock %}

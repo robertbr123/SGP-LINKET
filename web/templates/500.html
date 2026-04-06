@@ -3,12 +3,38 @@
 {% block page_title %}Erro 500{% endblock %}
 
 {% block content %}
-<div class="text-center py-5">
-    <div style="font-size:5rem;color:#fca5a5">500</div>
-    <h4 class="fw-semibold mt-2">Erro interno do servidor</h4>
-    <p class="text-muted mb-4">Algo deu errado. Tente novamente ou contate o administrador.</p>
-    <a href="{{ url_for('index') }}" class="btn btn-primary">
-        <i class="bi bi-house-fill me-2"></i>Voltar ao Dashboard
-    </a>
+<div class="d-flex flex-column align-items-center justify-content-center text-center" style="min-height:62vh; padding: 40px 20px">
+
+    <!-- Ilustração SVG -->
+    <div class="mb-3" style="opacity:.7">
+        <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10.5" stroke="#fca5a5" stroke-width="1.2"/>
+            <path d="M12 7.5v5.5" stroke="#f87171" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="12" cy="16.2" r="1.2" fill="#f87171"/>
+        </svg>
+    </div>
+
+    <!-- Número -->
+    <div style="font-size: 5.5rem; font-weight: 800; color: #fca5a5; line-height: 1; letter-spacing: -4px; margin-bottom: 12px;">
+        500
+    </div>
+
+    <h4 class="fw-semibold mb-2" style="font-size: 1.2rem;">Erro interno do servidor</h4>
+    <p class="text-muted mb-4" style="max-width: 400px; font-size: .9rem; line-height: 1.6;">
+        Algo inesperado aconteceu no servidor. Tente novamente em alguns instantes ou retorne ao dashboard.
+    </p>
+
+    <div class="d-flex gap-2 flex-wrap justify-content-center">
+        <a href="{{ url_for('index') }}" class="btn btn-primary">
+            <i class="bi bi-house-fill me-2"></i>Voltar ao Dashboard
+        </a>
+        <button onclick="location.reload()" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-clockwise me-2"></i>Tentar novamente
+        </button>
+    </div>
+
+    <div class="mt-5 text-muted" style="font-size: .75rem;">
+        Código de erro: <code>500 Internal Server Error</code>
+    </div>
 </div>
 {% endblock %}
