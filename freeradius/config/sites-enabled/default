@@ -51,9 +51,10 @@ server default {
     }
 
     accounting {
-        sql
         # Encaminha cópia do accounting ao servidor RADIUS do SGP (tempo real)
+        # Deve ficar ANTES do sql para não ser bloqueado por lentidão do banco
         exec_sgp_acct
+        sql
         exec
         attr_filter.accounting_response
     }
