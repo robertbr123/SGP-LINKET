@@ -229,13 +229,16 @@ def sync_all():
             novo_status = "ativo" if display == "ativo" else "suspenso"
             pppoe_login = contrato.get("contratoCentralLogin") or c["pppoe_login"]
             ip_sgp = contrato.get("servico_ip")
+            ip_local = (c.get("ip") or "").strip()
+            # Mantém IP cadastrado manualmente no painel; só usa IP do SGP se local estiver vazio
+            ip_efetivo = ip_local or (ip_sgp or "")
             old_status = c["status"]
             changed = novo_status != old_status
 
             with conn.cursor() as cur:
                 cur.execute(
                     """UPDATE clientes
-                       SET status=%s, pppoe_login=%s, ip=COALESCE(%s, ip),
+                       SET status=%s, pppoe_login=%s, ip=COALESCE(NULLIF(ip, ''), %s),
                            ultimo_sync_em=NOW(), atualizado_em=NOW()
                        WHERE id=%s""",
                     (novo_status, pppoe_login, ip_sgp, c["id"]),
@@ -246,7 +249,7 @@ def sync_all():
                 upsert_radius_user(
                     conn, pppoe_login, novo_status,
                     c["velocidade_down"], c["velocidade_up"],
-                    ip_sgp or c.get("ip") or "",
+                    ip_efetivo,
                 )
 
             if changed:
