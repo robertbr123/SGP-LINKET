@@ -9,10 +9,14 @@
 #   SGP_RADIUS_HOST          - IP do servidor RADIUS do SGP (padrão: 172.16.116.1)
 #   SGP_RADIUS_ACCT_PORT     - Porta de accounting do SGP (padrão: 2052)
 #   SGP_RADIUS_SECRET        - Secret compartilhado (padrão: sgp@radius)
-#   SGP_NAS_IP_OVERRIDE      - Substitui NAS-IP-Address no pacote enviado ao SGP
-#                               (usar o IP do MikroTik na rede L2TP do SGP,
-#                                ex.: 172.16.117.12). Se vazio, usa o IP original.
-#   SGP_NAS_IDENTIFIER       - NAS-Identifier enviado ao SGP (ex.: MikroTik).
+#   SGP_NAS_IP_MAP           - Mapeamento de NAS-IP original → NAS-IP do SGP.
+#                               Formato: "ip_original1=ip_sgp1,ip_original2=ip_sgp2"
+#                               Ex.: "10.73.91.5=172.16.117.12,10.73.91.6=172.16.117.13"
+#   SGP_NAS_IP_OVERRIDE      - Fallback se o IP não estiver no mapa (ex.: 172.16.117.12)
+#   SGP_NAS_ID_MAP           - Mapeamento de NAS-IP original → Nome Identificador no SGP.
+#                               Formato: "ip_original1=nome1,ip_original2=nome2"
+#                               Ex.: "10.73.91.5=ONDELINE_NET,10.73.91.6=EIRUNEPE_NET"
+#   SGP_NAS_IDENTIFIER       - Fallback de NAS-Identifier se o IP não estiver no mapa.
 #                               Se vazio, não envia o atributo.
 #   SGP_ACCT_DEBUG           - "true" para logar cada envio em stderr (padrão: false)
 # =============================================================================
@@ -54,13 +58,47 @@ SGP_PORT="${SGP_RADIUS_ACCT_PORT:-2052}"
 SGP_SECRET="${SGP_RADIUS_SECRET:-sgp@radius}"
 
 # ---------------------------------------------------------------------------
-# Override do NAS-IP-Address — ESSENCIAL para o SGP reconhecer o NAS
-# O SGP tem o NAS cadastrado com o IP da interface L2TP do MikroTik
-# (ex.: 172.16.117.12), mas o MikroTik envia accounting ao FreeRADIUS
-# com outro IP. Sem o override, o SGP ignora o pacote.
+# Tradução de NAS-IP-Address para o IP que o SGP conhece.
+#
+# Prioridade:
+#   1. SGP_NAS_IP_MAP  — mapeamento por NAS (múltiplos MikroTiks)
+#   2. SGP_NAS_IP_OVERRIDE — fallback único (cenário com 1 MikroTik)
+#   3. Sem alteração — usa o IP original do pacote
+#
+# Formato do SGP_NAS_IP_MAP:
+#   "ip_original1=ip_sgp1,ip_original2=ip_sgp2"
+#   Ex.: "10.73.91.5=172.16.117.12,10.73.91.6=172.16.117.13"
 # ---------------------------------------------------------------------------
-if [ -n "${SGP_NAS_IP_OVERRIDE}" ]; then
+ORIGINAL_NAS_IP="${NAS_IP}"
+if [ -n "${SGP_NAS_IP_MAP}" ]; then
+    MAPPED=$(echo "${SGP_NAS_IP_MAP}" | tr ',' '\n' | grep "^${NAS_IP}=" | head -1 | cut -d= -f2)
+    if [ -n "${MAPPED}" ]; then
+        NAS_IP="${MAPPED}"
+    elif [ -n "${SGP_NAS_IP_OVERRIDE}" ]; then
+        NAS_IP="${SGP_NAS_IP_OVERRIDE}"
+    fi
+elif [ -n "${SGP_NAS_IP_OVERRIDE}" ]; then
     NAS_IP="${SGP_NAS_IP_OVERRIDE}"
+fi
+
+# ---------------------------------------------------------------------------
+# Tradução do NAS-Identifier (Nome Identificador) por MikroTik.
+#
+# Prioridade:
+#   1. SGP_NAS_ID_MAP   — mapeamento por NAS (múltiplos MikroTiks)
+#   2. SGP_NAS_IDENTIFIER — fallback único
+#   3. Sem alteração — não envia NAS-Identifier
+#
+# Formato do SGP_NAS_ID_MAP:
+#   "ip_original1=nome1,ip_original2=nome2"
+#   Ex.: "10.73.91.5=ONDELINE_NET,10.73.91.6=EIRUNEPE_NET"
+# ---------------------------------------------------------------------------
+NAS_IDENT="${SGP_NAS_IDENTIFIER}"
+if [ -n "${SGP_NAS_ID_MAP}" ]; then
+    MAPPED_ID=$(echo "${SGP_NAS_ID_MAP}" | tr ',' '\n' | grep "^${ORIGINAL_NAS_IP}=" | head -1 | cut -d= -f2)
+    if [ -n "${MAPPED_ID}" ]; then
+        NAS_IDENT="${MAPPED_ID}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -101,9 +139,9 @@ PACKET=$(
         printf 'NAS-Port = %s\n' "${NAS_PORT}"
     fi
 
-    # NAS-Identifier — identidade textual do NAS (opcional)
-    if [ -n "${SGP_NAS_IDENTIFIER}" ]; then
-        printf 'NAS-Identifier = "%s"\n' "${SGP_NAS_IDENTIFIER}"
+    # NAS-Identifier — identidade textual do NAS (resolvido via SGP_NAS_ID_MAP)
+    if [ -n "${NAS_IDENT}" ]; then
+        printf 'NAS-Identifier = "%s"\n' "${NAS_IDENT}"
     fi
 
     # Atributos opcionais — incluídos somente se presentes
@@ -128,7 +166,7 @@ PACKET=$(
 # Debug — loga conteúdo do packet quando SGP_ACCT_DEBUG=true
 # ---------------------------------------------------------------------------
 if [ "${SGP_ACCT_DEBUG:-false}" = "true" ]; then
-    echo "[SGP-ACCT] ${ACCT_STATUS} user=${USER_NAME} nas=${NAS_IP} framed=${FRAMED_IP} -> ${SGP_HOST}:${SGP_PORT}" >&2
+    echo "[SGP-ACCT] ${ACCT_STATUS} user=${USER_NAME} nas=${ORIGINAL_NAS_IP}->${NAS_IP} framed=${FRAMED_IP} -> ${SGP_HOST}:${SGP_PORT}" >&2
     echo "${PACKET}" >&2
 fi
 

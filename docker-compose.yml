@@ -35,12 +35,10 @@ services:
   # Sidecar: configura roteamento para a rede do SGP via WireGuard → MikroTik → L2TP.
   # Roda no namespace de rede do WireGuard para ter acesso à interface wg0.
   #
-  # 1. Adiciona as redes do SGP (172.16.116.0/24, 172.16.117.0/24) aos
-  #    AllowedIPs do peer MikroTik no WireGuard, para que pacotes destinados
-  #    ao SGP sejam roteados pelo túnel WireGuard até o MikroTik.
-  # 2. Adiciona rotas locais para essas redes via wg0.
-  # 3. Aplica masquerade (SNAT) para que o MikroTik veja o tráfego vindo
-  #    de 10.73.91.1 (IP do WireGuard), que está nos AllowedIPs do peer.
+  # Adiciona as redes SGP (172.16.116.0/24, 172.16.117.0/24) aos AllowedIPs
+  # de TODOS os peers MikroTik listados em SGP_WG_PEER_KEYS, para que o
+  # tráfego destinado ao SGP passe pelo túnel WireGuard até qualquer MikroTik
+  # que tenha a VPN L2TP com o SGP.
   # ---------------------------------------------------------------------------
   route-sgp:
     image: alpine:3.19
@@ -52,20 +50,25 @@ services:
     depends_on:
       - wireguard
     environment:
-      # Chave pública do peer MikroTik no WireGuard (como aparece em wg show wg0)
-      PEER_KEY: ${SGP_WG_PEER_PUBKEY:-T0IU0nE43dYEtcf+6IvBTVLy4UP5NFXxIglas4UblT0=}
+      # Chaves públicas dos peers MikroTik (separadas por vírgula)
+      # Cada MikroTik que tem VPN L2TP com o SGP precisa estar aqui.
+      # Para descobrir a chave: wg show wg0 allowed-ips (no container wireguard)
+      SGP_WG_PEER_KEYS: ${SGP_WG_PEER_KEYS:-T0IU0nE43dYEtcf+6IvBTVLy4UP5NFXxIglas4UblT0=}
     command: >
       sh -c "
         apk add --no-cache iptables wireguard-tools > /dev/null 2>&1;
         echo '[route-sgp] Configurando roteamento SGP via WireGuard...';
+        echo '[route-sgp] Peers: '$$SGP_WG_PEER_KEYS;
         while true; do
-          CURRENT=$$(wg show wg0 allowed-ips 2>/dev/null | grep \"$$PEER_KEY\" | awk '{$$1=\"\"; gsub(/[ \\t]+/,\",\"); sub(/^,/,\"\"); print}');
-          if [ -n \"$$PEER_KEY\" ] && ! echo \"$$CURRENT\" | grep -q '172.16.116.0/24'; then
-            NEW=\"$$CURRENT,172.16.116.0/24,172.16.117.0/24\";
-            NEW=$$(echo \"$$NEW\" | sed 's/,,/,/g; s/^,//; s/,$$//');
-            wg set wg0 peer \"$$PEER_KEY\" allowed-ips \"$$NEW\" 2>/dev/null &&
-              echo '[route-sgp] AllowedIPs do peer MikroTik atualizados com redes SGP';
-          fi;
+          IFS=',' ; for PKEY in $$SGP_WG_PEER_KEYS; do
+            CURRENT=$$(wg show wg0 allowed-ips 2>/dev/null | grep \"$$PKEY\" | awk '{$$1=\"\"; gsub(/[ \\t]+/,\",\"); sub(/^,/,\"\"); print}');
+            if [ -n \"$$PKEY\" ] && ! echo \"$$CURRENT\" | grep -q '172.16.116.0/24'; then
+              NEW=\"$$CURRENT,172.16.116.0/24,172.16.117.0/24\";
+              NEW=$$(echo \"$$NEW\" | sed 's/,,/,/g; s/^,//; s/,$$//');
+              wg set wg0 peer \"$$PKEY\" allowed-ips \"$$NEW\" 2>/dev/null &&
+                echo \"[route-sgp] AllowedIPs atualizados para peer $$PKEY\";
+            fi;
+          done; unset IFS;
           ip route replace 172.16.116.0/24 dev wg0 2>/dev/null;
           ip route replace 172.16.117.0/24 dev wg0 2>/dev/null;
           iptables -t nat -C POSTROUTING -o wg0 -d 172.16.116.0/24 -j MASQUERADE 2>/dev/null ||
@@ -135,11 +138,16 @@ services:
       SGP_RADIUS_HOST: ${SGP_RADIUS_HOST:-172.16.116.1}
       SGP_RADIUS_ACCT_PORT: ${SGP_RADIUS_ACCT_PORT:-2052}
       SGP_RADIUS_SECRET: ${SGP_RADIUS_SECRET:-sgp@radius}
-      # IP do MikroTik na rede L2TP do SGP — ESSENCIAL para o SGP
-      # reconhecer o NAS e marcar clientes como online.
-      # Deve ser o mesmo IP cadastrado como NAS/concentrador no SGP.
+      # --- Mapeamento de NAS-IP (múltiplos MikroTiks) ---
+      # Formato: "ip_wireguard1=ip_sgp1,ip_wireguard2=ip_sgp2"
+      # O ip_wireguard é o IP do MikroTik no WireGuard (10.73.91.x)
+      # O ip_sgp é o IP do NAS cadastrado no SGP (172.16.117.x)
+      SGP_NAS_IP_MAP: ${SGP_NAS_IP_MAP:-10.73.91.5=172.16.117.12}
+      # Fallback: usado se o NAS-IP não estiver no mapa acima
       SGP_NAS_IP_OVERRIDE: ${SGP_NAS_IP_OVERRIDE:-172.16.117.12}
-      # Identificador textual do NAS — deve bater com "Nome Identificador" no SGP
+      # Mapeamento de Nome Identificador: IP_WireGuard=NomeNoSGP (vírgula)
+      SGP_NAS_ID_MAP: ${SGP_NAS_ID_MAP:-10.73.91.5=ONDELINE_NET}
+      # Fallback de Nome Identificador se o IP não estiver no mapa
       SGP_NAS_IDENTIFIER: ${SGP_NAS_IDENTIFIER:-ONDELINE_NET}
       # Debug: "true" loga cada packet de accounting encaminhado ao SGP
       SGP_ACCT_DEBUG: ${SGP_ACCT_DEBUG:-false}
