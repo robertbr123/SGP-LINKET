@@ -59,7 +59,7 @@ services:
         apk add --no-cache iptables wireguard-tools > /dev/null 2>&1;
         echo '[route-sgp] Configurando roteamento SGP via WireGuard...';
         while true; do
-          CURRENT=$$(wg show wg0 allowed-ips 2>/dev/null | grep \"$$PEER_KEY\" | awk '{print $$2}' | tr '\t' ',');
+          CURRENT=$$(wg show wg0 allowed-ips 2>/dev/null | grep \"$$PEER_KEY\" | awk '{$$1=\"\"; gsub(/[ \\t]+/,\",\"); sub(/^,/,\"\"); print}');
           if [ -n \"$$PEER_KEY\" ] && ! echo \"$$CURRENT\" | grep -q '172.16.116.0/24'; then
             NEW=\"$$CURRENT,172.16.116.0/24,172.16.117.0/24\";
             NEW=$$(echo \"$$NEW\" | sed 's/,,/,/g; s/^,//; s/,$$//');

@@ -40,7 +40,7 @@ echo ""
 
 # Teste 2: Status request
 echo "[2/3] Enviando Status-Server ao SGP..."
-echo "Status-Server" | radclient -r 1 -t 5 "${SGP_HOST}:${SGP_PORT}" status "${SGP_SECRET}" 2>&1
+echo "Message-Authenticator = 0x00" | radclient -r 1 -t 5 "${SGP_HOST}:${SGP_PORT}" status "${SGP_SECRET}" 2>&1
 RESULT=$?
 if [ $RESULT -eq 0 ]; then
     echo "  OK - SGP respondeu ao Status-Server"
