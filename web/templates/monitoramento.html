@@ -483,6 +483,61 @@
 }
 .modal-confirm-btn:hover { filter: brightness(1.1); }
 
+/* ───────── PICKER TABS ───────── */
+.picker-tab {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-secondary);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.picker-tab.active { background: var(--ios-blue); border-color: var(--ios-blue); color: white; }
+.picker-tab:hover:not(.active) { background: rgba(255,255,255,0.1); color: white; }
+
+/* ───────── DRAG & DROP ───────── */
+.ios-card { cursor: grab; }
+.ios-card:active { cursor: grabbing; }
+
+.sortable-ghost {
+    opacity: 0.25;
+    border: 2px dashed var(--ios-blue) !important;
+    background: rgba(10,132,255,0.05) !important;
+    transform: none !important;
+}
+
+.sortable-drag {
+    opacity: 1 !important;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(10,132,255,0.4) !important;
+    transform: scale(1.02) !important;
+    cursor: grabbing !important;
+    z-index: 9998;
+}
+
+.sortable-chosen {
+    border-color: rgba(10,132,255,0.35) !important;
+}
+
+.drag-handle {
+    position: absolute;
+    top: 10px; right: 40px;
+    width: 22px; height: 22px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-tertiary);
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    cursor: grab;
+    z-index: 10;
+}
+.ios-card:hover .drag-handle { opacity: 1; }
+
 /* ───────── SCROLLBAR ───────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -544,6 +599,7 @@
 
             <!-- CARD: SFP Interface (span 2) -->
             <div class="ios-card sfp-card span-2" id="cardSfp" data-card-type="sfp">
+                <div class="drag-handle"><i class="bi bi-grip-vertical"></i></div>
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
                     <div>
                         <div class="card-label">Interface Principal</div>
@@ -579,6 +635,7 @@
 
             <!-- CARD: CPU & RAM -->
             <div class="ios-card" id="cardResources" data-card-type="resources">
+                <div class="drag-handle"><i class="bi bi-grip-vertical"></i></div>
                 <div class="card-label">Sistema</div>
                 <div class="card-title"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i> Desempenho</div>
                 <div class="res-grid">
@@ -608,6 +665,7 @@
 
             <!-- CARD: DHCP Summary -->
             <div class="ios-card dhcp-summary-card" id="cardDhcp" data-card-type="dhcp">
+                <div class="drag-handle"><i class="bi bi-grip-vertical"></i></div>
                 <div class="card-label">WAN DHCP Clients</div>
                 <div class="card-title"><i class="bi bi-link-45deg" style="color:var(--ios-green)"></i> Conexões DHCP</div>
 
@@ -637,6 +695,7 @@
 
             <!-- CARD: Identidade -->
             <div class="ios-card" id="cardIdentity" data-card-type="identity">
+                <div class="drag-handle"><i class="bi bi-grip-vertical"></i></div>
                 <div class="card-label">NAS / MikroTik</div>
                 <div class="card-title"><i class="bi bi-router-fill" style="color:var(--ios-yellow)"></i> Identidade</div>
                 <div class="identity-row">
@@ -710,36 +769,85 @@
         </div>
         <div class="ios-modal-body">
             <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:16px;font-weight:600">Selecione o tipo de card para adicionar ao dashboard:</div>
+            <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="cardPickerTabs">
+                <button class="picker-tab active" onclick="filterPicker('all',this)">Todos</button>
+                <button class="picker-tab" onclick="filterPicker('rede',this)">Rede</button>
+                <button class="picker-tab" onclick="filterPicker('sistema',this)">Sistema</button>
+                <button class="picker-tab" onclick="filterPicker('clientes',this)">Clientes</button>
+            </div>
             <div class="card-picker-grid" id="cardPickerGrid">
-                <div class="card-picker-item" data-type="sfp" onclick="selectCardType(this)">
+                <!-- REDE -->
+                <div class="card-picker-item" data-type="sfp" data-cat="rede" onclick="selectCardType(this)">
                     <div class="picker-icon" style="background:rgba(10,132,255,0.15)"><i class="bi bi-ethernet" style="color:var(--ios-blue)"></i></div>
                     <div class="picker-label">SFP Interface</div>
                     <div class="picker-sub">Down/Up speeds</div>
                 </div>
-                <div class="card-picker-item" data-type="resources" onclick="selectCardType(this)">
-                    <div class="picker-icon" style="background:rgba(191,90,242,0.15)"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i></div>
-                    <div class="picker-label">Desempenho</div>
-                    <div class="picker-sub">CPU / RAM</div>
-                </div>
-                <div class="card-picker-item" data-type="dhcp" onclick="selectCardType(this)">
+                <div class="card-picker-item" data-type="dhcp" data-cat="rede" onclick="selectCardType(this)">
                     <div class="picker-icon" style="background:rgba(48,209,88,0.15)"><i class="bi bi-link-45deg" style="color:var(--ios-green)"></i></div>
                     <div class="picker-label">DHCP Clients</div>
                     <div class="picker-sub">Resumo bound</div>
                 </div>
-                <div class="card-picker-item" data-type="identity" onclick="selectCardType(this)">
+                <div class="card-picker-item" data-type="arp" data-cat="rede" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(90,200,250,0.15)"><i class="bi bi-diagram-3-fill" style="color:var(--ios-teal)"></i></div>
+                    <div class="picker-label">Tabela ARP</div>
+                    <div class="picker-sub">Hosts na rede</div>
+                </div>
+                <div class="card-picker-item" data-type="dns" data-cat="rede" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(10,132,255,0.12)"><i class="bi bi-globe2" style="color:var(--ios-blue)"></i></div>
+                    <div class="picker-label">DNS Cache</div>
+                    <div class="picker-sub">Entradas cached</div>
+                </div>
+                <div class="card-picker-item" data-type="firewall" data-cat="rede" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(255,69,58,0.15)"><i class="bi bi-shield-fill" style="color:var(--ios-red)"></i></div>
+                    <div class="picker-label">Firewall</div>
+                    <div class="picker-sub">Conexões ativas</div>
+                </div>
+                <div class="card-picker-item" data-type="queue" data-cat="rede" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(255,214,10,0.12)"><i class="bi bi-bar-chart-fill" style="color:var(--ios-yellow)"></i></div>
+                    <div class="picker-label">Filas</div>
+                    <div class="picker-sub">Queue / QoS</div>
+                </div>
+                <!-- SISTEMA -->
+                <div class="card-picker-item" data-type="resources" data-cat="sistema" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(191,90,242,0.15)"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i></div>
+                    <div class="picker-label">CPU & RAM</div>
+                    <div class="picker-sub">Desempenho</div>
+                </div>
+                <div class="card-picker-item" data-type="uptime" data-cat="sistema" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(255,159,10,0.15)"><i class="bi bi-clock-history" style="color:var(--ios-orange)"></i></div>
+                    <div class="picker-label">Uptime</div>
+                    <div class="picker-sub">Tempo ativo</div>
+                </div>
+                <div class="card-picker-item" data-type="identity" data-cat="sistema" onclick="selectCardType(this)">
                     <div class="picker-icon" style="background:rgba(255,214,10,0.15)"><i class="bi bi-router-fill" style="color:var(--ios-yellow)"></i></div>
                     <div class="picker-label">Identidade</div>
                     <div class="picker-sub">Info do NAS</div>
                 </div>
-                <div class="card-picker-item" data-type="ppp" onclick="selectCardType(this)">
+                <div class="card-picker-item" data-type="temp" data-cat="sistema" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(255,69,58,0.12)"><i class="bi bi-thermometer-half" style="color:var(--ios-red)"></i></div>
+                    <div class="picker-label">Temperatura</div>
+                    <div class="picker-sub">CPU / Board</div>
+                </div>
+                <div class="card-picker-item" data-type="log" data-cat="sistema" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(255,255,255,0.07)"><i class="bi bi-journal-text" style="color:var(--text-secondary)"></i></div>
+                    <div class="picker-label">Log</div>
+                    <div class="picker-sub">Últimos eventos</div>
+                </div>
+                <!-- CLIENTES -->
+                <div class="card-picker-item" data-type="ppp" data-cat="clientes" onclick="selectCardType(this)">
                     <div class="picker-icon" style="background:rgba(50,173,230,0.15)"><i class="bi bi-people-fill" style="color:var(--ios-cyan)"></i></div>
                     <div class="picker-label">Clientes PPPoE</div>
                     <div class="picker-sub">Sessões ativas</div>
                 </div>
-                <div class="card-picker-item" data-type="uptime" onclick="selectCardType(this)">
-                    <div class="picker-icon" style="background:rgba(255,159,10,0.15)"><i class="bi bi-clock-history" style="color:var(--ios-orange)"></i></div>
-                    <div class="picker-label">Uptime</div>
-                    <div class="picker-sub">Tempo ativo</div>
+                <div class="card-picker-item" data-type="wireless" data-cat="clientes" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(48,209,88,0.12)"><i class="bi bi-wifi" style="color:var(--ios-green)"></i></div>
+                    <div class="picker-label">Wi-Fi</div>
+                    <div class="picker-sub">Clientes wireless</div>
+                </div>
+                <div class="card-picker-item" data-type="vpn" data-cat="clientes" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(191,90,242,0.12)"><i class="bi bi-lock-fill" style="color:var(--ios-purple)"></i></div>
+                    <div class="picker-label">VPN</div>
+                    <div class="picker-sub">L2TP / PPTP</div>
                 </div>
             </div>
             <button class="modal-confirm-btn" id="confirmAddCard" onclick="addSelectedCard()" disabled>
@@ -754,6 +862,7 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
 // ──────────────────────────────────────────────
 // STATE
@@ -1013,10 +1122,24 @@ async function loadOverview() {
 // ──────────────────────────────────────────────
 // MODAL: ADD CARD
 // ──────────────────────────────────────────────
+function filterPicker(cat, btn) {
+    document.querySelectorAll('.picker-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.card-picker-item').forEach(el => {
+        const elCat = el.dataset.cat || 'all';
+        el.style.display = (cat === 'all' || elCat === cat) ? '' : 'none';
+    });
+}
+
 function openAddCardModal() {
     document.getElementById('addCardOverlay').classList.add('open');
     selectedCardType = null;
-    document.querySelectorAll('.card-picker-item').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.card-picker-item').forEach(el => {
+        el.classList.remove('selected');
+        el.style.display = '';
+    });
+    document.querySelectorAll('.picker-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.picker-tab').classList.add('active');
     document.getElementById('confirmAddCard').disabled = true;
 }
 
@@ -1035,106 +1158,215 @@ function selectCardType(el) {
     document.getElementById('confirmAddCard').disabled = false;
 }
 
-// Card templates for dynamic add
+// ──────────────────────────────────────────────
+// CARD TEMPLATES
+// ──────────────────────────────────────────────
+function makeCard(type, cssClass, innerHTML) {
+    const d = document.createElement('div');
+    d.className = `ios-card ${cssClass || ''}`.trim();
+    d.setAttribute('data-card-type', type);
+    d.innerHTML = `<div class="drag-handle"><i class="bi bi-grip-vertical"></i></div>` + innerHTML;
+    return d;
+}
+
 const CARD_TEMPLATES = {
-    sfp: () => {
-        const d = document.createElement('div');
-        d.className = 'ios-card sfp-card span-2';
-        d.setAttribute('data-card-type', 'sfp');
-        d.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
-                <div>
-                    <div class="card-label">Interface Principal</div>
-                    <div class="card-title"><i class="bi bi-ethernet" style="color:var(--ios-blue)"></i> <span id="sfpName">sfp-sfpplus1</span></div>
-                </div>
-                <div id="sfpStatusBadge"><span class="ios-badge badge-warn">Sincronizando</span></div>
+    sfp: () => makeCard('sfp', 'sfp-card span-2', `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+            <div>
+                <div class="card-label">Interface Principal</div>
+                <div class="card-title"><i class="bi bi-ethernet" style="color:var(--ios-blue)"></i> sfp-sfpplus1</div>
             </div>
-            <div class="sfp-speed-row">
-                <div class="sfp-speed-block">
-                    <div class="sfp-speed-dir rx"><i class="bi bi-arrow-down-circle-fill"></i> Download RX</div>
-                    <div class="sfp-speed-val" id="rxBps">0.00 <span style="font-size:1rem;opacity:.7">Mbps</span></div>
-                    <div class="sfp-speed-acc" id="rxBytes">Total: —</div>
-                </div>
-                <div class="sfp-speed-block">
-                    <div class="sfp-speed-dir tx"><i class="bi bi-arrow-up-circle-fill"></i> Upload TX</div>
-                    <div class="sfp-speed-val" id="txBps">0.00 <span style="font-size:1rem;opacity:.7">Mbps</span></div>
-                    <div class="sfp-speed-acc" id="txBytes">Total: —</div>
-                </div>
-            </div>`;
-        return d;
-    },
+            <span class="ios-badge badge-warn">Sincronizando</span>
+        </div>
+        <div class="sfp-speed-row">
+            <div class="sfp-speed-block">
+                <div class="sfp-speed-dir rx"><i class="bi bi-arrow-down-circle-fill"></i> Download RX</div>
+                <div class="sfp-speed-val">0.00 <span style="font-size:1rem;opacity:.7">Mbps</span></div>
+                <div class="sfp-speed-acc">Total: —</div>
+            </div>
+            <div class="sfp-speed-block">
+                <div class="sfp-speed-dir tx"><i class="bi bi-arrow-up-circle-fill"></i> Upload TX</div>
+                <div class="sfp-speed-val">0.00 <span style="font-size:1rem;opacity:.7">Mbps</span></div>
+                <div class="sfp-speed-acc">Total: —</div>
+            </div>
+        </div>`),
+
     ppp: () => {
-        const d = document.createElement('div');
-        d.className = 'ios-card';
-        d.setAttribute('data-card-type', 'ppp');
-        d.innerHTML = `
+        const d = makeCard('ppp', '', `
             <div class="card-label">Clientes</div>
             <div class="card-title"><i class="bi bi-people-fill" style="color:var(--ios-cyan)"></i> PPPoE Ativo</div>
             <div style="text-align:center;padding:20px 0">
-                <div style="font-size:4rem;font-weight:900;color:white;letter-spacing:-0.04em" id="pppCountExtra">—</div>
+                <div style="font-size:4rem;font-weight:900;color:white;letter-spacing:-0.04em" class="js-sync" data-src="pppCount">—</div>
                 <div style="font-size:0.7rem;font-weight:700;color:var(--ios-cyan);text-transform:uppercase;letter-spacing:0.1em">Sessões Ativas</div>
-            </div>`;
-        // sync with existing data
-        const el = document.getElementById('pppCount');
-        if (el) setTimeout(() => { const n = document.getElementById('pppCountExtra'); if(n) n.textContent = el.textContent; }, 100);
+            </div>`);
+        syncCardValue(d);
         return d;
     },
+
     uptime: () => {
-        const d = document.createElement('div');
-        d.className = 'ios-card';
-        d.setAttribute('data-card-type', 'uptime');
-        d.innerHTML = `
+        const d = makeCard('uptime', '', `
             <div class="card-label">Estabilidade</div>
             <div class="card-title"><i class="bi bi-clock-history" style="color:var(--ios-orange)"></i> Uptime</div>
             <div style="text-align:center;padding:16px 0">
-                <div style="font-size:1.5rem;font-weight:800;color:white;letter-spacing:-0.02em" id="uptimeExtra">—</div>
+                <div style="font-size:1.5rem;font-weight:800;color:white;letter-spacing:-0.02em" class="js-sync" data-src="systemUptime" data-strip="Uptime: ">—</div>
                 <div style="font-size:0.65rem;font-weight:700;color:var(--ios-orange);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px">Tempo sem reiniciar</div>
-            </div>`;
-        const el = document.getElementById('systemUptime');
-        if (el) setTimeout(() => { const n = document.getElementById('uptimeExtra'); if(n) n.textContent = el.textContent.replace('Uptime: ',''); }, 100);
+            </div>`);
+        syncCardValue(d);
         return d;
     },
-    resources: () => {
-        const d = document.createElement('div');
-        d.className = 'ios-card';
-        d.setAttribute('data-card-type', 'resources');
-        d.innerHTML = `
-            <div class="card-label">Sistema</div>
-            <div class="card-title"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i> Recursos</div>
-            <div class="res-grid">
-                <div class="res-tile"><div class="res-label">CPU</div><div class="res-value">—</div></div>
-                <div class="res-tile"><div class="res-label">RAM</div><div class="res-value">—</div></div>
-            </div>`;
-        return d;
-    },
-    dhcp: () => {
-        const d = document.createElement('div');
-        d.className = 'ios-card dhcp-summary-card';
-        d.setAttribute('data-card-type', 'dhcp');
-        d.innerHTML = `
-            <div class="card-label">WAN DHCP</div>
-            <div class="card-title"><i class="bi bi-link-45deg" style="color:var(--ios-green)"></i> Clientes DHCP</div>
-            <div style="text-align:center;padding:16px 0">
-                <div class="dhcp-big-number">—</div>
+
+    resources: () => makeCard('resources', '', `
+        <div class="card-label">Sistema</div>
+        <div class="card-title"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i> CPU & RAM</div>
+        <div class="res-grid">
+            <div class="res-tile">
+                <div class="res-label">CPU</div>
+                <div class="res-value js-sync" data-src="cpuLoad">—</div>
+                <div class="ios-progress"><span class="prog-cpu" style="width:0%"></span></div>
+            </div>
+            <div class="res-tile">
+                <div class="res-label">RAM</div>
+                <div class="res-value js-sync" data-src="memUsed">—</div>
+                <div class="ios-progress"><span class="prog-mem" style="width:0%"></span></div>
+            </div>
+        </div>`),
+
+    dhcp: () => makeCard('dhcp', 'dhcp-summary-card', `
+        <div class="card-label">WAN DHCP</div>
+        <div class="card-title"><i class="bi bi-link-45deg" style="color:var(--ios-green)"></i> Clientes DHCP</div>
+        <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:4px">
+            <div class="dhcp-big-number js-sync" data-src="dhcpBound">—</div>
+            <div style="padding-bottom:8px">
                 <div class="dhcp-label-bottom">BOUND</div>
-            </div>`;
-        return d;
-    },
+                <div style="font-size:0.65rem;color:var(--text-secondary);font-weight:600">Atribuições ativas</div>
+            </div>
+        </div>`),
+
     identity: () => {
-        const d = document.createElement('div');
-        d.className = 'ios-card';
-        d.setAttribute('data-card-type', 'identity');
-        d.innerHTML = `
-            <div class="card-label">NAS</div>
+        const d = makeCard('identity', '', `
+            <div class="card-label">NAS / MikroTik</div>
             <div class="card-title"><i class="bi bi-router-fill" style="color:var(--ios-yellow)"></i> Identidade</div>
             <div class="identity-row">
-                <div class="id-field"><span class="id-key">System Name</span><span class="id-val" id="nasIdentity2">—</span></div>
-            </div>`;
-        const el = document.getElementById('nasIdentity');
-        if (el) setTimeout(() => { const n = document.getElementById('nasIdentity2'); if(n) n.textContent = el.textContent; }, 100);
+                <div class="id-field"><span class="id-key">System Name</span><span class="id-val js-sync" data-src="nasIdentity">—</span></div>
+                <div class="id-field"><span class="id-key">Relógio</span><span class="id-val js-sync" data-src="routerClock">—</span></div>
+            </div>`);
+        syncCardValue(d);
         return d;
-    }
+    },
+
+    arp: () => makeCard('arp', '', `
+        <div class="card-label">Rede Local</div>
+        <div class="card-title"><i class="bi bi-diagram-3-fill" style="color:var(--ios-teal)"></i> Tabela ARP</div>
+        <div style="text-align:center;padding:16px 0">
+            <div style="font-size:3.5rem;font-weight:900;color:white;letter-spacing:-0.04em" id="arpCount">—</div>
+            <div style="font-size:0.7rem;font-weight:700;color:var(--ios-teal);text-transform:uppercase;letter-spacing:0.1em">Hosts Mapeados</div>
+        </div>
+        <div style="font-size:0.65rem;color:var(--text-tertiary);text-align:center">Atualiza a cada 3s</div>`),
+
+    dns: () => makeCard('dns', '', `
+        <div class="card-label">Resolução</div>
+        <div class="card-title"><i class="bi bi-globe2" style="color:var(--ios-blue)"></i> DNS Cache</div>
+        <div style="text-align:center;padding:16px 0">
+            <div style="font-size:3.5rem;font-weight:900;color:white;letter-spacing:-0.04em" id="dnsCount">—</div>
+            <div style="font-size:0.7rem;font-weight:700;color:var(--ios-blue);text-transform:uppercase;letter-spacing:0.1em">Entradas em Cache</div>
+        </div>`),
+
+    firewall: () => makeCard('firewall', '', `
+        <div class="card-label">Segurança</div>
+        <div class="card-title"><i class="bi bi-shield-fill" style="color:var(--ios-red)"></i> Firewall</div>
+        <div class="res-grid">
+            <div class="res-tile">
+                <div class="res-label">Conexões</div>
+                <div class="res-value" id="fwConns">—</div>
+                <div class="res-sub">Track ativo</div>
+            </div>
+            <div class="res-tile">
+                <div class="res-label">Bloqueios</div>
+                <div class="res-value" style="color:var(--ios-red)" id="fwDrops">—</div>
+                <div class="res-sub">Pacotes drop</div>
+            </div>
+        </div>`),
+
+    queue: () => makeCard('queue', '', `
+        <div class="card-label">QoS</div>
+        <div class="card-title"><i class="bi bi-bar-chart-fill" style="color:var(--ios-yellow)"></i> Filas de Tráfego</div>
+        <div style="text-align:center;padding:14px 0">
+            <div style="font-size:3rem;font-weight:900;color:white;letter-spacing:-0.04em" id="queueCount">—</div>
+            <div style="font-size:0.7rem;font-weight:700;color:var(--ios-yellow);text-transform:uppercase;letter-spacing:0.1em">Filas Ativas</div>
+        </div>
+        <div style="font-size:0.65rem;color:var(--text-tertiary);text-align:center">Simple + Tree queues</div>`),
+
+    temp: () => makeCard('temp', '', `
+        <div class="card-label">Monitoramento</div>
+        <div class="card-title"><i class="bi bi-thermometer-half" style="color:var(--ios-red)"></i> Temperatura</div>
+        <div style="display:flex;gap:10px;margin-top:4px">
+            <div class="res-tile" style="flex:1;text-align:center">
+                <div class="res-label">CPU</div>
+                <div class="res-value" id="tempCpu" style="color:var(--ios-orange)">—°C</div>
+            </div>
+            <div class="res-tile" style="flex:1;text-align:center">
+                <div class="res-label">Board</div>
+                <div class="res-value" id="tempBoard" style="color:var(--ios-orange)">—°C</div>
+            </div>
+        </div>
+        <div style="font-size:0.62rem;color:var(--text-tertiary);margin-top:10px;text-align:center">Requer hardware compatível</div>`),
+
+    log: () => makeCard('log', 'span-2', `
+        <div class="card-label">Sistema</div>
+        <div class="card-title"><i class="bi bi-journal-text" style="color:var(--text-secondary)"></i> Últimos Logs</div>
+        <div id="logOutput" style="background:#0d0d0d;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;font-family:'SF Mono','JetBrains Mono',monospace;font-size:0.72rem;color:#30D158;line-height:1.7;max-height:180px;overflow-y:auto">
+            <span style="color:rgba(255,255,255,0.2)">Aguardando dados do log...</span>
+        </div>`),
+
+    wireless: () => makeCard('wireless', '', `
+        <div class="card-label">Wi-Fi</div>
+        <div class="card-title"><i class="bi bi-wifi" style="color:var(--ios-green)"></i> Clientes Wireless</div>
+        <div style="text-align:center;padding:16px 0">
+            <div style="font-size:3.5rem;font-weight:900;color:white;letter-spacing:-0.04em" id="wifiCount">—</div>
+            <div style="font-size:0.7rem;font-weight:700;color:var(--ios-green);text-transform:uppercase;letter-spacing:0.1em">Clientes Conectados</div>
+        </div>
+        <div style="font-size:0.65rem;color:var(--text-tertiary);text-align:center">2.4 GHz + 5 GHz</div>`),
+
+    vpn: () => makeCard('vpn', '', `
+        <div class="card-label">Acesso Remoto</div>
+        <div class="card-title"><i class="bi bi-lock-fill" style="color:var(--ios-purple)"></i> Sessões VPN</div>
+        <div class="res-grid">
+            <div class="res-tile" style="text-align:center">
+                <div class="res-label">L2TP</div>
+                <div class="res-value" id="vpnL2tp">—</div>
+            </div>
+            <div class="res-tile" style="text-align:center">
+                <div class="res-label">PPTP</div>
+                <div class="res-value" id="vpnPptp">—</div>
+            </div>
+        </div>`)
 };
+
+// Sync a card's .js-sync elements from existing DOM sources
+function syncCardValue(card) {
+    setTimeout(() => {
+        card.querySelectorAll('.js-sync').forEach(el => {
+            const src = document.getElementById(el.dataset.src);
+            if (src) {
+                const strip = el.dataset.strip || '';
+                el.textContent = src.textContent.replace(strip, '');
+                el.innerHTML = src.innerHTML.replace(strip, '');
+            }
+        });
+    }, 200);
+}
+
+// Attach remove button to any card
+function attachRemoveBtn(card) {
+    const removeBtn = document.createElement('button');
+    removeBtn.style.cssText = 'position:absolute;top:12px;right:12px;width:24px;height:24px;background:rgba(255,69,58,0.15);border:1px solid rgba(255,69,58,0.3);border-radius:8px;color:var(--ios-red);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:0.75rem;opacity:0;transition:opacity 0.2s;z-index:11;';
+    removeBtn.innerHTML = '<i class="bi bi-x"></i>';
+    removeBtn.title = 'Remover card';
+    removeBtn.onclick = (e) => { e.stopPropagation(); card.remove(); };
+    card.appendChild(removeBtn);
+    card.addEventListener('mouseenter', () => removeBtn.style.opacity = '1');
+    card.addEventListener('mouseleave', () => removeBtn.style.opacity = '0');
+}
 
 function addSelectedCard() {
     if (!selectedCardType) return;
@@ -1143,17 +1375,7 @@ function addSelectedCard() {
 
     const grid = document.getElementById('cardsGrid');
     const card = template();
-
-    // add remove button
-    const removeBtn = document.createElement('button');
-    removeBtn.style.cssText = 'position:absolute;top:12px;right:12px;width:24px;height:24px;background:rgba(255,69,58,0.15);border:1px solid rgba(255,69,58,0.3);border-radius:8px;color:var(--ios-red);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:0.75rem;opacity:0;transition:opacity 0.2s;z-index:10;';
-    removeBtn.innerHTML = '<i class="bi bi-x"></i>';
-    removeBtn.title = 'Remover card';
-    removeBtn.onclick = () => card.remove();
-    card.appendChild(removeBtn);
-    card.addEventListener('mouseenter', () => removeBtn.style.opacity = '1');
-    card.addEventListener('mouseleave', () => removeBtn.style.opacity = '0');
-
+    attachRemoveBtn(card);
     card.style.animation = 'fadeUp 0.4s ease';
     grid.appendChild(card);
     closeAddCardModal();
@@ -1216,6 +1438,24 @@ async function runSpeedtest() {
 // ──────────────────────────────────────────────
 window.onload = () => {
     initChart();
+
+    // Init SortableJS drag & drop
+    Sortable.create(document.getElementById('cardsGrid'), {
+        animation: 200,
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        chosenClass: 'sortable-chosen',
+        handle: '.ios-card',
+        forceFallback: false,
+        swapThreshold: 0.65,
+        onEnd() { if (trafficChart) trafficChart.resize(); }
+    });
+
+    // Attach remove buttons to default static cards
+    document.querySelectorAll('#cardsGrid .ios-card').forEach(card => {
+        attachRemoveBtn(card);
+    });
+
     if (currentNasId) {
         loadOverview();
         pollTimer = setInterval(loadOverview, 3000);
