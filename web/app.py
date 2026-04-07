@@ -256,7 +256,20 @@ def upsert_radius_user(conn, login: str, status: str, down: int, up: int, ip: st
                     "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                     (login, "Framed-IP-Address", ":=", ip),
                 )
+        elif status == "suspenso":
+            # Autentica mas recebe IP da faixa bloqueada (10.24.0.0/20)
+            # O MikroTik tem regra de firewall bloqueando essa faixa
+            cur.execute(
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                (login, "Cleartext-Password", ":=", senha or "123"),
+            )
+            if ip:
+                cur.execute(
+                    "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                    (login, "Framed-IP-Address", ":=", ip),
+                )
         else:
+            # pendente ou qualquer outro status — nega acesso
             cur.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                 (login, "Auth-Type", ":=", "Reject"),
@@ -298,6 +311,28 @@ def disconnect_user(conn, username: str):
     except Exception as e:
         log.warning("Falha ao desconectar %s: %s", username, e)
         return False
+
+
+SUSPENSION_NETWORK = ipaddress.ip_network("10.24.0.0/20", strict=False)
+
+
+def alocar_ip_suspenso(conn) -> str:
+    """Retorna um IP livre da faixa 10.24.0.0/20 para clientes suspensos.
+    Verifica IPs já em uso no radreply (onde o IP de suspensão fica registrado).
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT value FROM radreply WHERE attribute = 'Framed-IP-Address' AND value LIKE '10.24.%'",
+        )
+        usados = {row[0] for row in cur.fetchall()}
+
+    hosts = SUSPENSION_NETWORK.hosts()
+    next(hosts, None)  # pula 10.24.0.1 (reservado para gateway)
+    for ip in hosts:
+        addr = str(ip)
+        if addr not in usados:
+            return addr
+    return "10.24.0.2"  # fallback — nunca deve ocorrer num /20 com 4094 hosts
 
 
 def check_ip_unique(conn, ip: str, exclude_id: int = 0) -> bool:
@@ -771,22 +806,33 @@ def sincronizar_cliente(cliente_id):
 
     novo_status = status_from_sgp(contrato)
     pppoe_login = contrato.get("contratoCentralLogin") or cliente["pppoe_login"]
-    ip_sgp = contrato.get("servico_ip") or cliente["ip"]
+    ip_sgp = contrato.get("servico_ip") or ""
+    ip_local = (cliente.get("ip") or "").strip()
 
     if pppoe_login and not check_pppoe_login_unique(conn, pppoe_login, cliente_id):
         conn.close()
         return jsonify({"error": f"Login PPPoE '{pppoe_login}' já pertence a outro cliente"}), 409
 
+    # ip_local = IP real do cliente (setado manualmente ou vindo do SGP anteriormente)
+    # O banco NUNCA recebe 10.24.x.x — esse IP vai apenas para o RADIUS
+    # Prioridade: IP setado manualmente no painel > IP do SGP
+    ip_banco = ip_local or ip_sgp
+
+    if novo_status == "suspenso":
+        ip_radius = alocar_ip_suspenso(conn)
+    else:
+        # Ativo: usa IP do banco (manual tem prioridade), fallback SGP
+        ip_radius = ip_banco
+
     with conn.cursor() as cur:
         cur.execute(
-            """UPDATE clientes SET status=%s, pppoe_login=%s, ip=%s,
+            """UPDATE clientes SET status=%s, pppoe_login=%s, ip=COALESCE(NULLIF(%s, ''), ip),
                ultimo_sync_em=NOW(), atualizado_em=NOW() WHERE id=%s""",
-            (novo_status, pppoe_login, ip_sgp, cliente_id),
+            (novo_status, pppoe_login, ip_banco, cliente_id),
         )
     conn.commit()
 
     if pppoe_login:
-        # Preserva senha personalizada — busca do radcheck antes de sobrescrever
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT value FROM radcheck WHERE username = %s AND attribute = 'Cleartext-Password'",
@@ -797,12 +843,12 @@ def sincronizar_cliente(cliente_id):
 
         upsert_radius_user(
             conn, pppoe_login, novo_status,
-            cliente["velocidade_down"], cliente["velocidade_up"], ip_sgp,
+            cliente["velocidade_down"], cliente["velocidade_up"], ip_radius,
             senha=senha_atual,
         )
 
     conn.close()
-    return jsonify({"status": novo_status, "pppoe_login": pppoe_login})
+    return jsonify({"status": novo_status, "pppoe_login": pppoe_login, "ip": ip_banco})
 
 
 @app.route("/cliente/<int:cliente_id>/excluir", methods=["POST"])
