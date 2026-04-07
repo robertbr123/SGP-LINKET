@@ -1,450 +1,797 @@
 {% extends "base.html" %}
-{% block title %}Central de Monitoramento — RADIUS Manager{% endblock %}
+{% block title %}NOC — RADIUS Manager{% endblock %}
 {% block page_title %}Central de Monitoramento{% endblock %}
 {% block breadcrumb %}<li class="breadcrumb-item active">Monitoramento</li>{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.min.css">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
 :root {
-    --noc-bg: #0b0e14;
-    --card-bg: rgba(23, 28, 41, 0.85);
-    --card-border: rgba(255, 255, 255, 0.08);
-    --accent-blue: #3b82f6;
-    --accent-cyan: #22d3ee;
-    --accent-amber: #f59e0b;
-    --text-main: #f1f5f9;
-    --text-muted: #94a3b8;
+    --ios-bg: #000000;
+    --ios-bg2: #0a0a0a;
+    --ios-surface: rgba(28, 28, 30, 0.92);
+    --ios-surface2: rgba(44, 44, 46, 0.85);
+    --ios-border: rgba(255,255,255,0.1);
+    --ios-blue: #0A84FF;
+    --ios-cyan: #32ADE6;
+    --ios-green: #30D158;
+    --ios-yellow: #FFD60A;
+    --ios-orange: #FF9F0A;
+    --ios-red: #FF453A;
+    --ios-purple: #BF5AF2;
+    --ios-teal: #5AC8FA;
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255,255,255,0.55);
+    --text-tertiary: rgba(255,255,255,0.3);
+    --shadow-card: 0 4px 30px rgba(0,0,0,0.5);
+    --shadow-modal: 0 20px 60px rgba(0,0,0,0.8);
 }
 
-.main-content {
-    background-color: var(--noc-bg);
-    min-height: 100vh;
-}
+* { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; }
 
-.noc-stage {
-    background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 50%), var(--noc-bg);
-    border-radius: 0;
-    padding: 24px;
+.main-content { background: var(--ios-bg); min-height: 100vh; }
+
+/* ───────── NOC STAGE ───────── */
+#nocStage {
+    background: var(--ios-bg);
     min-height: calc(100vh - 60px);
+    padding: 20px;
     transition: all 0.3s ease;
 }
-
-.noc-stage:fullscreen {
-    padding: 40px;
+#nocStage:fullscreen {
+    padding: 32px;
     overflow-y: auto;
+    background: var(--ios-bg);
 }
 
-.glass-card {
-    background: var(--card-bg);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--card-border);
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-    transition: transform 0.2s ease, border-color 0.2s ease;
-    height: 100%;
+/* ───────── TOPBAR ───────── */
+.noc-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
 }
 
-.glass-card:hover {
-    border-color: rgba(59, 130, 246, 0.3);
-}
-
-.hero-card {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%);
-}
-
-.hero-title {
-    font-size: 0.75rem;
-    letter-spacing: 0.15em;
+.noc-logo {
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    color: var(--ios-blue);
     text-transform: uppercase;
-    color: var(--accent-blue);
-    font-weight: 800;
-}
-
-.hero-speed {
-    font-size: 2.8rem;
-    font-weight: 800;
-    line-height: 1;
-    color: white;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
-}
-
-.metric-tile {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 12px;
-    padding: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.metric-k {
-    font-size: 0.65rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-weight: 700;
-}
-
-.metric-v {
-    font-size: 1.4rem;
-    color: white;
-    font-weight: 700;
-}
-
-.section-title {
-    font-size: 0.85rem;
-    font-weight: 800;
-    color: var(--text-main);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 20px;
 }
 
-.section-title i {
-    color: var(--accent-blue);
+.noc-logo i { font-size: 1rem; }
+
+.live-dot {
+    width: 8px; height: 8px;
+    background: var(--ios-green);
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(48,209,88,0.3);
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(48,209,88,0.3); }
+    50% { box-shadow: 0 0 0 5px rgba(48,209,88,0.1); }
 }
 
-.resource-bar {
-    height: 6px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    margin-top: 8px;
-    overflow: hidden;
-}
+.nas-pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.resource-bar > span {
-    display: block;
-    height: 100%;
-    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-    background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
-}
-
-.nas-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text-muted);
-    border-radius: 10px;
-    padding: 8px 16px;
-    font-weight: 600;
-    transition: all 0.2s;
-}
-
-.nas-btn.active {
-    background: var(--accent-blue);
-    border-color: var(--accent-blue);
-    color: white;
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
-}
-
-.pane-btn {
-    border-radius: 10px;
-    padding: 8px 16px;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
-}
-
-.status-badge {
-    padding: 4px 10px;
-    border-radius: 8px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.status-up { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.2); }
-.status-down { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.2); }
-
-.dhcp-item {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 8px;
-}
-
-.terminal-dark {
-    background: #000;
-    border-radius: 12px;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+.nas-pill {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-secondary);
+    border-radius: 20px;
+    padding: 6px 16px;
     font-size: 0.8rem;
-    padding: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #4ade80;
-}
-
-.fullscreen-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: white;
-    width: 38px;
-    height: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 10px;
+    font-weight: 600;
     cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.01em;
 }
+.nas-pill:hover { background: rgba(10,132,255,0.15); color: var(--ios-blue); border-color: rgba(10,132,255,0.3); }
+.nas-pill.active { background: var(--ios-blue); border-color: var(--ios-blue); color: white; box-shadow: 0 2px 12px rgba(10,132,255,0.4); }
 
-.fullscreen-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+.topbar-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+
+.ios-icon-btn {
+    width: 36px; height: 36px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.95rem;
 }
+.ios-icon-btn:hover { background: rgba(255,255,255,0.12); color: white; }
 
-#trafficChartContainer {
-    height: 180px;
-    position: relative;
-    margin-top: 20px;
+.ios-add-btn {
+    background: var(--ios-blue);
+    border: none;
+    border-radius: 10px;
+    padding: 8px 16px;
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 12px rgba(10,132,255,0.35);
 }
+.ios-add-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
+.pane-toggle {
+    background: rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 3px;
+    display: flex;
+    gap: 2px;
+}
+.pane-toggle button {
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.pane-toggle button.active { background: rgba(10,132,255,0.9); color: white; }
+
+.last-update { font-size: 0.7rem; color: var(--text-tertiary); font-weight: 600; }
+
+/* ───────── PANES ───────── */
 .pane { display: none; }
-.pane.active { display: block; animation: fadeIn 0.3s ease; }
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
+.pane.active { display: block; animation: fadeUp 0.3s ease; }
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
-body {
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent-blue) var(--noc-bg);
+/* ───────── CARDS GRID ───────── */
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+.cards-grid .span-2 { grid-column: span 2; }
+
+@media (max-width: 768px) {
+    .cards-grid .span-2 { grid-column: span 1; }
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--noc-bg); }
-::-webkit-scrollbar-thumb { background: var(--accent-blue); border-radius: 10px; }
+/* ───────── IOS CARD ───────── */
+.ios-card {
+    background: var(--ios-surface);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--ios-border);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+.ios-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+}
+.ios-card:hover { transform: translateY(-2px); border-color: rgba(10,132,255,0.2); }
+
+.card-label {
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+/* ───────── SFP CARD ───────── */
+.sfp-card { background: linear-gradient(135deg, rgba(10,132,255,0.15) 0%, rgba(28,28,30,0.95) 60%); }
+
+.sfp-speed-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.sfp-speed-block { padding: 16px; background: rgba(255,255,255,0.04); border-radius: 14px; border: 1px solid rgba(255,255,255,0.06); }
+
+.sfp-speed-dir { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+.sfp-speed-dir.rx { color: var(--ios-cyan); }
+.sfp-speed-dir.tx { color: var(--ios-orange); }
+
+.sfp-speed-val {
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: white;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+
+.sfp-speed-acc { font-size: 0.65rem; color: var(--text-secondary); margin-top: 4px; }
+
+.chart-wrap { height: 100px; position: relative; margin: 4px 0; }
+
+.sfp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.sfp-chip {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ───────── STATUS BADGE ───────── */
+.ios-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+.badge-up { background: rgba(48,209,88,0.15); color: var(--ios-green); border: 1px solid rgba(48,209,88,0.25); }
+.badge-down { background: rgba(255,69,58,0.15); color: var(--ios-red); border: 1px solid rgba(255,69,58,0.25); }
+.badge-warn { background: rgba(255,159,10,0.15); color: var(--ios-orange); border: 1px solid rgba(255,159,10,0.25); }
+
+/* ───────── RESOURCE TILES ───────── */
+.res-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+.res-tile {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+}
+.res-label { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); margin-bottom: 4px; }
+.res-value { font-size: 1.35rem; font-weight: 800; color: white; line-height: 1; }
+.res-sub { font-size: 0.62rem; color: var(--text-tertiary); margin-top: 4px; }
+
+.ios-progress {
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 10px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+.ios-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+.prog-cpu { background: linear-gradient(90deg, var(--ios-blue), var(--ios-teal)); box-shadow: 0 0 8px rgba(10,132,255,0.4); }
+.prog-mem { background: linear-gradient(90deg, var(--ios-purple), var(--ios-blue)); box-shadow: 0 0 8px rgba(191,90,242,0.4); }
+
+/* ───────── DHCP SUMMARY CARD ───────── */
+.dhcp-summary-card { background: linear-gradient(135deg, rgba(48,209,88,0.12) 0%, rgba(28,28,30,0.95) 60%); }
+
+.dhcp-big-number { font-size: 3.5rem; font-weight: 900; color: white; line-height: 1; letter-spacing: -0.04em; }
+.dhcp-label-bottom { font-size: 0.7rem; font-weight: 700; color: var(--ios-green); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.dhcp-breakdown { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.dhcp-stat {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+}
+.dhcp-stat-n { font-size: 1.2rem; font-weight: 800; color: white; }
+.dhcp-stat-l { font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; }
+
+/* ───────── IDENTITY CARD ───────── */
+.identity-row { display: flex; flex-direction: column; gap: 10px; }
+.id-field { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); }
+.id-key { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
+.id-val { font-size: 0.8rem; font-weight: 700; color: white; }
+
+/* ───────── TOOLS PANE ───────── */
+.tool-card { height: 100%; }
+.ios-input {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 8px 14px;
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 500;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.ios-input:focus { border-color: var(--ios-blue); background: rgba(10,132,255,0.08); }
+
+.ios-select {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 8px 14px;
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 500;
+    outline: none;
+}
+
+.ios-btn-primary {
+    background: var(--ios-blue);
+    border: none;
+    border-radius: 12px;
+    padding: 10px;
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s;
+    box-shadow: 0 2px 12px rgba(10,132,255,0.3);
+}
+.ios-btn-primary:hover { filter: brightness(1.1); }
+.ios-btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+.ios-terminal {
+    background: #0d0d0d;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    padding: 14px;
+    color: #30D158;
+    line-height: 1.6;
+    overflow-y: auto;
+    margin-top: 12px;
+}
+
+/* ───────── MODAL IOS ───────── */
+.ios-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 9999;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+.ios-modal-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.ios-modal {
+    background: #1c1c1e;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px 24px 0 0;
+    width: 100%;
+    max-width: 600px;
+    padding: 0;
+    transform: translateY(100%);
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+    overflow: hidden;
+    box-shadow: var(--shadow-modal);
+}
+.ios-modal-overlay.open .ios-modal { transform: translateY(0); }
+
+.ios-modal-handle {
+    width: 36px; height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    margin: 12px auto 0;
+}
+
+.ios-modal-header {
+    padding: 16px 24px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.ios-modal-title { font-size: 1.1rem; font-weight: 800; color: white; }
+.ios-modal-close {
+    width: 28px; height: 28px;
+    background: rgba(255,255,255,0.1);
+    border: none; border-radius: 50%;
+    color: var(--text-secondary);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+.ios-modal-close:hover { background: rgba(255,255,255,0.2); color: white; }
+
+.ios-modal-body { padding: 20px 24px 32px; }
+
+.card-picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+.card-picker-item {
+    background: rgba(255,255,255,0.05);
+    border: 2px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 16px 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.card-picker-item:hover { background: rgba(10,132,255,0.15); border-color: var(--ios-blue); transform: scale(1.03); }
+.card-picker-item.selected { background: rgba(10,132,255,0.2); border-color: var(--ios-blue); }
+
+.picker-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+}
+.picker-label { font-size: 0.72rem; font-weight: 700; color: white; line-height: 1.2; text-align: center; }
+.picker-sub { font-size: 0.6rem; color: var(--text-secondary); }
+
+.modal-confirm-btn {
+    background: var(--ios-blue);
+    border: none;
+    border-radius: 14px;
+    padding: 14px;
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 16px;
+    transition: all 0.2s;
+    box-shadow: 0 4px 16px rgba(10,132,255,0.35);
+}
+.modal-confirm-btn:hover { filter: brightness(1.1); }
+
+/* ───────── SCROLLBAR ───────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 </style>
 {% endblock %}
 
 {% block content %}
 {% if not mikrotik_available %}
-<div class="alert alert-warning">
+<div class="alert alert-warning m-3">
     <i class="bi bi-exclamation-triangle-fill me-2"></i>
     <strong>librouteros não instalado.</strong> O monitoramento MikroTik não está disponível.
 </div>
 {% elif not nas_list %}
-<div class="alert alert-info">
+<div class="alert alert-info m-3">
     <i class="bi bi-info-circle-fill me-2"></i>
     Nenhum NAS com credenciais API cadastrado. Vá em <a href="{{ url_for('gerenciar_nas') }}">NAS / MikroTik</a> e configure usuário/senha da API RouterOS.
 </div>
 {% else %}
-<div class="noc-stage mt-3" id="nocStage">
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
-        <div class="section-title mb-0"><i class="bi bi-cpu-fill"></i> SGP-NOC INFRA</div>
-        <div class="d-flex gap-2 ms-2">
+
+<!-- NOC Stage -->
+<div id="nocStage">
+
+    <!-- Top Bar -->
+    <div class="noc-topbar">
+        <div class="noc-logo">
+            <i class="bi bi-cpu-fill"></i>
+            SGP-NOC
+            <div class="live-dot"></div>
+        </div>
+
+        <div class="nas-pill-group">
             {% for nas in nas_list %}
-            <button
-                class="nas-btn {{ 'active' if loop.first else '' }}"
-                data-nas-id="{{ nas.id }}"
-                onclick="selectNas({{ nas.id }})">
+            <button class="nas-pill {{ 'active' if loop.first else '' }}" data-nas-id="{{ nas.id }}" onclick="selectNas({{ nas.id }})">
                 {{ nas.shortname or nas.nasname }}
             </button>
             {% endfor %}
         </div>
-        
-        <div class="ms-auto d-flex gap-2 align-items-center">
-            <div class="pane-switch d-flex gap-1 bg-dark p-1 rounded-3">
-                <button class="btn btn-sm pane-btn btn-primary" id="btnPaneCentral" onclick="switchPane('central')">Dashboard</button>
-                <button class="btn btn-sm pane-btn btn-link text-white text-decoration-none" id="btnPaneTools" onclick="switchPane('tools')">Ferramentas</button>
+
+        <div class="topbar-actions">
+            <div class="pane-toggle">
+                <button id="btnPaneCentral" class="active" onclick="switchPane('central')">Dashboard</button>
+                <button id="btnPaneTools" onclick="switchPane('tools')">Ferramentas</button>
             </div>
-            <button class="fullscreen-btn" onclick="toggleFullscreen()" title="Tela Cheia">
-                <i class="bi bi-arrows-fullscreen"></i>
+            <button class="ios-add-btn" onclick="openAddCardModal()" title="Adicionar Card">
+                <i class="bi bi-plus"></i> Card
             </button>
-            <span class="text-muted small fw-bold" id="lastUpdate" style="min-width: 80px;">—</span>
+            <div class="ios-icon-btn" onclick="toggleFullscreen()" title="Tela Cheia">
+                <i class="bi bi-arrows-fullscreen" id="fullscreenIcon"></i>
+            </div>
+            <span class="last-update" id="lastUpdate">—</span>
         </div>
     </div>
 
+    <!-- DASHBOARD PANE -->
     <div class="pane active" id="pane-central">
-        <div class="row g-4">
-            <div class="col-xl-8">
-                <!-- Principais Métricas de Tráfego -->
-                <div class="glass-card hero-card mb-4">
-                    <div class="d-flex justify-content-between align-items-start mb-4">
-                        <div>
-                            <div class="hero-title mb-1">Interface Principal</div>
-                            <div class="h4 fw-bold text-white mb-0" id="sfpName">Aguardando...</div>
-                        </div>
-                        <div id="sfpStatusBadge">
-                            <span class="status-badge status-up">Sincronizando...</span>
-                        </div>
-                    </div>
+        <div class="cards-grid" id="cardsGrid">
 
-                    <div class="row g-4 mb-2">
-                        <div class="col-md-6 border-end border-white border-opacity-10">
-                            <div class="text-muted small fw-bold mb-1">DOWNLOAD (RX)</div>
-                            <div class="hero-speed" id="rxBps">0.00 Mbps</div>
-                            <div class="small mt-2" style="color: var(--accent-cyan)" id="rxBytes">Acumulado: —</div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="text-muted small fw-bold mb-1">UPLOAD (TX)</div>
-                            <div class="hero-speed" id="txBps">0.00 Mbps</div>
-                            <div class="small mt-2" style="color: var(--accent-amber)" id="txBytes">Acumulado: —</div>
+            <!-- CARD: SFP Interface (span 2) -->
+            <div class="ios-card sfp-card span-2" id="cardSfp" data-card-type="sfp">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+                    <div>
+                        <div class="card-label">Interface Principal</div>
+                        <div class="card-title">
+                            <i class="bi bi-ethernet" style="color:var(--ios-blue)"></i>
+                            <span id="sfpName">Aguardando...</span>
                         </div>
                     </div>
-
-                    <div id="trafficChartContainer">
-                        <canvas id="trafficChart"></canvas>
-                    </div>
-                    
-                    <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top border-white border-opacity-10" id="sfpMeta">
-                        <!-- Chips renderizados via JS -->
+                    <div id="sfpStatusBadge">
+                        <span class="ios-badge badge-warn"><i class="bi bi-arrow-repeat"></i> Sincronizando</span>
                     </div>
                 </div>
 
-                <!-- Painel de Saúde & Hardware -->
-                <div class="glass-card">
-                    <div class="section-title"><i class="bi bi-hdd-network"></i> Desempenho do Sistema</div>
-                    <div class="row g-3 mb-4">
-                        <div class="col-sm-6 col-md-3">
-                            <div class="metric-tile">
-                                <div class="metric-k">Carga CPU</div>
-                                <div class="metric-v" id="cpuLoad">0%</div>
-                                <div class="resource-bar"><span id="cpuBar" style="width:0%"></span></div>
-                            </div>
-                        </div>
-                        <div class="col-sm-6 col-md-3">
-                            <div class="metric-tile">
-                                <div class="metric-k">Uso RAM</div>
-                                <div class="metric-v" id="memUsed">0 MB</div>
-                                <div class="resource-bar"><span id="memBar" style="width:0%"></span></div>
-                            </div>
-                        </div>
-                        <div class="col-sm-6 col-md-3">
-                            <div class="metric-tile">
-                                <div class="metric-k">Clientes PPPoE</div>
-                                <div class="metric-v" id="pppCount">0</div>
-                                <div class="small text-muted mt-1">Sessões Ativas</div>
-                            </div>
-                        </div>
-                        <div class="col-sm-6 col-md-3">
-                            <div class="metric-tile">
-                                <div class="metric-k">Versão ROS</div>
-                                <div class="metric-v" style="font-size: 1.1rem" id="rosVersion">—</div>
-                                <div class="small text-muted mt-1" id="systemUptime">Uptime: —</div>
-                            </div>
-                        </div>
+                <div class="sfp-speed-row">
+                    <div class="sfp-speed-block">
+                        <div class="sfp-speed-dir rx"><i class="bi bi-arrow-down-circle-fill"></i> Download RX</div>
+                        <div class="sfp-speed-val" id="rxBps">0.00<span style="font-size:1rem;font-weight:600;opacity:.7"> Mbps</span></div>
+                        <div class="sfp-speed-acc" id="rxBytes">Total: —</div>
                     </div>
-                    <div class="text-muted small" id="systemMeta">Carregando detalhes do hardware...</div>
+                    <div class="sfp-speed-block">
+                        <div class="sfp-speed-dir tx"><i class="bi bi-arrow-up-circle-fill"></i> Upload TX</div>
+                        <div class="sfp-speed-val" id="txBps">0.00<span style="font-size:1rem;font-weight:600;opacity:.7"> Mbps</span></div>
+                        <div class="sfp-speed-acc" id="txBytes">Total: —</div>
+                    </div>
+                </div>
+
+                <div class="chart-wrap">
+                    <canvas id="trafficChart"></canvas>
+                </div>
+
+                <div class="sfp-chips" id="sfpMeta"></div>
+            </div>
+
+            <!-- CARD: CPU & RAM -->
+            <div class="ios-card" id="cardResources" data-card-type="resources">
+                <div class="card-label">Sistema</div>
+                <div class="card-title"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i> Desempenho</div>
+                <div class="res-grid">
+                    <div class="res-tile">
+                        <div class="res-label">CPU</div>
+                        <div class="res-value" id="cpuLoad">0%</div>
+                        <div class="ios-progress"><span class="prog-cpu" id="cpuBar" style="width:0%"></span></div>
+                    </div>
+                    <div class="res-tile">
+                        <div class="res-label">RAM</div>
+                        <div class="res-value" id="memUsed">0 MB</div>
+                        <div class="ios-progress"><span class="prog-mem" id="memBar" style="width:0%"></span></div>
+                    </div>
+                    <div class="res-tile">
+                        <div class="res-label">PPPoE</div>
+                        <div class="res-value" id="pppCount">0</div>
+                        <div class="res-sub">Sessões ativas</div>
+                    </div>
+                    <div class="res-tile">
+                        <div class="res-label">RouterOS</div>
+                        <div class="res-value" id="rosVersion" style="font-size:1rem">—</div>
+                        <div class="res-sub" id="systemUptime">Uptime: —</div>
+                    </div>
+                </div>
+                <div class="res-sub mt-3" id="systemMeta" style="font-size:0.62rem;color:var(--text-tertiary)">Carregando hardware...</div>
+            </div>
+
+            <!-- CARD: DHCP Summary -->
+            <div class="ios-card dhcp-summary-card" id="cardDhcp" data-card-type="dhcp">
+                <div class="card-label">WAN DHCP Clients</div>
+                <div class="card-title"><i class="bi bi-link-45deg" style="color:var(--ios-green)"></i> Conexões DHCP</div>
+
+                <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:4px">
+                    <div class="dhcp-big-number" id="dhcpBound">0</div>
+                    <div style="padding-bottom:8px">
+                        <div class="dhcp-label-bottom">BOUND</div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary);font-weight:600">Atribuições ativas</div>
+                    </div>
+                </div>
+
+                <div class="dhcp-breakdown">
+                    <div class="dhcp-stat">
+                        <div class="dhcp-stat-n" id="dhcpTotal">0</div>
+                        <div class="dhcp-stat-l">Total</div>
+                    </div>
+                    <div class="dhcp-stat">
+                        <div class="dhcp-stat-n" style="color:var(--ios-orange)" id="dhcpSearching">0</div>
+                        <div class="dhcp-stat-l">Buscando</div>
+                    </div>
+                    <div class="dhcp-stat">
+                        <div class="dhcp-stat-n" style="color:var(--ios-red)" id="dhcpDown">0</div>
+                        <div class="dhcp-stat-l">Offline</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="col-xl-4 text-white">
-                <!-- DHCP & Links Externos -->
-                <div class="glass-card mb-4" style="max-height: 480px; overflow-y: auto;">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div class="section-title mb-0"><i class="bi bi-link-45deg"></i> WAN DHCP Clients</div>
-                        <span class="badge bg-primary rounded-pill small" id="dhcpCounter">0</span>
+            <!-- CARD: Identidade -->
+            <div class="ios-card" id="cardIdentity" data-card-type="identity">
+                <div class="card-label">NAS / MikroTik</div>
+                <div class="card-title"><i class="bi bi-router-fill" style="color:var(--ios-yellow)"></i> Identidade</div>
+                <div class="identity-row">
+                    <div class="id-field">
+                        <span class="id-key"><i class="bi bi-tag me-1"></i>System Name</span>
+                        <span class="id-val" id="nasIdentity">—</span>
                     </div>
-                    <div id="dhcpList">
-                        <div class="text-center py-4 text-muted">Aguardando dados...</div>
+                    <div class="id-field">
+                        <span class="id-key"><i class="bi bi-clock me-1"></i>Relógio</span>
+                        <span class="id-val" id="routerClock">—</span>
+                    </div>
+                    <div class="id-field">
+                        <span class="id-key"><i class="bi bi-cpu me-1"></i>Hardware</span>
+                        <span class="id-val" id="nasHardware">—</span>
                     </div>
                 </div>
+            </div>
 
-                <!-- Rotas de Saída -->
-                <div class="glass-card mb-4">
-                    <div class="section-title"><i class="bi bi-sign-turn-right"></i> Rotas Default</div>
-                    <div id="routeList" class="d-grid gap-2">
-                        <div class="text-muted small">Carregando tabela de roteamento...</div>
-                    </div>
-                </div>
+        </div><!-- /cards-grid -->
+    </div><!-- /pane-central -->
 
-                <!-- Identidade -->
-                <div class="glass-card">
-                    <div class="section-title"><i class="bi bi-info-circle"></i> Identidade do NAS</div>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <div class="metric-k">System Name</div>
-                            <div class="text-white fw-bold truncate" id="nasIdentity">—</div>
-                        </div>
-                        <div class="col-6">
-                            <div class="metric-k">Clock / Timezone</div>
-                            <div class="text-white small fw-bold" id="routerClock">—</div>
-                        </div>
-                    </div>
+    <!-- TOOLS PANE -->
+    <div class="pane" id="pane-tools">
+        <div class="cards-grid">
+            <!-- Ping -->
+            <div class="ios-card tool-card">
+                <div class="card-label">Diagnóstico</div>
+                <div class="card-title"><i class="bi bi-broadcast" style="color:var(--ios-teal)"></i> Teste de Latência</div>
+                <div style="display:flex;gap:8px;margin-bottom:10px">
+                    <input id="pingDest" class="ios-input" value="8.8.8.8" placeholder="Destino IP / Host" style="flex:1">
+                    <select id="pingCount" class="ios-select">
+                        <option value="5" selected>5x</option>
+                        <option value="10">10x</option>
+                    </select>
                 </div>
+                <button class="ios-btn-primary" id="btnPing" onclick="runPing()">INICIAR PING</button>
+                <div class="ios-terminal" id="pingOutput" style="height:260px">Aguardando comando...</div>
+            </div>
+
+            <!-- Traceroute -->
+            <div class="ios-card tool-card">
+                <div class="card-label">Diagnóstico</div>
+                <div class="card-title"><i class="bi bi-map" style="color:var(--ios-purple)"></i> Traceroute</div>
+                <input id="traceDest" class="ios-input" value="1.1.1.1" placeholder="Destino IP / Host" style="margin-bottom:10px">
+                <button class="ios-btn-primary" id="btnTrace" onclick="runTraceroute()">RASTREAR ROTA</button>
+                <div class="ios-terminal" id="traceOutput" style="height:260px">O resultado aparecerá aqui...</div>
+            </div>
+
+            <!-- Speedtest -->
+            <div class="ios-card tool-card">
+                <div class="card-label">Desempenho</div>
+                <div class="card-title"><i class="bi bi-speedometer2" style="color:var(--ios-orange)"></i> Speedtest</div>
+                <div style="background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.2);border-radius:12px;padding:10px 14px;font-size:0.75rem;color:var(--ios-blue);margin-bottom:10px;font-weight:600">
+                    <i class="bi bi-info-circle-fill me-1"></i> Usa servidores configurados no NAS.
+                </div>
+                <button class="ios-btn-primary" id="btnSpeed" onclick="runSpeedtest()">TESTAR AGORA</button>
+                <div class="ios-terminal" id="speedOutput" style="height:220px">Resultados aparecerão aqui...</div>
             </div>
         </div>
     </div>
 
-    <div class="pane" id="pane-tools">
-        <div class="row g-4">
-            <div class="col-md-4">
-                <div class="glass-card">
-                    <div class="section-title"><i class="bi bi-broadcast"></i> Teste de Latência (Ping)</div>
-                    <div class="d-flex gap-2 mb-3">
-                        <input id="pingDest" class="form-control form-control-sm bg-dark text-white border-secondary" value="8.8.8.8">
-                        <select id="pingCount" class="form-select form-select-sm bg-dark text-white border-secondary" style="width:80px">
-                            <option value="5" selected>5x</option>
-                            <option value="10">10x</option>
-                        </select>
-                    </div>
-                    <button class="btn btn-primary btn-sm w-100 mb-3 fw-bold" id="btnPing" onclick="runPing()">INICIAR PING</button>
-                    <div class="terminal-dark" id="pingOutput" style="height: 300px; overflow-y: auto;">Aguardando comando...</div>
+</div><!-- /nocStage -->
+
+<!-- ───────── MODAL ADICIONAR CARD ───────── -->
+<div class="ios-modal-overlay" id="addCardOverlay" onclick="handleOverlayClick(event)">
+    <div class="ios-modal" id="addCardModal">
+        <div class="ios-modal-handle"></div>
+        <div class="ios-modal-header">
+            <span class="ios-modal-title">Adicionar Card</span>
+            <button class="ios-modal-close" onclick="closeAddCardModal()"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="ios-modal-body">
+            <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:16px;font-weight:600">Selecione o tipo de card para adicionar ao dashboard:</div>
+            <div class="card-picker-grid" id="cardPickerGrid">
+                <div class="card-picker-item" data-type="sfp" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(10,132,255,0.15)"><i class="bi bi-ethernet" style="color:var(--ios-blue)"></i></div>
+                    <div class="picker-label">SFP Interface</div>
+                    <div class="picker-sub">Down/Up speeds</div>
+                </div>
+                <div class="card-picker-item" data-type="resources" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(191,90,242,0.15)"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i></div>
+                    <div class="picker-label">Desempenho</div>
+                    <div class="picker-sub">CPU / RAM</div>
+                </div>
+                <div class="card-picker-item" data-type="dhcp" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(48,209,88,0.15)"><i class="bi bi-link-45deg" style="color:var(--ios-green)"></i></div>
+                    <div class="picker-label">DHCP Clients</div>
+                    <div class="picker-sub">Resumo bound</div>
+                </div>
+                <div class="card-picker-item" data-type="identity" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(255,214,10,0.15)"><i class="bi bi-router-fill" style="color:var(--ios-yellow)"></i></div>
+                    <div class="picker-label">Identidade</div>
+                    <div class="picker-sub">Info do NAS</div>
+                </div>
+                <div class="card-picker-item" data-type="ppp" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(50,173,230,0.15)"><i class="bi bi-people-fill" style="color:var(--ios-cyan)"></i></div>
+                    <div class="picker-label">Clientes PPPoE</div>
+                    <div class="picker-sub">Sessões ativas</div>
+                </div>
+                <div class="card-picker-item" data-type="uptime" onclick="selectCardType(this)">
+                    <div class="picker-icon" style="background:rgba(255,159,10,0.15)"><i class="bi bi-clock-history" style="color:var(--ios-orange)"></i></div>
+                    <div class="picker-label">Uptime</div>
+                    <div class="picker-sub">Tempo ativo</div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="glass-card">
-                    <div class="section-title"><i class="bi bi-map"></i> Rota do Pacote (Traceroute)</div>
-                    <div class="mb-3">
-                        <input id="traceDest" class="form-control form-control-sm bg-dark text-white border-secondary" value="1.1.1.1">
-                    </div>
-                    <button class="btn btn-primary btn-sm w-100 mb-3 fw-bold" id="btnTrace" onclick="runTraceroute()">RASTREAR ROTA</button>
-                    <div class="terminal-dark" id="traceOutput" style="height: 300px; overflow-y: auto;">O resultado aparecerá aqui...</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="glass-card">
-                    <div class="section-title"><i class="bi bi-speedometer2"></i> Speedtest Interno (MikroTik)</div>
-                    <div class="alert alert-info py-2 px-3 small border-0 bg-primary bg-opacity-10 text-primary">
-                        <i class="bi bi-info-circle-fill me-1"></i> Usa os servidores configurados no NAS.
-                    </div>
-                    <button class="btn btn-outline-primary btn-sm w-100 mb-3 fw-bold" id="btnSpeed" onclick="runSpeedtest()">TESTAR AGORA</button>
-                    <div class="terminal-dark" id="speedOutput" style="height: 258px; overflow-y: auto;">Resultados aparecerão aqui...</div>
-                </div>
-            </div>
+            <button class="modal-confirm-btn" id="confirmAddCard" onclick="addSelectedCard()" disabled>
+                <i class="bi bi-plus-circle me-2"></i>Adicionar Card
+            </button>
         </div>
     </div>
 </div>
+
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+// ──────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────
 let currentNasId = {{ nas_list[0].id if nas_list else 'null' }};
 let sfpPrev = null;
 let pollTimer = null;
 let trafficChart = null;
 const rxHistory = new Array(60).fill(0);
 const txHistory = new Array(60).fill(0);
-const labelsCache = new Array(60).fill('');
+let selectedCardType = null;
+let isFullscreen = false;
 
+// ──────────────────────────────────────────────
+// CHART
+// ──────────────────────────────────────────────
 function initChart() {
     const ctx = document.getElementById('trafficChart').getContext('2d');
     trafficChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: labelsCache,
+            labels: new Array(60).fill(''),
             datasets: [
                 {
-                    label: 'Download (RX)',
+                    label: 'RX',
                     data: rxHistory,
-                    borderColor: '#22d3ee',
-                    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                    borderColor: 'rgba(50,173,230,0.9)',
+                    backgroundColor: 'rgba(50,173,230,0.07)',
                     borderWidth: 2,
                     fill: true,
                     tension: 0.4,
                     pointRadius: 0
                 },
                 {
-                    label: 'Upload (TX)',
+                    label: 'TX',
                     data: txHistory,
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderColor: 'rgba(255,159,10,0.9)',
+                    backgroundColor: 'rgba(255,159,10,0.07)',
                     borderWidth: 2,
                     fill: true,
                     tension: 0.4,
@@ -456,100 +803,127 @@ function initChart() {
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: 0 },
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
-                tooltip: { mode: 'index', intersect: false }
+                tooltip: {
+                    backgroundColor: 'rgba(20,20,22,0.95)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 1,
+                    titleColor: '#fff',
+                    bodyColor: 'rgba(255,255,255,0.6)',
+                    padding: 10,
+                    cornerRadius: 10,
+                    callbacks: {
+                        label: (ctx) => ` ${ctx.dataset.label}: ${fmtBps(ctx.raw)}`
+                    }
+                }
             },
             scales: {
                 x: { display: false },
                 y: {
                     beginAtZero: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
                     ticks: {
-                        color: '#64748b',
-                        callback: function(value) { return fmtBps(value); }
-                    }
+                        color: 'rgba(255,255,255,0.25)',
+                        font: { size: 10, weight: '600' },
+                        callback: (v) => fmtBps(v),
+                        maxTicksLimit: 4
+                    },
+                    border: { display: false }
                 }
             }
         }
     });
 }
 
+// ──────────────────────────────────────────────
+// FULLSCREEN
+// ──────────────────────────────────────────────
 function toggleFullscreen() {
     const elem = document.getElementById('nocStage');
+    const icon = document.getElementById('fullscreenIcon');
     if (!document.fullscreenElement) {
-        elem.requestFullscreen().catch(err => {
-            alert(`Erro ao entrar em tela cheia: ${err.message}`);
+        elem.requestFullscreen().then(() => {
+            icon.className = 'bi bi-fullscreen-exit';
+        }).catch(err => alert(`Erro: ${err.message}`));
+    } else {
+        document.exitFullscreen().then(() => {
+            icon.className = 'bi bi-arrows-fullscreen';
         });
-    } else {
-        document.exitFullscreen();
     }
 }
+document.addEventListener('fullscreenchange', () => {
+    const icon = document.getElementById('fullscreenIcon');
+    if (!document.fullscreenElement) icon.className = 'bi bi-arrows-fullscreen';
+});
 
+// ──────────────────────────────────────────────
+// PANE SWITCH
+// ──────────────────────────────────────────────
 function switchPane(name) {
-    const central = name === 'central';
-    document.getElementById('pane-central').classList.toggle('active', central);
-    document.getElementById('pane-tools').classList.toggle('active', !central);
-    
-    const btnC = document.getElementById('btnPaneCentral');
-    const btnT = document.getElementById('btnPaneTools');
-    
-    if (central) {
-        btnC.className = 'btn btn-sm pane-btn btn-primary';
-        btnT.className = 'btn btn-sm pane-btn btn-link text-white text-decoration-none';
-    } else {
-        btnC.className = 'btn btn-sm pane-btn btn-link text-white text-decoration-none';
-        btnT.className = 'btn btn-sm pane-btn btn-primary';
-    }
+    const isCentral = name === 'central';
+    document.getElementById('pane-central').classList.toggle('active', isCentral);
+    document.getElementById('pane-tools').classList.toggle('active', !isCentral);
+    document.getElementById('btnPaneCentral').classList.toggle('active', isCentral);
+    document.getElementById('btnPaneTools').classList.toggle('active', !isCentral);
 }
 
-function fmtTime() {
-    return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-function fmtBytes(bytes) {
-    const n = Number(bytes) || 0;
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
-    if (n < 1024 ** 3) return `${(n / (1024 ** 2)).toFixed(1)} MB`;
-    return `${(n / (1024 ** 3)).toFixed(2)} GB`;
-}
-
-function fmtBps(bps) {
-    const n = Number(bps) || 0;
-    if (n < 1000) return `${Math.round(n)} bps`;
-    if (n < 1000000) return `${(n / 1000).toFixed(1)} K`;
-    if (n < 1000000000) return `${(n / 1000000).toFixed(1)} Mbps`;
-    return `${(n / 1000000000).toFixed(2)} Gbps`;
-}
-
+// ──────────────────────────────────────────────
+// NAS SELECTOR
+// ──────────────────────────────────────────────
 function selectNas(nasId) {
     currentNasId = nasId;
     sfpPrev = null;
     rxHistory.fill(0);
     txHistory.fill(0);
     if (trafficChart) trafficChart.update();
-    
-    document.querySelectorAll('[data-nas-id]').forEach((btn) => {
-        const active = Number(btn.dataset.nasId) === nasId;
-        btn.classList.toggle('active', active);
+    document.querySelectorAll('[data-nas-id]').forEach(btn => {
+        btn.classList.toggle('active', Number(btn.dataset.nasId) === nasId);
     });
     loadOverview();
 }
 
+// ──────────────────────────────────────────────
+// FORMAT HELPERS
+// ──────────────────────────────────────────────
+function fmtTime() { return new Date().toLocaleTimeString('pt-BR'); }
+
+function fmtBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024**2) return `${(n/1024).toFixed(1)} KB`;
+    if (n < 1024**3) return `${(n/1024**2).toFixed(1)} MB`;
+    return `${(n/1024**3).toFixed(2)} GB`;
+}
+
+function fmtBps(bps) {
+    const n = Number(bps) || 0;
+    if (n < 1000) return `${Math.round(n)} bps`;
+    if (n < 1e6) return `${(n/1000).toFixed(1)} Kbps`;
+    if (n < 1e9) return `${(n/1e6).toFixed(2)} Mbps`;
+    return `${(n/1e9).toFixed(2)} Gbps`;
+}
+
+function fmtBpsShort(bps) {
+    const n = Number(bps) || 0;
+    if (n < 1e6) return `${(n/1000).toFixed(1)}<span style="font-size:1rem;font-weight:600;opacity:.6"> Kbps</span>`;
+    if (n < 1e9) return `${(n/1e6).toFixed(2)}<span style="font-size:1rem;font-weight:600;opacity:.6"> Mbps</span>`;
+    return `${(n/1e9).toFixed(3)}<span style="font-size:1rem;font-weight:600;opacity:.6"> Gbps</span>`;
+}
+
+// ──────────────────────────────────────────────
+// UPDATE SFP CARD
+// ──────────────────────────────────────────────
 function updateSfpCard(sfp) {
-    const nameEl = document.getElementById('sfpName');
-    const badgeContainer = document.getElementById('sfpStatusBadge');
-    
     if (!sfp) {
-        nameEl.textContent = 'Interface não detectada';
-        badgeContainer.innerHTML = '<span class="status-badge status-down">OFFLINE / NOT FOUND</span>';
+        document.getElementById('sfpName').textContent = 'Interface não detectada';
+        document.getElementById('sfpStatusBadge').innerHTML = '<span class="ios-badge badge-down"><i class="bi bi-x-circle-fill"></i> OFFLINE</span>';
         return;
     }
 
     const now = Date.now();
-    let rxBps = 0;
-    let txBps = 0;
+    let rxBps = 0, txBps = 0;
     if (sfpPrev) {
         const dt = Math.max((now - sfpPrev.ts) / 1000, 1);
         rxBps = Math.max(0, ((sfp.rx_byte - sfpPrev.rxByte) * 8) / dt);
@@ -557,132 +931,255 @@ function updateSfpCard(sfp) {
     }
     sfpPrev = { ts: now, rxByte: sfp.rx_byte, txByte: sfp.tx_byte };
 
-    nameEl.textContent = sfp.name || 'sfp-sfpplus1';
-    document.getElementById('rxBps').textContent = fmtBps(rxBps);
-    document.getElementById('txBps').textContent = fmtBps(txBps);
+    document.getElementById('sfpName').textContent = sfp.name || 'sfp-sfpplus1';
+    document.getElementById('rxBps').innerHTML = fmtBpsShort(rxBps);
+    document.getElementById('txBps').innerHTML = fmtBpsShort(txBps);
     document.getElementById('rxBytes').textContent = `Total RX: ${fmtBytes(sfp.rx_byte)}`;
     document.getElementById('txBytes').textContent = `Total TX: ${fmtBytes(sfp.tx_byte)}`;
 
-    rxHistory.push(rxBps);
-    txHistory.push(txBps);
-    rxHistory.shift();
-    txHistory.shift();
+    rxHistory.push(rxBps); rxHistory.shift();
+    txHistory.push(txBps); txHistory.shift();
     if (trafficChart) trafficChart.update();
 
     const isUp = sfp.running && !sfp.disabled;
-    badgeContainer.innerHTML = isUp ? 
-        '<span class="status-badge status-up"><i class="bi bi-check-circle-fill me-1"></i> LINK UP</span>' : 
-        '<span class="status-badge status-down"><i class="bi bi-x-circle-fill me-1"></i> LINK DOWN</span>';
+    document.getElementById('sfpStatusBadge').innerHTML = isUp
+        ? '<span class="ios-badge badge-up"><i class="bi bi-check-circle-fill"></i> LINK UP</span>'
+        : '<span class="ios-badge badge-down"><i class="bi bi-x-circle-fill"></i> LINK DOWN</span>';
 
     document.getElementById('sfpMeta').innerHTML = [
-        `<span class="badge bg-white bg-opacity-10 text-muted p-2">TYPE: ${sfp.type || 'n/d'}</span>`,
-        `<span class="badge bg-white bg-opacity-10 text-muted p-2">ERR RX/TX: ${sfp.rx_error || 0}/${sfp.tx_error || 0}</span>`,
-        `<span class="badge bg-white bg-opacity-10 text-muted p-2">DROPS: ${sfp.rx_drop || 0}</span>`,
-        `<span class="badge bg-white bg-opacity-10 text-muted p-2">DOWNS: ${sfp.link_downs || 0}</span>`,
+        `<span class="sfp-chip">TYPE ${sfp.type || 'n/d'}</span>`,
+        `<span class="sfp-chip">ERR ${sfp.rx_error || 0}/${sfp.tx_error || 0}</span>`,
+        `<span class="sfp-chip">DROPS ${sfp.rx_drop || 0}</span>`,
+        `<span class="sfp-chip">LINK DOWNS ${sfp.link_downs || 0}</span>`,
     ].join('');
 }
 
+// ──────────────────────────────────────────────
+// RENDER DHCP (only summary)
+// ──────────────────────────────────────────────
 function renderDhcp(dhcpRows) {
     const list = Array.isArray(dhcpRows) ? dhcpRows : [];
-    document.getElementById('dhcpCounter').textContent = list.length;
-    const container = document.getElementById('dhcpList');
+    const bound = list.filter(d => (d.status || '').toLowerCase().includes('bound')).length;
+    const searching = list.filter(d => (d.status || '').toLowerCase().includes('search')).length;
+    const down = list.filter(d => {
+        const s = (d.status || '').toLowerCase();
+        return !s.includes('bound') && !s.includes('search');
+    }).length;
 
-    if (!list.length) {
-        container.innerHTML = '<div class="text-center py-4 text-muted small">Nenhum DHCP Client ativo.</div>';
-        return;
-    }
-
-    container.innerHTML = list.map(d => {
-        const status = (d.status || '').toLowerCase();
-        const isBound = status.includes('bound');
-        return `
-            <div class="dhcp-item">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="fw-bold small">${d.interface}</span>
-                    <span class="status-badge ${isBound ? 'status-up' : 'status-down'}" style="font-size: 0.6rem">${status}</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-end">
-                    <div class="small text-white-50">${d.address || 'Sem IP'}</div>
-                    ${d.slave ? '<span class="text-info" style="font-size: 0.65rem; font-weight: 800;">[SLAVE]</span>' : ''}
-                </div>
-            </div>`;
-    }).join('');
+    document.getElementById('dhcpBound').textContent = bound;
+    document.getElementById('dhcpTotal').textContent = list.length;
+    document.getElementById('dhcpSearching').textContent = searching;
+    document.getElementById('dhcpDown').textContent = down;
 }
 
-function renderRoutes(routes) {
-    const list = Array.isArray(routes) ? routes : [];
-    const container = document.getElementById('routeList');
-    
-    if (!list.length) {
-        container.innerHTML = '<div class="text-muted small">Nenhuma rota padrão.</div>';
-        return;
-    }
-
-    container.innerHTML = list.map(r => `
-        <div class="p-2 rounded bg-white bg-opacity-5 border border-white border-opacity-5">
-            <div class="d-flex justify-content-between align-items-center">
-                <span class="small fw-bold">GW: ${r.gateway}</span>
-                <span class="status-badge ${r.active ? 'status-up' : 'status-down'}" style="font-size: 0.55rem">${r.active ? 'ACTIVE' : 'INACTIVE'}</span>
-            </div>
-            <div class="text-muted" style="font-size: 0.65rem">Dist: ${r.distance} | Tab: ${r.routing_table}</div>
-        </div>
-    `).join('');
-}
-
+// ──────────────────────────────────────────────
+// UPDATE RESOURCES
+// ──────────────────────────────────────────────
 function updateResources(res, ppp, nas, clock) {
     const cpu = Number(res?.cpu_load || 0);
     const mem = Number(res?.mem_pct || 0);
-    
+
     document.getElementById('cpuLoad').textContent = `${cpu}%`;
     document.getElementById('cpuBar').style.width = `${cpu}%`;
-    
     document.getElementById('memUsed').textContent = `${res?.used_mem_mb || 0} MB`;
     document.getElementById('memBar').style.width = `${mem}%`;
-    
     document.getElementById('pppCount').textContent = ppp || 0;
     document.getElementById('rosVersion').textContent = res?.version || '—';
     document.getElementById('systemUptime').textContent = `Uptime: ${res?.uptime || '—'}`;
-    
-    document.getElementById('systemMeta').textContent = `${res?.board_name || 'MikroTik'} | ${res?.platform || 'RouterOS'}`;
-    document.getElementById('nasIdentity').textContent = nas?.identity || 'MikroTik';
+    document.getElementById('systemMeta').textContent = `${res?.board_name || 'MikroTik'} · ${res?.platform || 'RouterOS'}`;
+    document.getElementById('nasIdentity').textContent = nas?.identity || '—';
     document.getElementById('routerClock').textContent = `${clock?.time || '--:--'} (${clock?.timezone || 'UTC'})`;
+    document.getElementById('nasHardware').textContent = `${res?.board_name || '—'}`;
 }
 
+// ──────────────────────────────────────────────
+// POLL API
+// ──────────────────────────────────────────────
 async function loadOverview() {
     if (!currentNasId) return;
     try {
         const res = await fetch(`/api/monitor/${currentNasId}/overview`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro API');
-
         updateSfpCard(data.sfp_interface);
         updateResources(data.resource, data.ppp_active_count, data.nas, data.clock);
         renderDhcp(data.dhcp_clients);
-        renderRoutes(data.default_routes);
         document.getElementById('lastUpdate').textContent = fmtTime();
     } catch (err) {
-        console.error('Monitor Poll Error:', err);
+        console.error('Poll Error:', err);
     }
 }
 
-// Diagnostic Tools (Ping, Trace, Speed) - Re-using logic but updating UI
+// ──────────────────────────────────────────────
+// MODAL: ADD CARD
+// ──────────────────────────────────────────────
+function openAddCardModal() {
+    document.getElementById('addCardOverlay').classList.add('open');
+    selectedCardType = null;
+    document.querySelectorAll('.card-picker-item').forEach(el => el.classList.remove('selected'));
+    document.getElementById('confirmAddCard').disabled = true;
+}
+
+function closeAddCardModal() {
+    document.getElementById('addCardOverlay').classList.remove('open');
+}
+
+function handleOverlayClick(e) {
+    if (e.target === document.getElementById('addCardOverlay')) closeAddCardModal();
+}
+
+function selectCardType(el) {
+    document.querySelectorAll('.card-picker-item').forEach(i => i.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedCardType = el.dataset.type;
+    document.getElementById('confirmAddCard').disabled = false;
+}
+
+// Card templates for dynamic add
+const CARD_TEMPLATES = {
+    sfp: () => {
+        const d = document.createElement('div');
+        d.className = 'ios-card sfp-card span-2';
+        d.setAttribute('data-card-type', 'sfp');
+        d.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+                <div>
+                    <div class="card-label">Interface Principal</div>
+                    <div class="card-title"><i class="bi bi-ethernet" style="color:var(--ios-blue)"></i> <span id="sfpName">sfp-sfpplus1</span></div>
+                </div>
+                <div id="sfpStatusBadge"><span class="ios-badge badge-warn">Sincronizando</span></div>
+            </div>
+            <div class="sfp-speed-row">
+                <div class="sfp-speed-block">
+                    <div class="sfp-speed-dir rx"><i class="bi bi-arrow-down-circle-fill"></i> Download RX</div>
+                    <div class="sfp-speed-val" id="rxBps">0.00 <span style="font-size:1rem;opacity:.7">Mbps</span></div>
+                    <div class="sfp-speed-acc" id="rxBytes">Total: —</div>
+                </div>
+                <div class="sfp-speed-block">
+                    <div class="sfp-speed-dir tx"><i class="bi bi-arrow-up-circle-fill"></i> Upload TX</div>
+                    <div class="sfp-speed-val" id="txBps">0.00 <span style="font-size:1rem;opacity:.7">Mbps</span></div>
+                    <div class="sfp-speed-acc" id="txBytes">Total: —</div>
+                </div>
+            </div>`;
+        return d;
+    },
+    ppp: () => {
+        const d = document.createElement('div');
+        d.className = 'ios-card';
+        d.setAttribute('data-card-type', 'ppp');
+        d.innerHTML = `
+            <div class="card-label">Clientes</div>
+            <div class="card-title"><i class="bi bi-people-fill" style="color:var(--ios-cyan)"></i> PPPoE Ativo</div>
+            <div style="text-align:center;padding:20px 0">
+                <div style="font-size:4rem;font-weight:900;color:white;letter-spacing:-0.04em" id="pppCountExtra">—</div>
+                <div style="font-size:0.7rem;font-weight:700;color:var(--ios-cyan);text-transform:uppercase;letter-spacing:0.1em">Sessões Ativas</div>
+            </div>`;
+        // sync with existing data
+        const el = document.getElementById('pppCount');
+        if (el) setTimeout(() => { const n = document.getElementById('pppCountExtra'); if(n) n.textContent = el.textContent; }, 100);
+        return d;
+    },
+    uptime: () => {
+        const d = document.createElement('div');
+        d.className = 'ios-card';
+        d.setAttribute('data-card-type', 'uptime');
+        d.innerHTML = `
+            <div class="card-label">Estabilidade</div>
+            <div class="card-title"><i class="bi bi-clock-history" style="color:var(--ios-orange)"></i> Uptime</div>
+            <div style="text-align:center;padding:16px 0">
+                <div style="font-size:1.5rem;font-weight:800;color:white;letter-spacing:-0.02em" id="uptimeExtra">—</div>
+                <div style="font-size:0.65rem;font-weight:700;color:var(--ios-orange);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px">Tempo sem reiniciar</div>
+            </div>`;
+        const el = document.getElementById('systemUptime');
+        if (el) setTimeout(() => { const n = document.getElementById('uptimeExtra'); if(n) n.textContent = el.textContent.replace('Uptime: ',''); }, 100);
+        return d;
+    },
+    resources: () => {
+        const d = document.createElement('div');
+        d.className = 'ios-card';
+        d.setAttribute('data-card-type', 'resources');
+        d.innerHTML = `
+            <div class="card-label">Sistema</div>
+            <div class="card-title"><i class="bi bi-hdd-network-fill" style="color:var(--ios-purple)"></i> Recursos</div>
+            <div class="res-grid">
+                <div class="res-tile"><div class="res-label">CPU</div><div class="res-value">—</div></div>
+                <div class="res-tile"><div class="res-label">RAM</div><div class="res-value">—</div></div>
+            </div>`;
+        return d;
+    },
+    dhcp: () => {
+        const d = document.createElement('div');
+        d.className = 'ios-card dhcp-summary-card';
+        d.setAttribute('data-card-type', 'dhcp');
+        d.innerHTML = `
+            <div class="card-label">WAN DHCP</div>
+            <div class="card-title"><i class="bi bi-link-45deg" style="color:var(--ios-green)"></i> Clientes DHCP</div>
+            <div style="text-align:center;padding:16px 0">
+                <div class="dhcp-big-number">—</div>
+                <div class="dhcp-label-bottom">BOUND</div>
+            </div>`;
+        return d;
+    },
+    identity: () => {
+        const d = document.createElement('div');
+        d.className = 'ios-card';
+        d.setAttribute('data-card-type', 'identity');
+        d.innerHTML = `
+            <div class="card-label">NAS</div>
+            <div class="card-title"><i class="bi bi-router-fill" style="color:var(--ios-yellow)"></i> Identidade</div>
+            <div class="identity-row">
+                <div class="id-field"><span class="id-key">System Name</span><span class="id-val" id="nasIdentity2">—</span></div>
+            </div>`;
+        const el = document.getElementById('nasIdentity');
+        if (el) setTimeout(() => { const n = document.getElementById('nasIdentity2'); if(n) n.textContent = el.textContent; }, 100);
+        return d;
+    }
+};
+
+function addSelectedCard() {
+    if (!selectedCardType) return;
+    const template = CARD_TEMPLATES[selectedCardType];
+    if (!template) return;
+
+    const grid = document.getElementById('cardsGrid');
+    const card = template();
+
+    // add remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.style.cssText = 'position:absolute;top:12px;right:12px;width:24px;height:24px;background:rgba(255,69,58,0.15);border:1px solid rgba(255,69,58,0.3);border-radius:8px;color:var(--ios-red);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:0.75rem;opacity:0;transition:opacity 0.2s;z-index:10;';
+    removeBtn.innerHTML = '<i class="bi bi-x"></i>';
+    removeBtn.title = 'Remover card';
+    removeBtn.onclick = () => card.remove();
+    card.appendChild(removeBtn);
+    card.addEventListener('mouseenter', () => removeBtn.style.opacity = '1');
+    card.addEventListener('mouseleave', () => removeBtn.style.opacity = '0');
+
+    card.style.animation = 'fadeUp 0.4s ease';
+    grid.appendChild(card);
+    closeAddCardModal();
+}
+
+// ──────────────────────────────────────────────
+// TOOLS
+// ──────────────────────────────────────────────
 async function runPing() {
     const out = document.getElementById('pingOutput');
     const btn = document.getElementById('btnPing');
     const dest = document.getElementById('pingDest').value;
     const count = document.getElementById('pingCount').value;
-    
     btn.disabled = true;
-    out.textContent = `> ping ${dest} -c ${count}...\n`;
+    out.textContent = `> ping ${dest} (${count}x)...\n`;
     try {
         const r = await fetch(`/api/monitor/${currentNasId}/ping?destino=${dest}&count=${count}`);
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        
-        let txt = d.packets.map(p => p.status === 'timeout' ? 'Request timeout.' : `Reply from ${p.host}: time=${p.time}ms ttl=${p.ttl}`).join('\n');
-        txt += `\n\nStatistics: ${d.loss_pct}% loss, avg=${d.avg_ms}ms`;
+        let txt = d.packets.map(p => p.status === 'timeout'
+            ? '  ✗ timeout'
+            : `  ✓ ${p.host}  time=${p.time}ms  ttl=${p.ttl}`
+        ).join('\n');
+        txt += `\n\n  Perda: ${d.loss_pct}%  |  Avg: ${d.avg_ms}ms`;
         out.textContent = txt;
-    } catch (e) { out.textContent = `Error: ${e.message}`; }
+    } catch(e) { out.textContent = `Erro: ${e.message}`; }
     finally { btn.disabled = false; }
 }
 
@@ -690,15 +1187,14 @@ async function runTraceroute() {
     const out = document.getElementById('traceOutput');
     const btn = document.getElementById('btnTrace');
     const dest = document.getElementById('traceDest').value;
-    
     btn.disabled = true;
     out.textContent = `> traceroute ${dest}...\n`;
     try {
         const r = await fetch(`/api/monitor/${currentNasId}/traceroute?destino=${dest}`);
         const d = await r.json();
-        let txt = (d.hops || []).map(h => `${h.n}. ${h.host}  ${h.avg}ms`).join('\n');
-        out.textContent = txt || 'No hops returned.';
-    } catch (e) { out.textContent = `Error: ${e.message}`; }
+        const txt = (d.hops || []).map(h => `  ${String(h.n).padStart(2,'0')}  ${h.host}   ${h.avg}ms`).join('\n');
+        out.textContent = txt || 'Nenhum salto retornado.';
+    } catch(e) { out.textContent = `Erro: ${e.message}`; }
     finally { btn.disabled = false; }
 }
 
@@ -706,15 +1202,18 @@ async function runSpeedtest() {
     const out = document.getElementById('speedOutput');
     const btn = document.getElementById('btnSpeed');
     btn.disabled = true;
-    out.textContent = '> initializing bandwidth test...\n';
+    out.textContent = '> iniciando teste de velocidade...\n';
     try {
         const r = await fetch(`/api/monitor/${currentNasId}/speedtest`, { signal: AbortSignal.timeout(60000) });
         const d = await r.json();
-        out.textContent = `STATUS: ${d.status}\nDOWNLOAD: ${d.download_mbps} Mbps\nUPLOAD: ${d.upload_mbps} Mbps\nLATENCY: ${d.latency_ms} ms\nSERVER: ${d.server}`;
-    } catch (e) { out.textContent = `Error: ${e.message}`; }
+        out.textContent = `STATUS:    ${d.status}\nDOWNLOAD:  ${d.download_mbps} Mbps\nUPLOAD:    ${d.upload_mbps} Mbps\nLATENCY:   ${d.latency_ms} ms\nSERVER:    ${d.server}`;
+    } catch(e) { out.textContent = `Erro: ${e.message}`; }
     finally { btn.disabled = false; }
 }
 
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
 window.onload = () => {
     initChart();
     if (currentNasId) {
@@ -723,6 +1222,6 @@ window.onload = () => {
     }
 };
 
-window.addEventListener('resize', () => { if(trafficChart) trafficChart.resize(); });
+window.addEventListener('resize', () => { if (trafficChart) trafficChart.resize(); });
 </script>
 {% endblock %}
