@@ -1104,6 +1104,81 @@ function updateResources(res, ppp, nas, clock) {
 }
 
 // ──────────────────────────────────────────────
+// UPDATE EXTRA CARDS (dados novos da API)
+// ──────────────────────────────────────────────
+function setEl(id, val) {
+    const el = document.getElementById(id);
+    if (el && val !== undefined && val !== null) el.textContent = val;
+}
+
+function updateExtraCards(data) {
+    // Temperatura
+    const temp = data.temperature || {};
+    if (temp.cpu !== null && temp.cpu !== undefined) {
+        setEl('tempCpu', temp.cpu.toFixed(1) + '°C');
+        const cpuEl = document.getElementById('tempCpu');
+        if (cpuEl) cpuEl.style.color = temp.cpu > 70 ? 'var(--ios-red)' : temp.cpu > 55 ? 'var(--ios-orange)' : 'var(--ios-green)';
+    } else {
+        setEl('tempCpu', 'N/D');
+    }
+    if (temp.board !== null && temp.board !== undefined) {
+        setEl('tempBoard', temp.board.toFixed(1) + '°C');
+        const bEl = document.getElementById('tempBoard');
+        if (bEl) bEl.style.color = temp.board > 60 ? 'var(--ios-red)' : temp.board > 45 ? 'var(--ios-orange)' : 'var(--ios-green)';
+    } else {
+        setEl('tempBoard', 'N/D');
+    }
+
+    // Wi-Fi
+    setEl('wifiCount', data.wireless_count ?? '—');
+
+    // VPN
+    const vpn = data.vpn || {};
+    setEl('vpnL2tp', vpn.l2tp ?? '—');
+    setEl('vpnPptp', vpn.pptp ?? '—');
+
+    // ARP
+    setEl('arpCount', data.arp_count ?? '—');
+
+    // DNS Cache
+    setEl('dnsCount', data.dns_cache_count ?? '—');
+
+    // Firewall connections + drops
+    setEl('fwConns', data.firewall_connections ?? '—');
+    setEl('fwDrops', data.firewall_drops != null ? data.firewall_drops.toLocaleString() : '—');
+
+    // Queues
+    setEl('queueCount', data.queue_count ?? '—');
+
+    // PPPoE extra (cards dinâmicos adicionados pelo usuário)
+    document.querySelectorAll('.js-sync[data-src="pppCount"]').forEach(el => {
+        el.textContent = data.ppp_active_count ?? '—';
+    });
+    document.querySelectorAll('.js-sync[data-src="dhcpBound"]').forEach(el => {
+        const bound = (data.dhcp_clients || []).filter(d => (d.status || '').toLowerCase().includes('bound')).length;
+        el.textContent = bound;
+    });
+
+    // Uptime (cards dinâmicos)
+    document.querySelectorAll('.js-sync[data-src="systemUptime"]').forEach(el => {
+        el.textContent = data.resource?.uptime || '—';
+    });
+
+    // Log
+    const logEl = document.getElementById('logOutput');
+    if (logEl && Array.isArray(data.log_entries) && data.log_entries.length) {
+        logEl.innerHTML = data.log_entries.map(e => {
+            const topics = e.topics || '';
+            const isErr = topics.includes('error') || topics.includes('critical');
+            const isWarn = topics.includes('warning');
+            const color = isErr ? 'var(--ios-red)' : isWarn ? 'var(--ios-orange)' : '#30D158';
+            return `<div style="color:${color}"><span style="opacity:.45">${e.time}</span>  <span style="opacity:.6">[${topics}]</span>  ${e.message}</div>`;
+        }).join('');
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+}
+
+// ──────────────────────────────────────────────
 // POLL API
 // ──────────────────────────────────────────────
 function setApiStatus(ok, msg) {
@@ -1143,6 +1218,7 @@ async function loadOverview() {
         updateSfpCard(data.sfp_interface);
         updateResources(data.resource, data.ppp_active_count, data.nas, data.clock);
         renderDhcp(data.dhcp_clients);
+        updateExtraCards(data);
         setApiStatus(true);
         document.getElementById('lastUpdate').textContent = fmtTime();
     } catch (err) {

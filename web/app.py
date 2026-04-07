@@ -1265,8 +1265,92 @@ def monitor_overview(nas_id):
             dhcp_clients = list(api("/ip/dhcp-client/print"))
             routes = list(api("/ip/route/print"))
             ppp_active = list(api("/ppp/active/print"))
+
+            # Temperatura
+            try:
+                health_rows = list(api("/system/health/print"))
+            except Exception:
+                health_rows = []
+
+            # Wireless clients
+            try:
+                wireless_clients = list(api("/interface/wireless/registration-table/print"))
+            except Exception:
+                wireless_clients = []
+
+            # VPN (L2TP / PPTP separados pelo campo "service")
+            vpn_l2tp = [s for s in ppp_active if str(s.get("service", "")).lower() in ("l2tp", "l2tp-in")]
+            vpn_pptp = [s for s in ppp_active if str(s.get("service", "")).lower() in ("pptp", "pptp-in")]
+
+            # ARP
+            try:
+                arp_rows = list(api("/ip/arp/print"))
+            except Exception:
+                arp_rows = []
+
+            # DNS cache count
+            try:
+                dns_cache = list(api("/ip/dns/cache/print"))
+            except Exception:
+                dns_cache = []
+
+            # Firewall connections (count only — evita travar em roteadores com muitas conexões)
+            try:
+                fw_connections = list(api("/ip/firewall/connection/print", **{"count-only": ""}))
+                # count-only retorna [{'ret': 'N'}] no RouterOS
+                if fw_connections and isinstance(fw_connections[0], dict) and 'ret' in fw_connections[0]:
+                    fw_connections = [None] * int(fw_connections[0]['ret'])
+            except Exception:
+                try:
+                    fw_connections = list(api("/ip/firewall/connection/print"))
+                except Exception:
+                    fw_connections = []
+
+            # Firewall drops (regras action=drop com packet count)
+            try:
+                fw_rules = list(api("/ip/firewall/filter/print", **{"stats": ""}))
+                fw_drops = sum(
+                    int(r.get("packets", 0))
+                    for r in fw_rules
+                    if str(r.get("action", "")).lower() == "drop"
+                )
+            except Exception:
+                fw_drops = 0
+
+            # Queues
+            try:
+                queues_simple = list(api("/queue/simple/print"))
+            except Exception:
+                queues_simple = []
+            try:
+                queues_tree = list(api("/queue/tree/print"))
+            except Exception:
+                queues_tree = []
+
+            # Log (últimas 20 entradas)
+            try:
+                log_entries = list(api("/log/print"))[-20:]
+            except Exception:
+                log_entries = []
+
         finally:
             api.close()
+
+        # Temperatura — campos variam por hardware
+        cpu_temp = None
+        board_temp = None
+        for h in health_rows:
+            name = str(h.get("name", "")).lower()
+            val  = h.get("value", "")
+            if "cpu" in name and "temp" in name:
+                try: cpu_temp = float(val)
+                except Exception: pass
+            elif "board" in name and "temp" in name:
+                try: board_temp = float(val)
+                except Exception: pass
+            elif "temperature" in name and cpu_temp is None:
+                try: cpu_temp = float(val)
+                except Exception: pass
 
         identity = identity_rows[0] if identity_rows else {}
         resource = resource_rows[0] if resource_rows else {}
@@ -1365,6 +1449,29 @@ def monitor_overview(nas_id):
             "dhcp_clients": dhcp_rows,
             "dhcp_slave_count": sum(1 for d in dhcp_rows if d["slave"]),
             "default_routes": default_routes,
+            # Novos campos
+            "temperature": {
+                "cpu": cpu_temp,
+                "board": board_temp,
+            },
+            "wireless_count": len(wireless_clients),
+            "vpn": {
+                "l2tp": len(vpn_l2tp),
+                "pptp": len(vpn_pptp),
+            },
+            "arp_count": len([r for r in arp_rows if str(r.get("complete", "")).lower() in ("true", "yes", "1")]),
+            "dns_cache_count": len(dns_cache),
+            "firewall_connections": len(fw_connections),
+            "firewall_drops": fw_drops,
+            "queue_count": len(queues_simple) + len(queues_tree),
+            "log_entries": [
+                {
+                    "time": e.get("time", ""),
+                    "topics": e.get("topics", ""),
+                    "message": e.get("message", ""),
+                }
+                for e in log_entries
+            ],
             "ts": time.time(),
         })
     except Exception as e:
