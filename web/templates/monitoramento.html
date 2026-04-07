@@ -1,0 +1,601 @@
+{% extends "base.html" %}
+{% block title %}Monitoramento — RADIUS Manager{% endblock %}
+{% block page_title %}Monitoramento{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Monitoramento</li>{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Tabs de ferramentas */
+.tool-tab { display: none; }
+.tool-tab.active { display: block; }
+
+.nav-tool .nav-link {
+    color: #64748b; border-radius: 8px; padding: 7px 14px;
+    font-size: .85rem; font-weight: 500; border: none; background: none;
+    transition: all .15s;
+}
+.nav-tool .nav-link:hover { background: #f1f5f9; color: #334155; }
+.nav-tool .nav-link.active { background: #2563eb; color: #fff; }
+[data-bs-theme="dark"] .nav-tool .nav-link:hover { background: #334155; color: #e2e8f0; }
+
+/* Throughput gauge */
+.iface-card {
+    border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 16px 20px; background: #fff;
+    transition: box-shadow .15s;
+}
+.iface-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+[data-bs-theme="dark"] .iface-card { background: #1e293b; border-color: #334155; }
+
+.iface-running { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink:0; }
+.iface-running.up { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.2); animation: pulse-online 2s ease infinite; }
+.iface-running.down { background: #dc2626; }
+
+.speed-bar { height: 5px; border-radius: 3px; background: #e2e8f0; overflow: hidden; margin-top: 4px; }
+.speed-bar-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+.speed-bar-fill.rx { background: linear-gradient(90deg, #16a34a, #4ade80); }
+.speed-bar-fill.tx { background: linear-gradient(90deg, #2563eb, #60a5fa); }
+
+/* Ping result */
+.ping-row { font-size: .82rem; padding: 5px 0; border-bottom: 1px solid #f1f5f9; }
+.ping-row:last-child { border: none; }
+[data-bs-theme="dark"] .ping-row { border-color: #1e293b; }
+
+/* Traceroute */
+.hop-row td { font-size: .8rem; padding: 5px 8px; }
+.hop-timeout { color: #94a3b8; }
+
+/* Resource bars */
+.res-label { font-size: .78rem; color: #64748b; font-weight: 500; }
+.res-val { font-size: .78rem; color: #334155; font-weight: 600; }
+[data-bs-theme="dark"] .res-val { color: #e2e8f0; }
+
+/* Terminal-style output */
+.terminal {
+    background: #0f172a; color: #4ade80; border-radius: 8px;
+    padding: 14px 16px; font-family: monospace; font-size: .8rem;
+    line-height: 1.7; min-height: 80px; max-height: 320px;
+    overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+}
+
+/* NAS selector */
+.nas-selector .btn-nas {
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 14px;
+    background: #f8fafc; color: #64748b; font-size: .82rem; font-weight: 500;
+    cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.nas-selector .btn-nas.active {
+    background: #2563eb; color: #fff; border-color: #2563eb;
+}
+[data-bs-theme="dark"] .nas-selector .btn-nas { background: #1e293b; border-color: #334155; color: #94a3b8; }
+[data-bs-theme="dark"] .nas-selector .btn-nas.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if not mikrotik_available %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <strong>librouteros não instalado.</strong> O monitoramento MikroTik não está disponível.
+</div>
+{% elif not nas_list %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle-fill me-2"></i>
+    Nenhum NAS com credenciais API cadastrado. Vá em <a href="{{ url_for('gerenciar_nas') }}">NAS / MikroTik</a> e configure o usuário e senha da API RouterOS.
+</div>
+{% else %}
+
+<!-- Seletor de NAS -->
+<div class="card mb-3">
+    <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap nas-selector">
+            <span class="text-muted" style="font-size:.82rem; white-space:nowrap"><i class="bi bi-router-fill me-1"></i>MikroTik:</span>
+            {% for nas in nas_list %}
+            <button class="btn-nas {{ 'active' if loop.first }}"
+                    data-nas-id="{{ nas.id }}"
+                    data-nas-name="{{ nas.shortname or nas.nasname }}"
+                    onclick="selectNas({{ nas.id }}, '{{ nas.shortname or nas.nasname }}')">
+                <i class="bi bi-router me-1"></i>{{ nas.shortname or nas.nasname }}
+            </button>
+            {% endfor %}
+            <span class="ms-auto text-muted" style="font-size:.75rem" id="lastUpdate">—</span>
+        </div>
+    </div>
+</div>
+
+<!-- Recursos do sistema -->
+<div class="row g-3 mb-3" id="recursos">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-cpu-fill"></i></div>
+            <div class="stat-info">
+                <h3 id="res_cpu">—</h3>
+                <small>CPU</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon purple"><i class="bi bi-memory"></i></div>
+            <div class="stat-info">
+                <h3 id="res_mem">—</h3>
+                <small>Memória usada</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-clock-history"></i></div>
+            <div class="stat-info">
+                <h3 id="res_uptime" style="font-size:1rem">—</h3>
+                <small>Uptime</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon cyan"><i class="bi bi-info-circle-fill"></i></div>
+            <div class="stat-info">
+                <h3 id="res_version" style="font-size:.95rem">—</h3>
+                <small id="res_board">RouterOS</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Interfaces -->
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-hdd-network-fill text-primary"></i> Interfaces</h6>
+                <div class="d-flex gap-2 align-items-center">
+                    <input type="text" id="ifaceFilter" class="form-control form-control-sm"
+                           placeholder="Filtrar interface..." style="width:150px"
+                           oninput="renderInterfaces()">
+                    <span class="badge bg-light text-dark border" id="ifaceCount">0</span>
+                </div>
+            </div>
+            <div class="card-body p-3" id="ifaceList" style="max-height:480px; overflow-y:auto">
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border spinner-border-sm me-2"></div> Carregando...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ferramentas -->
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header bg-white py-2 px-3">
+                <ul class="nav nav-tool gap-1 flex-wrap">
+                    <li><button class="nav-link active" onclick="switchTool('ping', this)"><i class="bi bi-reception-4 me-1"></i>Ping</button></li>
+                    <li><button class="nav-link" onclick="switchTool('traceroute', this)"><i class="bi bi-signpost-split me-1"></i>Traceroute</button></li>
+                    <li><button class="nav-link" onclick="switchTool('speedtest', this)"><i class="bi bi-speedometer me-1"></i>Speedtest</button></li>
+                    <li><button class="nav-link" onclick="switchTool('dns', this)"><i class="bi bi-globe me-1"></i>DNS Cache</button></li>
+                </ul>
+            </div>
+            <div class="card-body p-3">
+
+                <!-- PING -->
+                <div class="tool-tab active" id="tab-ping">
+                    <div class="d-flex gap-2 mb-3">
+                        <input type="text" id="pingDest" class="form-control form-control-sm"
+                               placeholder="IP ou domínio (ex: 8.8.8.8)" value="8.8.8.8">
+                        <select id="pingCount" class="form-select form-select-sm" style="width:90px">
+                            <option value="5" selected>5x</option>
+                            <option value="10">10x</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="runPing()" id="btnPing">
+                            <i class="bi bi-play-fill"></i> Ping
+                        </button>
+                    </div>
+                    <!-- Resumo -->
+                    <div class="row g-2 mb-3" id="pingSummary" style="display:none!important">
+                        <div class="col-3">
+                            <div class="text-center p-2 rounded" style="background:#f0fdf4">
+                                <div class="fw-bold text-success" id="pingReceived">—</div>
+                                <div style="font-size:.7rem;color:#64748b">Recebidos</div>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="text-center p-2 rounded" style="background:#fef2f2">
+                                <div class="fw-bold text-danger" id="pingLoss">—</div>
+                                <div style="font-size:.7rem;color:#64748b">Perda</div>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="text-center p-2 rounded" style="background:#eff6ff">
+                                <div class="fw-bold text-primary" id="pingAvg">—</div>
+                                <div style="font-size:.7rem;color:#64748b">Avg ms</div>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="text-center p-2 rounded" style="background:#fdf4ff">
+                                <div class="fw-bold" style="color:#7c3aed" id="pingMax">—</div>
+                                <div style="font-size:.7rem;color:#64748b">Max ms</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="terminal" id="pingOutput">Aguardando...</div>
+                </div>
+
+                <!-- TRACEROUTE -->
+                <div class="tool-tab" id="tab-traceroute">
+                    <div class="d-flex gap-2 mb-3">
+                        <input type="text" id="traceDest" class="form-control form-control-sm"
+                               placeholder="IP ou domínio" value="8.8.8.8">
+                        <button class="btn btn-primary btn-sm" onclick="runTraceroute()" id="btnTrace">
+                            <i class="bi bi-play-fill"></i> Trace
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" id="traceTable" style="display:none">
+                            <thead>
+                                <tr>
+                                    <th style="width:30px">#</th>
+                                    <th>Host</th>
+                                    <th>Loss</th>
+                                    <th>Avg ms</th>
+                                    <th>Best</th>
+                                    <th>Worst</th>
+                                </tr>
+                            </thead>
+                            <tbody id="traceBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="terminal" id="traceOutput">Aguardando...</div>
+                </div>
+
+                <!-- SPEEDTEST -->
+                <div class="tool-tab" id="tab-speedtest">
+                    <p class="text-muted mb-3" style="font-size:.83rem">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Speedtest nativo do RouterOS (requer v7.4+). Executa diretamente no MikroTik.
+                    </p>
+                    <button class="btn btn-primary w-100 mb-3" onclick="runSpeedtest()" id="btnSpeed">
+                        <i class="bi bi-speedometer me-2"></i>Iniciar Speedtest
+                    </button>
+                    <div id="speedResult" style="display:none">
+                        <div class="row g-3 text-center">
+                            <div class="col-6">
+                                <div class="p-3 rounded" style="background:#f0fdf4; border:1px solid #bbf7d0">
+                                    <i class="bi bi-arrow-down-circle-fill text-success" style="font-size:1.8rem"></i>
+                                    <div class="fw-bold mt-1" style="font-size:1.5rem; color:#16a34a" id="speedDown">—</div>
+                                    <div class="text-muted" style="font-size:.75rem">Mbps Download</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 rounded" style="background:#eff6ff; border:1px solid #bfdbfe">
+                                    <i class="bi bi-arrow-up-circle-fill text-primary" style="font-size:1.8rem"></i>
+                                    <div class="fw-bold mt-1" style="font-size:1.5rem; color:#2563eb" id="speedUp">—</div>
+                                    <div class="text-muted" style="font-size:.75rem">Mbps Upload</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-muted" style="font-size:.8rem">Latência: <strong id="speedLatency">—</strong></div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-muted" style="font-size:.8rem">Servidor: <strong id="speedServer">—</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="terminal" id="speedOutput" style="display:none"></div>
+                </div>
+
+                <!-- DNS -->
+                <div class="tool-tab" id="tab-dns">
+                    <div class="d-flex gap-2 mb-3">
+                        <input type="text" id="dnsNome" class="form-control form-control-sm"
+                               placeholder="Nome ou domínio" value="google.com">
+                        <button class="btn btn-primary btn-sm" onclick="runDns()" id="btnDns">
+                            <i class="bi bi-search"></i> Buscar
+                        </button>
+                    </div>
+                    <div class="terminal" id="dnsOutput">Aguardando...</div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+let currentNasId = {{ nas_list[0].id if nas_list else 'null' }};
+let ifaceData = [];
+let ifacePrev = {};
+let recursoTimer = null;
+let ifaceTimer   = null;
+
+// ---- Seletor de NAS ----
+function selectNas(id, name) {
+    currentNasId = id;
+    document.querySelectorAll('.btn-nas').forEach(b => b.classList.toggle('active', +b.dataset.nasId === id));
+    restartPolling();
+}
+
+// ---- Formatação ----
+function fmtBytes(b)  { b = parseInt(b)||0; if(b<1024) return b+'B'; if(b<1048576) return (b/1024).toFixed(1)+'KB'; if(b<1073741824) return (b/1048576).toFixed(1)+'MB'; return (b/1073741824).toFixed(2)+'GB'; }
+function fmtBps(bps)  { if(bps<1000) return bps+'bps'; if(bps<1e6) return (bps/1000).toFixed(1)+'Kbps'; if(bps<1e9) return (bps/1e6).toFixed(2)+'Mbps'; return (bps/1e9).toFixed(2)+'Gbps'; }
+function fmtTime()    { return new Date().toLocaleTimeString('pt-BR'); }
+
+// ---- Tab de ferramentas ----
+function switchTool(name, btn) {
+    document.querySelectorAll('.tool-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-tool .nav-link').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+}
+
+// ---- Recursos do sistema ----
+async function fetchRecursos() {
+    if (!currentNasId) return;
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/recursos`);
+        if (!r.ok) return;
+        const d = await r.json();
+        document.getElementById('res_cpu').textContent     = d.cpu_load + '%';
+        document.getElementById('res_mem').textContent     = d.used_mem_mb + ' MB';
+        document.getElementById('res_uptime').textContent  = d.uptime;
+        document.getElementById('res_version').textContent = d.version;
+        document.getElementById('res_board').textContent   = d.board_name || 'RouterOS';
+        document.getElementById('lastUpdate').textContent  = 'Atualizado: ' + fmtTime();
+    } catch(e) {}
+}
+
+// ---- Interfaces ----
+async function fetchInterfaces() {
+    if (!currentNasId) return;
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/interface`);
+        if (!r.ok) return;
+        const d = await r.json();
+        const now = Date.now();
+
+        d.interfaces.forEach(iface => {
+            const prev = ifacePrev[iface.name];
+            if (prev) {
+                const dt = (now - prev.ts) / 1000;
+                iface.rx_bps = Math.max(0, ((iface.rx_byte - prev.rx_byte) / dt) * 8);
+                iface.tx_bps = Math.max(0, ((iface.tx_byte - prev.tx_byte) / dt) * 8);
+            } else {
+                iface.rx_bps = 0; iface.tx_bps = 0;
+            }
+            ifacePrev[iface.name] = { rx_byte: iface.rx_byte, tx_byte: iface.tx_byte, ts: now };
+        });
+        ifaceData = d.interfaces;
+        renderInterfaces();
+    } catch(e) {}
+}
+
+function renderInterfaces() {
+    const filter = (document.getElementById('ifaceFilter')?.value || '').toLowerCase();
+    const list   = ifaceData.filter(i => !filter || i.name.toLowerCase().includes(filter));
+    document.getElementById('ifaceCount').textContent = list.length;
+
+    const maxBps = Math.max(...list.map(i => Math.max(i.rx_bps||0, i.tx_bps||0)), 1);
+
+    const html = list.map(iface => {
+        const up   = iface.running === 'true';
+        const rxPct = Math.min(100, ((iface.rx_bps||0) / maxBps) * 100);
+        const txPct = Math.min(100, ((iface.tx_bps||0) / maxBps) * 100);
+        const isHighlight = iface.name.includes('sfp') || iface.name.includes('ether1');
+        return `
+        <div class="iface-card mb-2 ${isHighlight ? 'border-primary' : ''}">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="iface-running ${up ? 'up' : 'down'}"></span>
+                    <span class="fw-semibold" style="font-size:.85rem">${iface.name}</span>
+                    <span class="badge bg-light text-dark border" style="font-size:.65rem">${iface.type}</span>
+                </div>
+                <span class="text-muted" style="font-size:.72rem">${up ? 'UP' : 'DOWN'}</span>
+            </div>
+            <div class="row g-1" style="font-size:.78rem">
+                <div class="col-6">
+                    <div class="d-flex justify-content-between">
+                        <span class="text-success">↓ RX</span>
+                        <span class="fw-medium">${iface.rx_bps ? fmtBps(iface.rx_bps) : fmtBytes(iface.rx_byte)}</span>
+                    </div>
+                    <div class="speed-bar"><div class="speed-bar-fill rx" style="width:${rxPct}%"></div></div>
+                </div>
+                <div class="col-6">
+                    <div class="d-flex justify-content-between">
+                        <span class="text-primary">↑ TX</span>
+                        <span class="fw-medium">${iface.tx_bps ? fmtBps(iface.tx_bps) : fmtBytes(iface.tx_byte)}</span>
+                    </div>
+                    <div class="speed-bar"><div class="speed-bar-fill tx" style="width:${txPct}%"></div></div>
+                </div>
+            </div>
+            ${(iface.rx_error||iface.tx_error||iface.rx_drop||iface.tx_drop) ? `
+            <div class="mt-1 text-danger" style="font-size:.7rem">
+                Erros: RX ${iface.rx_error} TX ${iface.tx_error} | Drops: RX ${iface.rx_drop} TX ${iface.tx_drop}
+            </div>` : ''}
+        </div>`;
+    }).join('');
+
+    document.getElementById('ifaceList').innerHTML = html || '<div class="text-muted text-center py-3">Nenhuma interface encontrada</div>';
+}
+
+// ---- Ping ----
+async function runPing() {
+    const btn  = document.getElementById('btnPing');
+    const dest = document.getElementById('pingDest').value.trim();
+    const count= document.getElementById('pingCount').value;
+    const out  = document.getElementById('pingOutput');
+    if (!dest || !currentNasId) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:12px;height:12px"></span>';
+    out.textContent = `Executando ping para ${dest} (${count}x)...\n`;
+    document.getElementById('pingSummary').style.display = 'none';
+
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/ping?destino=${encodeURIComponent(dest)}&count=${count}`);
+        const d = await r.json();
+        if (!r.ok) { out.textContent += `\nERRO: ${d.error}`; return; }
+
+        let txt = `PING ${d.destino}\n`;
+        txt += '─'.repeat(48) + '\n';
+        d.packets.forEach(p => {
+            if (p.status === 'timeout') {
+                txt += `seq=${p.seq}  timeout\n`;
+            } else {
+                txt += `seq=${p.seq}  host=${p.host}  time=${p.time}  TTL=${p.ttl}\n`;
+            }
+        });
+        txt += '─'.repeat(48) + '\n';
+        txt += `Enviados: ${d.sent}  Recebidos: ${d.received}  Perda: ${d.loss_pct}%\n`;
+        if (d.avg_ms !== null) txt += `RTT — min: ${d.min_ms}ms  avg: ${d.avg_ms}ms  max: ${d.max_ms}ms\n`;
+        out.textContent = txt;
+
+        const sum = document.getElementById('pingSummary');
+        sum.style.display = '';
+        document.getElementById('pingReceived').textContent = `${d.received}/${d.sent}`;
+        document.getElementById('pingLoss').textContent     = d.loss_pct + '%';
+        document.getElementById('pingAvg').textContent      = d.avg_ms !== null ? d.avg_ms + 'ms' : '—';
+        document.getElementById('pingMax').textContent      = d.max_ms !== null ? d.max_ms + 'ms' : '—';
+    } catch(e) {
+        out.textContent += '\nErro de comunicação: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Ping';
+    }
+}
+
+// ---- Traceroute ----
+async function runTraceroute() {
+    const btn  = document.getElementById('btnTrace');
+    const dest = document.getElementById('traceDest').value.trim();
+    const out  = document.getElementById('traceOutput');
+    const tbl  = document.getElementById('traceTable');
+    if (!dest || !currentNasId) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:12px;height:12px"></span>';
+    out.textContent = `Traceroute para ${dest}... (pode levar alguns segundos)\n`;
+    tbl.style.display = 'none';
+
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/traceroute?destino=${encodeURIComponent(dest)}`);
+        const d = await r.json();
+        if (!r.ok) { out.textContent += `\nERRO: ${d.error}`; return; }
+
+        if (d.hops && d.hops.length) {
+            tbl.style.display = '';
+            out.style.display = 'none';
+            document.getElementById('traceBody').innerHTML = d.hops.map(h => `
+                <tr class="hop-row">
+                    <td>${h.n}</td>
+                    <td class="${h.host === '*' ? 'hop-timeout' : ''}">${h.host || '*'}</td>
+                    <td>${h.loss || '—'}</td>
+                    <td>${h.avg || '—'}</td>
+                    <td>${h.best || '—'}</td>
+                    <td>${h.worst || '—'}</td>
+                </tr>`).join('');
+        } else {
+            out.textContent = 'Nenhum salto retornado. Verifique o destino ou permissões do RouterOS.';
+        }
+    } catch(e) {
+        out.textContent += '\nErro: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Trace';
+    }
+}
+
+// ---- Speedtest ----
+async function runSpeedtest() {
+    const btn = document.getElementById('btnSpeed');
+    const out = document.getElementById('speedOutput');
+    const res = document.getElementById('speedResult');
+    if (!currentNasId) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" style="width:14px;height:14px"></span>Executando speedtest... (aguarde ~30s)';
+    res.style.display = 'none';
+    out.style.display = 'none';
+
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/speedtest`, { signal: AbortSignal.timeout(90000) });
+        const d = await r.json();
+
+        if (!r.ok) {
+            out.style.display = 'block';
+            out.textContent = 'ERRO: ' + d.error;
+        } else {
+            res.style.display = 'block';
+            document.getElementById('speedDown').textContent    = d.download_mbps + ' Mbps';
+            document.getElementById('speedUp').textContent      = d.upload_mbps   + ' Mbps';
+            document.getElementById('speedLatency').textContent = d.latency_ms    || '—';
+            document.getElementById('speedServer').textContent  = d.server        || '—';
+        }
+    } catch(e) {
+        out.style.display = 'block';
+        out.textContent = e.name === 'TimeoutError' ? 'Timeout: speedtest demorou mais de 90s.' : 'Erro: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-speedometer me-2"></i>Iniciar Speedtest';
+    }
+}
+
+// ---- DNS ----
+async function runDns() {
+    const btn  = document.getElementById('btnDns');
+    const nome = document.getElementById('dnsNome').value.trim();
+    const out  = document.getElementById('dnsOutput');
+    if (!nome || !currentNasId) return;
+
+    btn.disabled = true;
+    out.textContent = `Consultando cache DNS para "${nome}"...\n`;
+
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/dns-lookup?nome=${encodeURIComponent(nome)}`);
+        const d = await r.json();
+        if (!r.ok) { out.textContent += `\nERRO: ${d.error}`; return; }
+
+        if (d.registros.length === 0) {
+            out.textContent = `Nenhum registro encontrado para "${nome}" no cache DNS do MikroTik.`;
+        } else {
+            out.textContent = `Registros DNS para "${nome}" (${d.registros.length} encontrados):\n`;
+            out.textContent += '─'.repeat(48) + '\n';
+            d.registros.forEach(rec => {
+                out.textContent += `${rec.name || ''}  →  ${rec.address || rec.data || '?'}  [TTL: ${rec.ttl || '?'}]\n`;
+            });
+        }
+    } catch(e) {
+        out.textContent += '\nErro: ' + e.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ---- Polling automático ----
+function restartPolling() {
+    clearInterval(recursoTimer);
+    clearInterval(ifaceTimer);
+    ifacePrev = {};
+    ifaceData = [];
+    document.getElementById('ifaceList').innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div> Carregando...</div>';
+    fetchRecursos();
+    fetchInterfaces();
+    recursoTimer = setInterval(fetchRecursos,    5000);
+    ifaceTimer   = setInterval(fetchInterfaces,  3000);
+}
+
+// Enter nos inputs
+document.getElementById('pingDest').addEventListener('keydown',  e => e.key === 'Enter' && runPing());
+document.getElementById('traceDest').addEventListener('keydown', e => e.key === 'Enter' && runTraceroute());
+document.getElementById('dnsNome').addEventListener('keydown',   e => e.key === 'Enter' && runDns());
+
+// Inicia
+{% if nas_list %}
+restartPolling();
+{% endif %}
+</script>
+{% endblock %}

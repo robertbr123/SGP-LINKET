@@ -1133,6 +1133,244 @@ def radius_debug(username):
     return jsonify({"username": username, "radcheck": checks, "radreply": replies})
 
 
+# ---------------------------------------------------------------------------
+# Monitoramento MikroTik
+# ---------------------------------------------------------------------------
+
+@app.route("/monitoramento")
+@login_required
+def monitoramento():
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT id, nasname, shortname FROM nas WHERE mikrotik_user IS NOT NULL AND mikrotik_pass IS NOT NULL AND mikrotik_pass != '' ORDER BY shortname")
+        nas_list = cur.fetchall()
+    conn.close()
+    return render_template("monitoramento.html", nas_list=nas_list, mikrotik_available=MIKROTIK_AVAILABLE)
+
+
+def _mt_connect(nas_id: int):
+    """Retorna (api, nas_dict) ou lança exceção."""
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM nas WHERE id = %s", (nas_id,))
+        nas = cur.fetchone()
+    conn.close()
+    if not nas:
+        raise ValueError("NAS não encontrado")
+    if not MIKROTIK_AVAILABLE:
+        raise RuntimeError("librouteros não instalado")
+    api = librouteros.connect(
+        host=nas["nasname"],
+        username=nas.get("mikrotik_user") or "admin",
+        password=nas.get("mikrotik_pass") or "",
+        port=int(nas.get("mikrotik_port") or 8728),
+        timeout=8,
+    )
+    return api, nas
+
+
+@app.route("/api/monitor/<int:nas_id>/interface")
+@login_required
+def monitor_interface(nas_id):
+    """Retorna stats de todas as interfaces (ou filtra por nome via ?iface=sfp-sfpplus1)."""
+    iface_filter = request.args.get("iface", "")
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            ifaces = list(api("/interface/print", **{"stats": ""}))
+        finally:
+            api.close()
+
+        result = []
+        for iface in ifaces:
+            name = iface.get("name", "")
+            if iface_filter and iface_filter.lower() not in name.lower():
+                continue
+            result.append({
+                "name":       name,
+                "type":       iface.get("type", ""),
+                "running":    iface.get("running", "false"),
+                "disabled":   iface.get("disabled", "false"),
+                "rx_byte":    int(iface.get("rx-byte", 0)),
+                "tx_byte":    int(iface.get("tx-byte", 0)),
+                "rx_packet":  int(iface.get("rx-packet", 0)),
+                "tx_packet":  int(iface.get("tx-packet", 0)),
+                "rx_error":   int(iface.get("rx-error", 0)),
+                "tx_error":   int(iface.get("tx-error", 0)),
+                "rx_drop":    int(iface.get("rx-drop", 0)),
+                "tx_drop":    int(iface.get("tx-drop", 0)),
+                "link_downs": int(iface.get("link-downs", 0)),
+            })
+        return jsonify({"nas_id": nas_id, "interfaces": result, "ts": time.time()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/monitor/<int:nas_id>/recursos")
+@login_required
+def monitor_recursos(nas_id):
+    """CPU, memória, uptime, versão do RouterOS."""
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            res = list(api("/system/resource/print"))
+        finally:
+            api.close()
+        if not res:
+            return jsonify({"error": "Sem dados de recursos"}), 500
+        r = res[0]
+        total_mem = int(r.get("total-memory", 0))
+        free_mem  = int(r.get("free-memory", 0))
+        used_mem  = total_mem - free_mem
+        return jsonify({
+            "cpu_load":      int(r.get("cpu-load", 0)),
+            "uptime":        r.get("uptime", ""),
+            "version":       r.get("version", ""),
+            "board_name":    r.get("board-name", ""),
+            "platform":      r.get("platform", ""),
+            "total_mem_mb":  round(total_mem / 1048576, 1),
+            "used_mem_mb":   round(used_mem  / 1048576, 1),
+            "free_mem_mb":   round(free_mem  / 1048576, 1),
+            "mem_pct":       round(used_mem / total_mem * 100, 1) if total_mem else 0,
+            "total_hdd_mb":  round(int(r.get("total-hdd-space", 0)) / 1048576, 1),
+            "free_hdd_mb":   round(int(r.get("free-hdd-space", 0))  / 1048576, 1),
+            "ts": time.time(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/monitor/<int:nas_id>/ping")
+@login_required
+def monitor_ping(nas_id):
+    """Ping a partir do MikroTik para um destino."""
+    destino = request.args.get("destino", "8.8.8.8").strip()
+    count   = min(int(request.args.get("count", 5)), 10)
+    if not destino:
+        return jsonify({"error": "Informe o destino"}), 400
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            result = list(api("/ping", **{
+                "address": destino,
+                "count":   str(count),
+            }))
+        finally:
+            api.close()
+
+        packets = []
+        for p in result:
+            packets.append({
+                "seq":    p.get("seq", ""),
+                "host":   p.get("host", destino),
+                "time":   p.get("time", ""),
+                "size":   p.get("size", ""),
+                "ttl":    p.get("ttl", ""),
+                "status": p.get("status", ""),
+            })
+        sent     = len(packets)
+        received = sum(1 for p in packets if p.get("status", "") != "timeout")
+        times    = [float(p["time"].replace("ms", "").strip()) for p in packets if p.get("time") and "ms" in p["time"]]
+        return jsonify({
+            "destino":  destino,
+            "sent":     sent,
+            "received": received,
+            "loss_pct": round((sent - received) / sent * 100, 1) if sent else 0,
+            "avg_ms":   round(sum(times) / len(times), 2) if times else None,
+            "min_ms":   round(min(times), 2) if times else None,
+            "max_ms":   round(max(times), 2) if times else None,
+            "packets":  packets,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/monitor/<int:nas_id>/traceroute")
+@login_required
+def monitor_traceroute(nas_id):
+    """Traceroute a partir do MikroTik."""
+    destino = request.args.get("destino", "8.8.8.8").strip()
+    if not destino:
+        return jsonify({"error": "Informe o destino"}), 400
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            result = list(api("/ip/firewall/connection/print"))  # warmup
+            hops = list(api("/tool/traceroute", **{
+                "address":  destino,
+                "count":    "3",
+                "timeout":  "3000ms",
+            }))
+        finally:
+            api.close()
+
+        saltos = []
+        for h in hops:
+            saltos.append({
+                "n":      h.get("n", ""),
+                "host":   h.get("host", "*"),
+                "loss":   h.get("loss", ""),
+                "sent":   h.get("sent", ""),
+                "last":   h.get("last", ""),
+                "avg":    h.get("avg", ""),
+                "best":   h.get("best", ""),
+                "worst":  h.get("worst", ""),
+                "status": h.get("status", ""),
+            })
+        return jsonify({"destino": destino, "hops": saltos})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/monitor/<int:nas_id>/speedtest")
+@login_required
+def monitor_speedtest(nas_id):
+    """Speedtest via MikroTik (RouterOS 7.x — /tool/bandwidth-test para servidor interno
+       ou speedtest nativo se disponível)."""
+    try:
+        api, nas = _mt_connect(nas_id)
+        try:
+            # Tenta speedtest nativo (RouterOS 7.4+)
+            result = list(api("/tool/speedtest", **{}))
+        except Exception:
+            result = []
+        finally:
+            api.close()
+
+        if result:
+            r = result[0]
+            return jsonify({
+                "method":       "speedtest",
+                "status":       r.get("status", ""),
+                "download_mbps": round(int(r.get("download", 0)) / 1_000_000, 2),
+                "upload_mbps":   round(int(r.get("upload", 0))   / 1_000_000, 2),
+                "latency_ms":    r.get("latency", ""),
+                "server":        r.get("server-name", ""),
+                "isp":           r.get("isp", ""),
+            })
+        return jsonify({"error": "Speedtest não suportado neste RouterOS (requer v7.4+)"}), 422
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/monitor/<int:nas_id>/dns-lookup")
+@login_required
+def monitor_dns(nas_id):
+    """DNS lookup a partir do MikroTik."""
+    nome = request.args.get("nome", "google.com").strip()
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            result = list(api("/ip/dns/cache/print"))
+        finally:
+            api.close()
+        # Filtra pelo nome consultado
+        matches = [r for r in result if nome.lower() in (r.get("name") or "").lower()]
+        return jsonify({"nome": nome, "registros": matches[:20]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/radius/reapply", methods=["POST"])
 @login_required
 def radius_reapply_all():
