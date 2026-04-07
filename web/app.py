@@ -1240,6 +1240,137 @@ def monitor_recursos(nas_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/monitor/<int:nas_id>/overview")
+@login_required
+def monitor_overview(nas_id):
+    """Resumo operacional do NAS para painel de monitoramento."""
+    def as_bool(value):
+        if isinstance(value, bool):
+            return value
+        return str(value).lower() in {"true", "yes", "on", "1"}
+
+    def safe_int(value):
+        try:
+            return int(value)
+        except Exception:
+            return 0
+
+    try:
+        api, nas = _mt_connect(nas_id)
+        try:
+            identity_rows = list(api("/system/identity/print"))
+            resource_rows = list(api("/system/resource/print"))
+            clock_rows = list(api("/system/clock/print"))
+            interfaces = list(api("/interface/print", **{"stats": ""}))
+            dhcp_clients = list(api("/ip/dhcp-client/print"))
+            routes = list(api("/ip/route/print"))
+            ppp_active = list(api("/ppp/active/print"))
+        finally:
+            api.close()
+
+        identity = identity_rows[0] if identity_rows else {}
+        resource = resource_rows[0] if resource_rows else {}
+        clock = clock_rows[0] if clock_rows else {}
+
+        target_iface = None
+        for iface in interfaces:
+            name = str(iface.get("name", ""))
+            if name == "sfp-sfpplus1":
+                target_iface = iface
+                break
+        if target_iface is None:
+            for iface in interfaces:
+                name = str(iface.get("name", "")).lower()
+                if "sfp" in name:
+                    target_iface = iface
+                    break
+
+        iface_summary = None
+        if target_iface:
+            iface_summary = {
+                "name": target_iface.get("name", "sfp-sfpplus1"),
+                "type": target_iface.get("type", ""),
+                "running": as_bool(target_iface.get("running", False)),
+                "disabled": as_bool(target_iface.get("disabled", False)),
+                "rx_byte": safe_int(target_iface.get("rx-byte", 0)),
+                "tx_byte": safe_int(target_iface.get("tx-byte", 0)),
+                "rx_packet": safe_int(target_iface.get("rx-packet", 0)),
+                "tx_packet": safe_int(target_iface.get("tx-packet", 0)),
+                "rx_error": safe_int(target_iface.get("rx-error", 0)),
+                "tx_error": safe_int(target_iface.get("tx-error", 0)),
+                "rx_drop": safe_int(target_iface.get("rx-drop", 0)),
+                "tx_drop": safe_int(target_iface.get("tx-drop", 0)),
+                "link_downs": safe_int(target_iface.get("link-downs", 0)),
+            }
+
+        dhcp_rows = []
+        for row in dhcp_clients:
+            dhcp_rows.append({
+                "id": row.get(".id", ""),
+                "interface": row.get("interface", ""),
+                "status": row.get("status", "unknown"),
+                "address": row.get("address", ""),
+                "gateway": row.get("gateway", ""),
+                "default_route_distance": row.get("default-route-distance", ""),
+                "use_peer_dns": as_bool(row.get("use-peer-dns", False)),
+                "running": as_bool(row.get("running", False)),
+                "disabled": as_bool(row.get("disabled", False)),
+                "slave": as_bool(row.get("slave", False)),
+                "comment": row.get("comment", ""),
+            })
+
+        default_routes = []
+        for route in routes:
+            if str(route.get("dst-address", "")) != "0.0.0.0/0":
+                continue
+            default_routes.append({
+                "gateway": route.get("gateway", ""),
+                "distance": route.get("distance", ""),
+                "active": as_bool(route.get("active", False)),
+                "disabled": as_bool(route.get("disabled", False)),
+                "routing_table": route.get("routing-table", "main"),
+            })
+
+        total_mem = safe_int(resource.get("total-memory", 0))
+        free_mem = safe_int(resource.get("free-memory", 0))
+        used_mem = max(0, total_mem - free_mem)
+
+        return jsonify({
+            "nas": {
+                "id": nas_id,
+                "nasname": nas.get("nasname", ""),
+                "shortname": nas.get("shortname", ""),
+                "identity": identity.get("name", ""),
+            },
+            "clock": {
+                "date": clock.get("date", ""),
+                "time": clock.get("time", ""),
+                "timezone": clock.get("time-zone-name", ""),
+            },
+            "resource": {
+                "cpu_load": safe_int(resource.get("cpu-load", 0)),
+                "uptime": resource.get("uptime", ""),
+                "version": resource.get("version", ""),
+                "board_name": resource.get("board-name", ""),
+                "platform": resource.get("platform", ""),
+                "total_mem_mb": round(total_mem / 1048576, 1),
+                "used_mem_mb": round(used_mem / 1048576, 1),
+                "free_mem_mb": round(free_mem / 1048576, 1),
+                "mem_pct": round((used_mem / total_mem) * 100, 1) if total_mem else 0,
+                "free_hdd_mb": round(safe_int(resource.get("free-hdd-space", 0)) / 1048576, 1),
+                "total_hdd_mb": round(safe_int(resource.get("total-hdd-space", 0)) / 1048576, 1),
+            },
+            "ppp_active_count": len(ppp_active),
+            "sfp_interface": iface_summary,
+            "dhcp_clients": dhcp_rows,
+            "dhcp_slave_count": sum(1 for d in dhcp_rows if d["slave"]),
+            "default_routes": default_routes,
+            "ts": time.time(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/monitor/<int:nas_id>/ping")
 @login_required
 def monitor_ping(nas_id):
