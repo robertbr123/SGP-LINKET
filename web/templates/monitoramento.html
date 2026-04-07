@@ -4,282 +4,219 @@
 {% block breadcrumb %}<li class="breadcrumb-item active">Monitoramento</li>{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.min.css">
 <style>
+:root {
+    --noc-bg: #0b0e14;
+    --card-bg: rgba(23, 28, 41, 0.85);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --accent-blue: #3b82f6;
+    --accent-cyan: #22d3ee;
+    --accent-amber: #f59e0b;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+}
+
 .main-content {
-    padding: 10px 14px 18px;
+    background-color: var(--noc-bg);
+    min-height: 100vh;
 }
 
 .noc-stage {
-    background:
-        radial-gradient(circle at 15% 15%, rgba(255, 196, 127, .17), transparent 36%),
-        radial-gradient(circle at 85% 10%, rgba(125, 211, 252, .20), transparent 34%),
-        linear-gradient(180deg, #f6f8fc 0%, #eef3fb 55%, #ebf2fb 100%);
-    border: 1px solid #d9e3f0;
-    border-radius: 22px;
-    padding: 18px;
-    min-height: calc(100vh - 108px);
+    background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 50%), var(--noc-bg);
+    border-radius: 0;
+    padding: 24px;
+    min-height: calc(100vh - 60px);
+    transition: all 0.3s ease;
 }
 
-.center-card {
-    border: 1px solid #d8e2ee;
+.noc-stage:fullscreen {
+    padding: 40px;
+    overflow-y: auto;
+}
+
+.glass-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--card-border);
     border-radius: 16px;
-    background: rgba(255, 255, 255, .92);
-    box-shadow: 0 8px 28px rgba(15, 23, 42, .06);
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+    height: 100%;
+}
+
+.glass-card:hover {
+    border-color: rgba(59, 130, 246, 0.3);
 }
 
 .hero-card {
-    background: linear-gradient(120deg, #0f172a 0%, #1d3557 56%, #264f77 100%);
-    color: #e2e8f0;
-    border: none;
-    border-radius: 18px;
-    padding: 20px;
-    box-shadow: 0 18px 36px rgba(15, 23, 42, .22);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%);
 }
 
 .hero-title {
-    font-size: .9rem;
-    letter-spacing: .08em;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: #93c5fd;
-    font-weight: 600;
+    color: var(--accent-blue);
+    font-weight: 800;
 }
 
 .hero-speed {
-    font-size: 2rem;
-    font-weight: 700;
-    line-height: 1.1;
-    color: #fff;
-}
-
-.hero-sub {
-    font-size: .76rem;
-    color: rgba(226, 232, 240, .8);
-}
-
-.soft-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 999px;
-    padding: 5px 10px;
-    font-size: .74rem;
-    font-weight: 600;
-    background: rgba(148, 163, 184, .18);
-    color: #e2e8f0;
-}
-
-.soft-chip.ok {
-    background: rgba(22, 163, 74, .24);
-    color: #86efac;
-}
-
-.metric-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
+    font-size: 2.8rem;
+    font-weight: 800;
+    line-height: 1;
+    color: white;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
 }
 
 .metric-tile {
+    background: rgba(255, 255, 255, 0.03);
     border-radius: 12px;
-    border: 1px solid #dde7f3;
-    background: #f8fbff;
-    padding: 12px;
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .metric-k {
-    font-size: .72rem;
-    color: #64748b;
+    font-size: 0.65rem;
+    color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: .05em;
+    letter-spacing: 0.1em;
+    font-weight: 700;
 }
 
 .metric-v {
-    font-size: 1.15rem;
-    color: #0f172a;
+    font-size: 1.4rem;
+    color: white;
     font-weight: 700;
 }
 
 .section-title {
-    font-size: .82rem;
-    font-weight: 700;
-    color: #334155;
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--text-main);
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: 0.1em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.section-title i {
+    color: var(--accent-blue);
 }
 
 .resource-bar {
-    height: 8px;
-    border-radius: 99px;
-    background: #e2e8f0;
+    height: 6px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    margin-top: 8px;
     overflow: hidden;
 }
 
 .resource-bar > span {
     display: block;
     height: 100%;
-    border-radius: 99px;
-    transition: width .45s ease;
-    background: linear-gradient(90deg, #0ea5e9, #2563eb);
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
 }
 
-.dhcp-link {
-    border: 1px solid #d9e2ee;
-    border-radius: 12px;
-    padding: 10px;
-    background: #fff;
-}
-
-.mini-badge {
-    border-radius: 999px;
-    padding: 2px 8px;
-    font-size: .68rem;
-    font-weight: 700;
-}
-
-.mini-badge.slave {
-    background: #fff7ed;
-    color: #c2410c;
-}
-
-.mini-badge.main {
-    background: #eff6ff;
-    color: #1d4ed8;
-}
-
-.mini-badge.up {
-    background: #dcfce7;
-    color: #15803d;
-}
-
-.mini-badge.down {
-    background: #fee2e2;
-    color: #b91c1c;
-}
-
-.route-card {
-    border: 1px dashed #cbd5e1;
-    background: #f8fafc;
-    border-radius: 12px;
-    padding: 10px;
-}
-
-.hint {
-    color: #64748b;
-    font-size: .76rem;
-}
-
-.pane-switch .btn {
-    border-radius: 999px;
-    font-size: .78rem;
-    font-weight: 700;
-    letter-spacing: .03em;
-    padding: 6px 14px;
-}
-
-.pane {
-    display: none;
-}
-
-.pane.active {
-    display: block;
-}
-
-.traffic-wrap {
-    margin-top: 12px;
-    border: 1px solid rgba(148, 163, 184, .35);
-    border-radius: 12px;
-    padding: 8px;
-    background: rgba(15, 23, 42, .2);
-}
-
-.traffic-legend {
-    display: flex;
-    gap: 12px;
-    font-size: .72rem;
-    color: #cbd5e1;
-    margin-top: 6px;
-}
-
-.traffic-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 5px;
-}
-
-.traffic-dot.rx {
-    background: #22d3ee;
-}
-
-.traffic-dot.tx {
-    background: #f59e0b;
-}
-
-.tool-layout {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-}
-
-.tool-card {
-    border: 1px solid #d8e2ee;
-    border-radius: 14px;
-    background: #ffffffd9;
-    padding: 12px;
-}
-
-.tool-title {
-    font-size: .8rem;
-    font-weight: 800;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    color: #334155;
-    margin-bottom: 10px;
-}
-
-.terminal-lite {
+.nas-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
     border-radius: 10px;
-    background: #0f172a;
-    color: #dbeafe;
-    border: 1px solid #1e293b;
-    min-height: 220px;
-    max-height: 300px;
-    overflow: auto;
-    padding: 10px;
-    font-family: Consolas, monospace;
-    font-size: .75rem;
-    white-space: pre-wrap;
-    word-break: break-word;
+    padding: 8px 16px;
+    font-weight: 600;
+    transition: all 0.2s;
 }
 
-@media (max-width: 1200px) {
-    .metric-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+.nas-btn.active {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: white;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
 }
 
-@media (max-width: 768px) {
-    .noc-stage {
-        min-height: auto;
-        padding: 12px;
-    }
-    .hero-speed {
-        font-size: 1.5rem;
-    }
+.pane-btn {
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
 }
 
-@media (max-width: 1200px) {
-    .tool-layout {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
-@media (max-width: 900px) {
-    .tool-layout {
-        grid-template-columns: 1fr;
-    }
+.status-up { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.2); }
+.status-down { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.2); }
+
+.dhcp-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
 }
+
+.terminal-dark {
+    background: #000;
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #4ade80;
+}
+
+.fullscreen-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.fullscreen-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#trafficChartContainer {
+    height: 180px;
+    position: relative;
+    margin-top: 20px;
+}
+
+.pane { display: none; }
+.pane.active { display: block; animation: fadeIn 0.3s ease; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+body {
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-blue) var(--noc-bg);
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--noc-bg); }
+::-webkit-scrollbar-thumb { background: var(--accent-blue); border-radius: 10px; }
 </style>
 {% endblock %}
 
@@ -295,154 +232,179 @@
     Nenhum NAS com credenciais API cadastrado. Vá em <a href="{{ url_for('gerenciar_nas') }}">NAS / MikroTik</a> e configure usuário/senha da API RouterOS.
 </div>
 {% else %}
-<div class="noc-stage">
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <span class="section-title mb-0"><i class="bi bi-router-fill me-1"></i>NAS</span>
-        {% for nas in nas_list %}
-        <button
-            class="btn btn-sm {{ 'btn-primary' if loop.first else 'btn-outline-primary' }}"
-            data-nas-id="{{ nas.id }}"
-            onclick="selectNas({{ nas.id }})">
-            {{ nas.shortname or nas.nasname }}
-        </button>
-        {% endfor %}
-        <div class="pane-switch ms-2 d-flex gap-1">
-            <button class="btn btn-primary" id="btnPaneCentral" onclick="switchPane('central')">Central</button>
-            <button class="btn btn-outline-primary" id="btnPaneTools" onclick="switchPane('tools')">Ferramentas Avançadas</button>
+<div class="noc-stage mt-3" id="nocStage">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+        <div class="section-title mb-0"><i class="bi bi-cpu-fill"></i> SGP-NOC INFRA</div>
+        <div class="d-flex gap-2 ms-2">
+            {% for nas in nas_list %}
+            <button
+                class="nas-btn {{ 'active' if loop.first else '' }}"
+                data-nas-id="{{ nas.id }}"
+                onclick="selectNas({{ nas.id }})">
+                {{ nas.shortname or nas.nasname }}
+            </button>
+            {% endfor %}
         </div>
-        <span class="ms-auto hint" id="lastUpdate">—</span>
+        
+        <div class="ms-auto d-flex gap-2 align-items-center">
+            <div class="pane-switch d-flex gap-1 bg-dark p-1 rounded-3">
+                <button class="btn btn-sm pane-btn btn-primary" id="btnPaneCentral" onclick="switchPane('central')">Dashboard</button>
+                <button class="btn btn-sm pane-btn btn-link text-white text-decoration-none" id="btnPaneTools" onclick="switchPane('tools')">Ferramentas</button>
+            </div>
+            <button class="fullscreen-btn" onclick="toggleFullscreen()" title="Tela Cheia">
+                <i class="bi bi-arrows-fullscreen"></i>
+            </button>
+            <span class="text-muted small fw-bold" id="lastUpdate" style="min-width: 80px;">—</span>
+        </div>
     </div>
 
     <div class="pane active" id="pane-central">
-    <div class="row g-3">
-        <div class="col-xl-7">
-            <div class="hero-card mb-3">
-                <div class="d-flex justify-content-between align-items-start mb-3">
-                    <div>
-                        <div class="hero-title">Link Principal em Tempo Real</div>
-                        <div class="fs-5 fw-semibold" id="sfpName">sfp-sfpplus1</div>
+        <div class="row g-4">
+            <div class="col-xl-8">
+                <!-- Principais Métricas de Tráfego -->
+                <div class="glass-card hero-card mb-4">
+                    <div class="d-flex justify-content-between align-items-start mb-4">
+                        <div>
+                            <div class="hero-title mb-1">Interface Principal</div>
+                            <div class="h4 fw-bold text-white mb-0" id="sfpName">Aguardando...</div>
+                        </div>
+                        <div id="sfpStatusBadge">
+                            <span class="status-badge status-up">Sincronizando...</span>
+                        </div>
                     </div>
-                    <span class="soft-chip" id="sfpStatus">Aguardando leitura</span>
+
+                    <div class="row g-4 mb-2">
+                        <div class="col-md-6 border-end border-white border-opacity-10">
+                            <div class="text-muted small fw-bold mb-1">DOWNLOAD (RX)</div>
+                            <div class="hero-speed" id="rxBps">0.00 Mbps</div>
+                            <div class="small mt-2" style="color: var(--accent-cyan)" id="rxBytes">Acumulado: —</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small fw-bold mb-1">UPLOAD (TX)</div>
+                            <div class="hero-speed" id="txBps">0.00 Mbps</div>
+                            <div class="small mt-2" style="color: var(--accent-amber)" id="txBytes">Acumulado: —</div>
+                        </div>
+                    </div>
+
+                    <div id="trafficChartContainer">
+                        <canvas id="trafficChart"></canvas>
+                    </div>
+                    
+                    <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top border-white border-opacity-10" id="sfpMeta">
+                        <!-- Chips renderizados via JS -->
+                    </div>
                 </div>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="hero-sub mb-1">DOWNLOAD</div>
-                        <div class="hero-speed" id="rxBps">—</div>
-                        <div class="hero-sub" id="rxBytes">Total RX: —</div>
+
+                <!-- Painel de Saúde & Hardware -->
+                <div class="glass-card">
+                    <div class="section-title"><i class="bi bi-hdd-network"></i> Desempenho do Sistema</div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6 col-md-3">
+                            <div class="metric-tile">
+                                <div class="metric-k">Carga CPU</div>
+                                <div class="metric-v" id="cpuLoad">0%</div>
+                                <div class="resource-bar"><span id="cpuBar" style="width:0%"></span></div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="metric-tile">
+                                <div class="metric-k">Uso RAM</div>
+                                <div class="metric-v" id="memUsed">0 MB</div>
+                                <div class="resource-bar"><span id="memBar" style="width:0%"></span></div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="metric-tile">
+                                <div class="metric-k">Clientes PPPoE</div>
+                                <div class="metric-v" id="pppCount">0</div>
+                                <div class="small text-muted mt-1">Sessões Ativas</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="metric-tile">
+                                <div class="metric-k">Versão ROS</div>
+                                <div class="metric-v" style="font-size: 1.1rem" id="rosVersion">—</div>
+                                <div class="small text-muted mt-1" id="systemUptime">Uptime: —</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="hero-sub mb-1">UPLOAD</div>
-                        <div class="hero-speed" id="txBps">—</div>
-                        <div class="hero-sub" id="txBytes">Total TX: —</div>
-                    </div>
+                    <div class="text-muted small" id="systemMeta">Carregando detalhes do hardware...</div>
                 </div>
-                <div class="traffic-wrap">
-                    <canvas id="trafficCanvas" height="92"></canvas>
-                    <div class="traffic-legend">
-                        <span><i class="traffic-dot rx"></i>RX (download)</span>
-                        <span><i class="traffic-dot tx"></i>TX (upload)</span>
-                        <span class="ms-auto" id="trafficRange">Janela: 5 min</span>
-                    </div>
-                </div>
-                <div class="d-flex flex-wrap gap-2 mt-3" id="sfpMeta"></div>
             </div>
 
-            <div class="center-card p-3 mb-3">
-                <div class="section-title mb-2">Saúde do Equipamento</div>
-                <div class="metric-grid mb-3">
-                    <div class="metric-tile">
-                        <div class="metric-k">CPU</div>
-                        <div class="metric-v" id="cpuLoad">—</div>
+            <div class="col-xl-4 text-white">
+                <!-- DHCP & Links Externos -->
+                <div class="glass-card mb-4" style="max-height: 480px; overflow-y: auto;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="section-title mb-0"><i class="bi bi-link-45deg"></i> WAN DHCP Clients</div>
+                        <span class="badge bg-primary rounded-pill small" id="dhcpCounter">0</span>
                     </div>
-                    <div class="metric-tile">
-                        <div class="metric-k">Memória</div>
-                        <div class="metric-v" id="memUsed">—</div>
-                    </div>
-                    <div class="metric-tile">
-                        <div class="metric-k">PPPoE Ativos</div>
-                        <div class="metric-v" id="pppCount">—</div>
-                    </div>
-                    <div class="metric-tile">
-                        <div class="metric-k">RouterOS</div>
-                        <div class="metric-v" id="rosVersion">—</div>
+                    <div id="dhcpList">
+                        <div class="text-center py-4 text-muted">Aguardando dados...</div>
                     </div>
                 </div>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="d-flex justify-content-between"><span class="hint">Uso de memória</span><strong id="memPct">0%</strong></div>
-                        <div class="resource-bar mt-1"><span id="memBar" style="width:0%"></span></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="d-flex justify-content-between"><span class="hint">CPU atual</span><strong id="cpuPct">0%</strong></div>
-                        <div class="resource-bar mt-1"><span id="cpuBar" style="width:0%"></span></div>
+
+                <!-- Rotas de Saída -->
+                <div class="glass-card mb-4">
+                    <div class="section-title"><i class="bi bi-sign-turn-right"></i> Rotas Default</div>
+                    <div id="routeList" class="d-grid gap-2">
+                        <div class="text-muted small">Carregando tabela de roteamento...</div>
                     </div>
                 </div>
-                <div class="hint mt-2" id="systemMeta">—</div>
+
+                <!-- Identidade -->
+                <div class="glass-card">
+                    <div class="section-title"><i class="bi bi-info-circle"></i> Identidade do NAS</div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="metric-k">System Name</div>
+                            <div class="text-white fw-bold truncate" id="nasIdentity">—</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-k">Clock / Timezone</div>
+                            <div class="text-white small fw-bold" id="routerClock">—</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <div class="col-xl-5">
-            <div class="center-card p-3 mb-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <div class="section-title mb-0">Links DHCP Client</div>
-                    <span class="hint" id="dhcpSummary">—</span>
-                </div>
-                <div id="dhcpList" class="d-grid gap-2">
-                    <div class="text-muted">Carregando...</div>
-                </div>
-            </div>
-
-            <div class="center-card p-3 mb-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <div class="section-title mb-0">Rotas Default</div>
-                    <span class="hint" id="routeSummary">—</span>
-                </div>
-                <div id="routeList" class="d-grid gap-2">
-                    <div class="text-muted">Carregando...</div>
-                </div>
-            </div>
-
-            <div class="center-card p-3">
-                <div class="section-title mb-2">Identidade do NAS</div>
-                <div class="hint mb-1">Nome</div>
-                <div class="fw-semibold text-dark" id="nasIdentity">—</div>
-                <div class="hint mb-1 mt-2">Hostname / Cadastro</div>
-                <div class="fw-semibold text-dark" id="nasHost">—</div>
-                <div class="hint mb-1 mt-2">Relógio RouterOS</div>
-                <div class="fw-semibold text-dark" id="routerClock">—</div>
-            </div>
-        </div>
-    </div>
     </div>
 
     <div class="pane" id="pane-tools">
-        <div class="tool-layout">
-            <div class="tool-card">
-                <div class="tool-title"><i class="bi bi-reception-4 me-1"></i>Ping</div>
-                <div class="d-flex gap-2 mb-2">
-                    <input id="pingDest" class="form-control form-control-sm" value="8.8.8.8" placeholder="IP ou domínio">
-                    <select id="pingCount" class="form-select form-select-sm" style="width:84px">
-                        <option value="5" selected>5x</option>
-                        <option value="10">10x</option>
-                    </select>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="glass-card">
+                    <div class="section-title"><i class="bi bi-broadcast"></i> Teste de Latência (Ping)</div>
+                    <div class="d-flex gap-2 mb-3">
+                        <input id="pingDest" class="form-control form-control-sm bg-dark text-white border-secondary" value="8.8.8.8">
+                        <select id="pingCount" class="form-select form-select-sm bg-dark text-white border-secondary" style="width:80px">
+                            <option value="5" selected>5x</option>
+                            <option value="10">10x</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-sm w-100 mb-3 fw-bold" id="btnPing" onclick="runPing()">INICIAR PING</button>
+                    <div class="terminal-dark" id="pingOutput" style="height: 300px; overflow-y: auto;">Aguardando comando...</div>
                 </div>
-                <button class="btn btn-primary btn-sm w-100 mb-2" id="btnPing" onclick="runPing()">Executar Ping</button>
-                <div class="terminal-lite" id="pingOutput">Aguardando comando.</div>
             </div>
-
-            <div class="tool-card">
-                <div class="tool-title"><i class="bi bi-signpost-split me-1"></i>Traceroute</div>
-                <div class="d-flex gap-2 mb-2">
-                    <input id="traceDest" class="form-control form-control-sm" value="8.8.8.8" placeholder="IP ou domínio">
+            <div class="col-md-4">
+                <div class="glass-card">
+                    <div class="section-title"><i class="bi bi-map"></i> Rota do Pacote (Traceroute)</div>
+                    <div class="mb-3">
+                        <input id="traceDest" class="form-control form-control-sm bg-dark text-white border-secondary" value="1.1.1.1">
+                    </div>
+                    <button class="btn btn-primary btn-sm w-100 mb-3 fw-bold" id="btnTrace" onclick="runTraceroute()">RASTREAR ROTA</button>
+                    <div class="terminal-dark" id="traceOutput" style="height: 300px; overflow-y: auto;">O resultado aparecerá aqui...</div>
                 </div>
-                <button class="btn btn-primary btn-sm w-100 mb-2" id="btnTrace" onclick="runTraceroute()">Executar Traceroute</button>
-                <div class="terminal-lite" id="traceOutput">Aguardando comando.</div>
             </div>
-
-            <div class="tool-card">
-                <div class="tool-title"><i class="bi bi-speedometer me-1"></i>Speedtest</div>
-                <button class="btn btn-primary btn-sm w-100 mb-2" id="btnSpeed" onclick="runSpeedtest()">Iniciar Speedtest</button>
-                <div class="terminal-lite" id="speedOutput">Aguardando comando.</div>
+            <div class="col-md-4">
+                <div class="glass-card">
+                    <div class="section-title"><i class="bi bi-speedometer2"></i> Speedtest Interno (MikroTik)</div>
+                    <div class="alert alert-info py-2 px-3 small border-0 bg-primary bg-opacity-10 text-primary">
+                        <i class="bi bi-info-circle-fill me-1"></i> Usa os servidores configurados no NAS.
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm w-100 mb-3 fw-bold" id="btnSpeed" onclick="runSpeedtest()">TESTAR AGORA</button>
+                    <div class="terminal-dark" id="speedOutput" style="height: 258px; overflow-y: auto;">Resultados aparecerão aqui...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -451,26 +413,98 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 let currentNasId = {{ nas_list[0].id if nas_list else 'null' }};
 let sfpPrev = null;
 let pollTimer = null;
-const rxHistory = [];
-const txHistory = [];
-const maxHistoryPoints = 100;
+let trafficChart = null;
+const rxHistory = new Array(60).fill(0);
+const txHistory = new Array(60).fill(0);
+const labelsCache = new Array(60).fill('');
+
+function initChart() {
+    const ctx = document.getElementById('trafficChart').getContext('2d');
+    trafficChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labelsCache,
+            datasets: [
+                {
+                    label: 'Download (RX)',
+                    data: rxHistory,
+                    borderColor: '#22d3ee',
+                    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Upload (TX)',
+                    data: txHistory,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 0 },
+            plugins: {
+                legend: { display: false },
+                tooltip: { mode: 'index', intersect: false }
+            },
+            scales: {
+                x: { display: false },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: {
+                        color: '#64748b',
+                        callback: function(value) { return fmtBps(value); }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function toggleFullscreen() {
+    const elem = document.getElementById('nocStage');
+    if (!document.fullscreenElement) {
+        elem.requestFullscreen().catch(err => {
+            alert(`Erro ao entrar em tela cheia: ${err.message}`);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+}
 
 function switchPane(name) {
     const central = name === 'central';
     document.getElementById('pane-central').classList.toggle('active', central);
     document.getElementById('pane-tools').classList.toggle('active', !central);
-    document.getElementById('btnPaneCentral').classList.toggle('btn-primary', central);
-    document.getElementById('btnPaneCentral').classList.toggle('btn-outline-primary', !central);
-    document.getElementById('btnPaneTools').classList.toggle('btn-primary', !central);
-    document.getElementById('btnPaneTools').classList.toggle('btn-outline-primary', central);
+    
+    const btnC = document.getElementById('btnPaneCentral');
+    const btnT = document.getElementById('btnPaneTools');
+    
+    if (central) {
+        btnC.className = 'btn btn-sm pane-btn btn-primary';
+        btnT.className = 'btn btn-sm pane-btn btn-link text-white text-decoration-none';
+    } else {
+        btnC.className = 'btn btn-sm pane-btn btn-link text-white text-decoration-none';
+        btnT.className = 'btn btn-sm pane-btn btn-primary';
+    }
 }
 
 function fmtTime() {
-    return new Date().toLocaleTimeString('pt-BR');
+    return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function fmtBytes(bytes) {
@@ -483,102 +517,33 @@ function fmtBytes(bytes) {
 
 function fmtBps(bps) {
     const n = Number(bps) || 0;
-    if (n < 1_000) return `${Math.round(n)} bps`;
-    if (n < 1_000_000) return `${(n / 1_000).toFixed(1)} Kbps`;
-    if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(2)} Mbps`;
-    return `${(n / 1_000_000_000).toFixed(2)} Gbps`;
-}
-
-function routeStatusTag(route) {
-    if (route.active && !route.disabled) {
-        return '<span class="mini-badge up">ATIVA</span>';
-    }
-    return '<span class="mini-badge down">INATIVA</span>';
-}
-
-function drawTrafficChart() {
-    const canvas = document.getElementById('trafficCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.clientWidth || canvas.width;
-    const h = canvas.clientHeight || canvas.height;
-    canvas.width = w;
-    canvas.height = h;
-
-    ctx.clearRect(0, 0, w, h);
-
-    const padding = 8;
-    const innerW = w - padding * 2;
-    const innerH = h - padding * 2;
-    ctx.strokeStyle = 'rgba(148,163,184,.28)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i += 1) {
-        const y = padding + (innerH / 4) * i;
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(w - padding, y);
-        ctx.stroke();
-    }
-
-    const maxVal = Math.max(1, ...rxHistory, ...txHistory);
-    const toY = (value) => padding + innerH - (value / maxVal) * innerH;
-    const toX = (idx, total) => {
-        if (total <= 1) return padding;
-        return padding + (idx / (total - 1)) * innerW;
-    };
-
-    const drawSeries = (series, color) => {
-        if (!series.length) return;
-        ctx.beginPath();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = color;
-        series.forEach((v, i) => {
-            const x = toX(i, series.length);
-            const y = toY(v);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-    };
-
-    drawSeries(rxHistory, '#22d3ee');
-    drawSeries(txHistory, '#f59e0b');
-}
-
-function pushTraffic(rxBps, txBps) {
-    rxHistory.push(rxBps);
-    txHistory.push(txBps);
-    if (rxHistory.length > maxHistoryPoints) rxHistory.shift();
-    if (txHistory.length > maxHistoryPoints) txHistory.shift();
-    drawTrafficChart();
+    if (n < 1000) return `${Math.round(n)} bps`;
+    if (n < 1000000) return `${(n / 1000).toFixed(1)} K`;
+    if (n < 1000000000) return `${(n / 1000000).toFixed(1)} Mbps`;
+    return `${(n / 1000000000).toFixed(2)} Gbps`;
 }
 
 function selectNas(nasId) {
     currentNasId = nasId;
     sfpPrev = null;
-    rxHistory.length = 0;
-    txHistory.length = 0;
-    drawTrafficChart();
+    rxHistory.fill(0);
+    txHistory.fill(0);
+    if (trafficChart) trafficChart.update();
+    
     document.querySelectorAll('[data-nas-id]').forEach((btn) => {
         const active = Number(btn.dataset.nasId) === nasId;
-        btn.classList.toggle('btn-primary', active);
-        btn.classList.toggle('btn-outline-primary', !active);
+        btn.classList.toggle('active', active);
     });
     loadOverview();
 }
 
 function updateSfpCard(sfp) {
+    const nameEl = document.getElementById('sfpName');
+    const badgeContainer = document.getElementById('sfpStatusBadge');
+    
     if (!sfp) {
-        document.getElementById('sfpStatus').textContent = 'Interface sfp-sfpplus1 não encontrada';
-        document.getElementById('sfpName').textContent = 'sfp-sfpplus1';
-        document.getElementById('rxBps').textContent = '—';
-        document.getElementById('txBps').textContent = '—';
-        document.getElementById('rxBytes').textContent = 'Total RX: —';
-        document.getElementById('txBytes').textContent = 'Total TX: —';
-        document.getElementById('sfpMeta').innerHTML = '<span class="soft-chip">Verifique o nome da interface no RouterOS</span>';
-        rxHistory.length = 0;
-        txHistory.length = 0;
-        drawTrafficChart();
+        nameEl.textContent = 'Interface não detectada';
+        badgeContainer.innerHTML = '<span class="status-badge status-down">OFFLINE / NOT FOUND</span>';
         return;
     }
 
@@ -590,194 +555,97 @@ function updateSfpCard(sfp) {
         rxBps = Math.max(0, ((sfp.rx_byte - sfpPrev.rxByte) * 8) / dt);
         txBps = Math.max(0, ((sfp.tx_byte - sfpPrev.txByte) * 8) / dt);
     }
-
     sfpPrev = { ts: now, rxByte: sfp.rx_byte, txByte: sfp.tx_byte };
-    document.getElementById('sfpName').textContent = sfp.name || 'sfp-sfpplus1';
+
+    nameEl.textContent = sfp.name || 'sfp-sfpplus1';
     document.getElementById('rxBps').textContent = fmtBps(rxBps);
     document.getElementById('txBps').textContent = fmtBps(txBps);
     document.getElementById('rxBytes').textContent = `Total RX: ${fmtBytes(sfp.rx_byte)}`;
     document.getElementById('txBytes').textContent = `Total TX: ${fmtBytes(sfp.tx_byte)}`;
-    pushTraffic(rxBps, txBps);
+
+    rxHistory.push(rxBps);
+    txHistory.push(txBps);
+    rxHistory.shift();
+    txHistory.shift();
+    if (trafficChart) trafficChart.update();
 
     const isUp = sfp.running && !sfp.disabled;
-    const statusEl = document.getElementById('sfpStatus');
-    statusEl.classList.toggle('ok', isUp);
-    statusEl.textContent = isUp ? 'Link ONLINE' : 'Link OFFLINE';
+    badgeContainer.innerHTML = isUp ? 
+        '<span class="status-badge status-up"><i class="bi bi-check-circle-fill me-1"></i> LINK UP</span>' : 
+        '<span class="status-badge status-down"><i class="bi bi-x-circle-fill me-1"></i> LINK DOWN</span>';
 
     document.getElementById('sfpMeta').innerHTML = [
-        `<span class="soft-chip">Tipo: ${sfp.type || 'n/d'}</span>`,
-        `<span class="soft-chip">RX errors: ${sfp.rx_error || 0}</span>`,
-        `<span class="soft-chip">TX errors: ${sfp.tx_error || 0}</span>`,
-        `<span class="soft-chip">Drops RX/TX: ${sfp.rx_drop || 0}/${sfp.tx_drop || 0}</span>`,
-        `<span class="soft-chip">Link downs: ${sfp.link_downs || 0}</span>`,
+        `<span class="badge bg-white bg-opacity-10 text-muted p-2">TYPE: ${sfp.type || 'n/d'}</span>`,
+        `<span class="badge bg-white bg-opacity-10 text-muted p-2">ERR RX/TX: ${sfp.rx_error || 0}/${sfp.tx_error || 0}</span>`,
+        `<span class="badge bg-white bg-opacity-10 text-muted p-2">DROPS: ${sfp.rx_drop || 0}</span>`,
+        `<span class="badge bg-white bg-opacity-10 text-muted p-2">DOWNS: ${sfp.link_downs || 0}</span>`,
     ].join('');
-}
-
-async function runPing() {
-    const out = document.getElementById('pingOutput');
-    const btn = document.getElementById('btnPing');
-    const dest = (document.getElementById('pingDest').value || '').trim();
-    const count = document.getElementById('pingCount').value || '5';
-    if (!dest || !currentNasId) return;
-
-    btn.disabled = true;
-    out.textContent = `Executando ping para ${dest} (${count}x)...`;
-    try {
-        const r = await fetch(`/api/monitor/${currentNasId}/ping?destino=${encodeURIComponent(dest)}&count=${count}`);
-        const d = await r.json();
-        if (!r.ok) {
-            out.textContent = `Erro: ${d.error || 'falha no ping'}`;
-            return;
-        }
-
-        let txt = `PING ${d.destino}\n`;
-        txt += '----------------------------------------\n';
-        d.packets.forEach((p) => {
-            if (p.status === 'timeout') txt += `seq=${p.seq} timeout\n`;
-            else txt += `seq=${p.seq} host=${p.host} time=${p.time} ttl=${p.ttl}\n`;
-        });
-        txt += '----------------------------------------\n';
-        txt += `sent=${d.sent} recv=${d.received} loss=${d.loss_pct}%\n`;
-        if (d.avg_ms !== null) txt += `min=${d.min_ms}ms avg=${d.avg_ms}ms max=${d.max_ms}ms`;
-        out.textContent = txt;
-    } catch (err) {
-        out.textContent = `Erro de comunicação: ${err.message}`;
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-async function runTraceroute() {
-    const out = document.getElementById('traceOutput');
-    const btn = document.getElementById('btnTrace');
-    const dest = (document.getElementById('traceDest').value || '').trim();
-    if (!dest || !currentNasId) return;
-
-    btn.disabled = true;
-    out.textContent = `Executando traceroute para ${dest}...`;
-    try {
-        const r = await fetch(`/api/monitor/${currentNasId}/traceroute?destino=${encodeURIComponent(dest)}`);
-        const d = await r.json();
-        if (!r.ok) {
-            out.textContent = `Erro: ${d.error || 'falha no traceroute'}`;
-            return;
-        }
-
-        const hops = d.hops || [];
-        if (!hops.length) {
-            out.textContent = 'Sem hops retornados.';
-            return;
-        }
-
-        let txt = `TRACEROUTE ${dest}\n`;
-        txt += '----------------------------------------\n';
-        hops.forEach((h) => {
-            txt += `${h.n || '?'}  ${h.host || '*'}  avg=${h.avg || '-'} best=${h.best || '-'} worst=${h.worst || '-'} loss=${h.loss || '-'}\n`;
-        });
-        out.textContent = txt;
-    } catch (err) {
-        out.textContent = `Erro de comunicação: ${err.message}`;
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-async function runSpeedtest() {
-    const out = document.getElementById('speedOutput');
-    const btn = document.getElementById('btnSpeed');
-    if (!currentNasId) return;
-
-    btn.disabled = true;
-    out.textContent = 'Iniciando speedtest no RouterOS. Aguarde...';
-    try {
-        const r = await fetch(`/api/monitor/${currentNasId}/speedtest`, { signal: AbortSignal.timeout(90000) });
-        const d = await r.json();
-        if (!r.ok) {
-            out.textContent = `Erro: ${d.error || 'speedtest indisponivel'}`;
-            return;
-        }
-        out.textContent = [
-            `SPEEDTEST (${d.status || 'ok'})`,
-            `download: ${d.download_mbps} Mbps`,
-            `upload:   ${d.upload_mbps} Mbps`,
-            `latencia: ${d.latency_ms || 'n/d'}`,
-            `servidor: ${d.server || 'n/d'}`,
-            `isp:      ${d.isp || 'n/d'}`,
-        ].join('\n');
-    } catch (err) {
-        out.textContent = `Erro: ${err.message}`;
-    } finally {
-        btn.disabled = false;
-    }
 }
 
 function renderDhcp(dhcpRows) {
     const list = Array.isArray(dhcpRows) ? dhcpRows : [];
-    const slaveCount = list.filter((d) => d.slave).length;
-    document.getElementById('dhcpSummary').textContent = `${list.length} links | ${slaveCount} slave`;
+    document.getElementById('dhcpCounter').textContent = list.length;
+    const container = document.getElementById('dhcpList');
 
     if (!list.length) {
-        document.getElementById('dhcpList').innerHTML = '<div class="text-muted">Nenhum DHCP Client encontrado no MikroTik.</div>';
+        container.innerHTML = '<div class="text-center py-4 text-muted small">Nenhum DHCP Client ativo.</div>';
         return;
     }
 
-    document.getElementById('dhcpList').innerHTML = list.map((d) => {
+    container.innerHTML = list.map(d => {
         const status = (d.status || '').toLowerCase();
-        const up = status.includes('bound') || d.running;
+        const isBound = status.includes('bound');
         return `
-            <div class="dhcp-link">
+            <div class="dhcp-item">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <strong>${d.interface || 'sem interface'}</strong>
-                    ${d.slave ? '<span class="mini-badge slave">slave</span>' : '<span class="mini-badge main">main</span>'}
+                    <span class="fw-bold small">${d.interface}</span>
+                    <span class="status-badge ${isBound ? 'status-up' : 'status-down'}" style="font-size: 0.6rem">${status}</span>
                 </div>
-                <div class="d-flex flex-wrap gap-1 mb-1">
-                    ${up ? '<span class="mini-badge up">bound</span>' : '<span class="mini-badge down">' + (d.status || 'down') + '</span>'}
-                    ${d.disabled ? '<span class="mini-badge down">disabled</span>' : ''}
+                <div class="d-flex justify-content-between align-items-end">
+                    <div class="small text-white-50">${d.address || 'Sem IP'}</div>
+                    ${d.slave ? '<span class="text-info" style="font-size: 0.65rem; font-weight: 800;">[SLAVE]</span>' : ''}
                 </div>
-                <div class="hint">IP: <strong>${d.address || 'n/d'}</strong></div>
-                <div class="hint">Gateway: <strong>${d.gateway || 'n/d'}</strong></div>
             </div>`;
     }).join('');
 }
 
 function renderRoutes(routes) {
     const list = Array.isArray(routes) ? routes : [];
-    const activeCount = list.filter((r) => r.active && !r.disabled).length;
-    document.getElementById('routeSummary').textContent = `${activeCount} ativas de ${list.length}`;
-
+    const container = document.getElementById('routeList');
+    
     if (!list.length) {
-        document.getElementById('routeList').innerHTML = '<div class="text-muted">Sem rota default (0.0.0.0/0) retornada.</div>';
+        container.innerHTML = '<div class="text-muted small">Nenhuma rota padrão.</div>';
         return;
     }
 
-    document.getElementById('routeList').innerHTML = list.map((r) => `
-        <div class="route-card">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-                <strong>Gateway ${r.gateway || 'n/d'}</strong>
-                ${routeStatusTag(r)}
+    container.innerHTML = list.map(r => `
+        <div class="p-2 rounded bg-white bg-opacity-5 border border-white border-opacity-5">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="small fw-bold">GW: ${r.gateway}</span>
+                <span class="status-badge ${r.active ? 'status-up' : 'status-down'}" style="font-size: 0.55rem">${r.active ? 'ACTIVE' : 'INACTIVE'}</span>
             </div>
-            <div class="hint">Distance: <strong>${r.distance || 'n/d'}</strong> | Table: <strong>${r.routing_table || 'main'}</strong></div>
+            <div class="text-muted" style="font-size: 0.65rem">Dist: ${r.distance} | Tab: ${r.routing_table}</div>
         </div>
     `).join('');
 }
 
-function updateResources(resource, pppCount, nas, clock) {
-    const cpu = Number(resource?.cpu_load || 0);
-    const mem = Number(resource?.mem_pct || 0);
+function updateResources(res, ppp, nas, clock) {
+    const cpu = Number(res?.cpu_load || 0);
+    const mem = Number(res?.mem_pct || 0);
+    
     document.getElementById('cpuLoad').textContent = `${cpu}%`;
-    document.getElementById('memUsed').textContent = `${resource?.used_mem_mb || 0} MB`;
-    document.getElementById('pppCount').textContent = Number(pppCount || 0);
-    document.getElementById('rosVersion').textContent = resource?.version || '—';
-    document.getElementById('cpuPct').textContent = `${cpu}%`;
-    document.getElementById('memPct').textContent = `${mem}%`;
-    document.getElementById('cpuBar').style.width = `${Math.min(cpu, 100)}%`;
-    document.getElementById('memBar').style.width = `${Math.min(mem, 100)}%`;
-
-    document.getElementById('systemMeta').textContent =
-        `Uptime: ${resource?.uptime || '—'} | Board: ${resource?.board_name || '—'} | Plataforma: ${resource?.platform || '—'}`;
-    document.getElementById('nasIdentity').textContent = nas?.identity || '—';
-    document.getElementById('nasHost').textContent = nas?.shortname || nas?.nasname || '—';
-    document.getElementById('routerClock').textContent = `${clock?.date || '—'} ${clock?.time || ''} ${clock?.timezone || ''}`.trim();
+    document.getElementById('cpuBar').style.width = `${cpu}%`;
+    
+    document.getElementById('memUsed').textContent = `${res?.used_mem_mb || 0} MB`;
+    document.getElementById('memBar').style.width = `${mem}%`;
+    
+    document.getElementById('pppCount').textContent = ppp || 0;
+    document.getElementById('rosVersion').textContent = res?.version || '—';
+    document.getElementById('systemUptime').textContent = `Uptime: ${res?.uptime || '—'}`;
+    
+    document.getElementById('systemMeta').textContent = `${res?.board_name || 'MikroTik'} | ${res?.platform || 'RouterOS'}`;
+    document.getElementById('nasIdentity').textContent = nas?.identity || 'MikroTik';
+    document.getElementById('routerClock').textContent = `${clock?.time || '--:--'} (${clock?.timezone || 'UTC'})`;
 }
 
 async function loadOverview() {
@@ -785,38 +653,76 @@ async function loadOverview() {
     try {
         const res = await fetch(`/api/monitor/${currentNasId}/overview`);
         const data = await res.json();
-        if (!res.ok) {
-            document.getElementById('sfpStatus').textContent = data.error || 'Erro ao consultar NAS';
-            return;
-        }
+        if (!res.ok) throw new Error(data.error || 'Erro API');
 
         updateSfpCard(data.sfp_interface);
         updateResources(data.resource, data.ppp_active_count, data.nas, data.clock);
         renderDhcp(data.dhcp_clients);
         renderRoutes(data.default_routes);
-        document.getElementById('lastUpdate').textContent = `Atualizado: ${fmtTime()}`;
+        document.getElementById('lastUpdate').textContent = fmtTime();
     } catch (err) {
-        document.getElementById('sfpStatus').textContent = `Falha: ${err.message}`;
+        console.error('Monitor Poll Error:', err);
     }
 }
 
-function startPolling() {
-    clearInterval(pollTimer);
-    loadOverview();
-    pollTimer = setInterval(loadOverview, 3000);
+// Diagnostic Tools (Ping, Trace, Speed) - Re-using logic but updating UI
+async function runPing() {
+    const out = document.getElementById('pingOutput');
+    const btn = document.getElementById('btnPing');
+    const dest = document.getElementById('pingDest').value;
+    const count = document.getElementById('pingCount').value;
+    
+    btn.disabled = true;
+    out.textContent = `> ping ${dest} -c ${count}...\n`;
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/ping?destino=${dest}&count=${count}`);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        
+        let txt = d.packets.map(p => p.status === 'timeout' ? 'Request timeout.' : `Reply from ${p.host}: time=${p.time}ms ttl=${p.ttl}`).join('\n');
+        txt += `\n\nStatistics: ${d.loss_pct}% loss, avg=${d.avg_ms}ms`;
+        out.textContent = txt;
+    } catch (e) { out.textContent = `Error: ${e.message}`; }
+    finally { btn.disabled = false; }
 }
 
-window.addEventListener('resize', drawTrafficChart);
+async function runTraceroute() {
+    const out = document.getElementById('traceOutput');
+    const btn = document.getElementById('btnTrace');
+    const dest = document.getElementById('traceDest').value;
+    
+    btn.disabled = true;
+    out.textContent = `> traceroute ${dest}...\n`;
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/traceroute?destino=${dest}`);
+        const d = await r.json();
+        let txt = (d.hops || []).map(h => `${h.n}. ${h.host}  ${h.avg}ms`).join('\n');
+        out.textContent = txt || 'No hops returned.';
+    } catch (e) { out.textContent = `Error: ${e.message}`; }
+    finally { btn.disabled = false; }
+}
 
-document.getElementById('pingDest')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') runPing();
-});
-document.getElementById('traceDest')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') runTraceroute();
-});
+async function runSpeedtest() {
+    const out = document.getElementById('speedOutput');
+    const btn = document.getElementById('btnSpeed');
+    btn.disabled = true;
+    out.textContent = '> initializing bandwidth test...\n';
+    try {
+        const r = await fetch(`/api/monitor/${currentNasId}/speedtest`, { signal: AbortSignal.timeout(60000) });
+        const d = await r.json();
+        out.textContent = `STATUS: ${d.status}\nDOWNLOAD: ${d.download_mbps} Mbps\nUPLOAD: ${d.upload_mbps} Mbps\nLATENCY: ${d.latency_ms} ms\nSERVER: ${d.server}`;
+    } catch (e) { out.textContent = `Error: ${e.message}`; }
+    finally { btn.disabled = false; }
+}
 
-{% if nas_list %}
-startPolling();
-{% endif %}
+window.onload = () => {
+    initChart();
+    if (currentNasId) {
+        loadOverview();
+        pollTimer = setInterval(loadOverview, 3000);
+    }
+};
+
+window.addEventListener('resize', () => { if(trafficChart) trafficChart.resize(); });
 </script>
 {% endblock %}
