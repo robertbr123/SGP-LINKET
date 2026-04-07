@@ -1,5 +1,7 @@
 import os
 import re
+import csv
+import io
 import json
 import time
 import hashlib
@@ -1189,6 +1191,166 @@ BACKUP_TABLE_ORDER = [
     "radusergroup",
     "alertas_consumo",
 ]
+
+
+@app.route("/clientes/importar", methods=["GET", "POST"])
+@login_required
+def importar_clientes():
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM planos ORDER BY nome")
+        planos = cur.fetchall()
+        cur.execute("SELECT * FROM pools ORDER BY nome")
+        pools = cur.fetchall()
+
+    if request.method == "GET":
+        conn.close()
+        return render_template("importar_clientes.html", planos=planos, pools=pools)
+
+    # POST — processa o CSV
+    arquivo = request.files.get("arquivo")
+    plano_id = request.form.get("plano_id", "").strip()
+    pool_id = request.form.get("pool_id", "").strip()
+
+    if not arquivo or not arquivo.filename:
+        flash("Selecione um arquivo CSV.", "danger")
+        conn.close()
+        return render_template("importar_clientes.html", planos=planos, pools=pools)
+
+    if not plano_id:
+        flash("Selecione um plano padrão para a importação.", "danger")
+        conn.close()
+        return render_template("importar_clientes.html", planos=planos, pools=pools)
+
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM planos WHERE id = %s", (plano_id,))
+        plano_obj = cur.fetchone()
+
+    if not plano_obj:
+        flash("Plano não encontrado.", "danger")
+        conn.close()
+        return render_template("importar_clientes.html", planos=planos, pools=pools)
+
+    pool_id_val = int(pool_id) if pool_id else None
+
+    # Lê o CSV
+    try:
+        conteudo = arquivo.read().decode("utf-8-sig")  # utf-8-sig remove BOM se houver
+    except UnicodeDecodeError:
+        try:
+            arquivo.seek(0)
+            conteudo = arquivo.read().decode("latin-1")
+        except Exception:
+            flash("Não foi possível ler o arquivo. Use UTF-8 ou Latin-1.", "danger")
+            conn.close()
+            return render_template("importar_clientes.html", planos=planos, pools=pools)
+
+    reader = csv.DictReader(io.StringIO(conteudo))
+
+    # Detecta automaticamente as colunas nome e cpf (case-insensitive)
+    if not reader.fieldnames:
+        flash("CSV vazio ou sem cabeçalho.", "danger")
+        conn.close()
+        return render_template("importar_clientes.html", planos=planos, pools=pools)
+
+    col_map = {c.strip().lower(): c for c in reader.fieldnames}
+    col_nome = col_map.get("nome") or col_map.get("name") or col_map.get("cliente")
+    col_cpf  = col_map.get("cpf") or col_map.get("documento") or col_map.get("cpf/cnpj")
+
+    if not col_nome or not col_cpf:
+        flash(
+            f"Colunas obrigatórias não encontradas. O CSV deve ter colunas 'nome' e 'cpf'. "
+            f"Colunas encontradas: {', '.join(reader.fieldnames)}",
+            "danger"
+        )
+        conn.close()
+        return render_template("importar_clientes.html", planos=planos, pools=pools)
+
+    resultados = []  # lista de dicts com o resultado de cada linha
+    importados = 0
+    ignorados = 0
+    erros = 0
+
+    for i, row in enumerate(reader, start=2):  # começa em 2 pois linha 1 é cabeçalho
+        nome = (row.get(col_nome) or "").strip()
+        cpf  = re.sub(r"\D", "", row.get(col_cpf) or "")
+
+        if not nome or not cpf:
+            resultados.append({"linha": i, "nome": nome or "—", "cpf": cpf or "—",
+                                "status": "erro", "detalhe": "Nome ou CPF vazio"})
+            erros += 1
+            continue
+
+        if len(cpf) != 11:
+            resultados.append({"linha": i, "nome": nome, "cpf": cpf,
+                                "status": "erro", "detalhe": f"CPF inválido ({len(cpf)} dígitos)"})
+            erros += 1
+            continue
+
+        # Verifica se CPF já existe
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM clientes WHERE cpf = %s", (cpf,))
+            if cur.fetchone():
+                resultados.append({"linha": i, "nome": nome, "cpf": cpf,
+                                    "status": "ignorado", "detalhe": "CPF já cadastrado"})
+                ignorados += 1
+                continue
+
+        # Consulta SGP
+        contrato = consultar_sgp(cpf)
+        pppoe_login = None
+        status = "pendente"
+        ip = ""
+
+        if contrato:
+            pppoe_login = contrato.get("contratoCentralLogin")
+            status = status_from_sgp(contrato)
+            ip = contrato.get("servico_ip") or ""
+
+        # Auto-alocar IP do pool se necessário
+        if not ip and pool_id_val:
+            ip = alocar_ip_do_pool(conn, pool_id_val) or ""
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO clientes (nome, cpf, ip, plano, velocidade_down, velocidade_up,
+                       plano_id, pool_id, pppoe_login, status, ultimo_sync_em)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+                    (nome, cpf, ip, plano_obj["nome"],
+                     plano_obj["velocidade_down"], plano_obj["velocidade_up"],
+                     int(plano_id), pool_id_val, pppoe_login, status),
+                )
+            conn.commit()
+
+            if pppoe_login:
+                upsert_radius_user(conn, pppoe_login, status,
+                                   plano_obj["velocidade_down"], plano_obj["velocidade_up"], ip)
+
+            detalhe = f"SGP: {status}" if contrato else "Sem resposta do SGP — pendente"
+            resultados.append({"linha": i, "nome": nome, "cpf": cpf,
+                                "status": "ok", "detalhe": detalhe,
+                                "pppoe": pppoe_login or "—"})
+            importados += 1
+
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            resultados.append({"linha": i, "nome": nome, "cpf": cpf,
+                                "status": "ignorado", "detalhe": "Login PPPoE duplicado"})
+            ignorados += 1
+        except Exception as e:
+            conn.rollback()
+            resultados.append({"linha": i, "nome": nome, "cpf": cpf,
+                                "status": "erro", "detalhe": str(e)})
+            erros += 1
+
+    conn.close()
+    return render_template(
+        "importar_clientes.html",
+        planos=planos, pools=pools,
+        resultados=resultados,
+        resumo={"importados": importados, "ignorados": ignorados, "erros": erros},
+    )
 
 
 @app.route("/backup")

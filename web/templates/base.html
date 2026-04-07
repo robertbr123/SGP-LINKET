@@ -341,6 +341,9 @@
         <a href="{{ url_for('novo_cliente') }}" class="{{ 'active' if request.endpoint == 'novo_cliente' }}">
             <i class="bi bi-person-plus-fill"></i> Novo Cliente
         </a>
+        <a href="{{ url_for('importar_clientes') }}" class="{{ 'active' if request.endpoint == 'importar_clientes' }}">
+            <i class="bi bi-file-earmark-arrow-up-fill"></i> Importar CSV
+        </a>
 
         <div class="nav-label">Configurações</div>
         <a href="{{ url_for('gerenciar_planos') }}" class="{{ 'active' if request.endpoint == 'gerenciar_planos' }}">
