@@ -567,7 +567,7 @@
         <div class="noc-logo">
             <i class="bi bi-cpu-fill"></i>
             SGP-NOC
-            <div class="live-dot"></div>
+            <div class="live-dot" id="liveDot"></div>
         </div>
 
         <div class="nas-pill-group">
@@ -1050,7 +1050,9 @@ function updateSfpCard(sfp) {
     txHistory.push(txBps); txHistory.shift();
     if (trafficChart) trafficChart.update();
 
-    const isUp = sfp.running && !sfp.disabled;
+    const isRunning = sfp.running === true || sfp.running === 'true';
+    const isDisabled = sfp.disabled === true || sfp.disabled === 'true';
+    const isUp = isRunning && !isDisabled;
     document.getElementById('sfpStatusBadge').innerHTML = isUp
         ? '<span class="ios-badge badge-up"><i class="bi bi-check-circle-fill"></i> LINK UP</span>'
         : '<span class="ios-badge badge-down"><i class="bi bi-x-circle-fill"></i> LINK DOWN</span>';
@@ -1104,19 +1106,67 @@ function updateResources(res, ppp, nas, clock) {
 // ──────────────────────────────────────────────
 // POLL API
 // ──────────────────────────────────────────────
+function setApiStatus(ok, msg) {
+    const dot = document.getElementById('liveDot');
+    const upd = document.getElementById('lastUpdate');
+    if (!dot) return;
+    if (ok) {
+        dot.style.background = 'var(--ios-green)';
+        dot.title = 'Conectado';
+        upd.style.color = 'var(--text-tertiary)';
+    } else {
+        dot.style.background = 'var(--ios-red)';
+        dot.style.boxShadow = '0 0 0 3px rgba(255,69,58,0.3)';
+        dot.title = msg || 'Erro API';
+        upd.textContent = '⚠ ' + (msg || 'Erro');
+        upd.style.color = 'var(--ios-red)';
+    }
+}
+
 async function loadOverview() {
     if (!currentNasId) return;
     try {
         const res = await fetch(`/api/monitor/${currentNasId}/overview`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro API');
+        let data;
+        try { data = await res.json(); }
+        catch(e) { setApiStatus(false, 'Resposta inválida (não JSON)'); return; }
+
+        if (!res.ok) {
+            setApiStatus(false, data.error || `HTTP ${res.status}`);
+            showApiError(data.error || `Erro HTTP ${res.status}`);
+            return;
+        }
+
+        console.debug('[NOC] overview:', data);
+
+        hideApiError();
         updateSfpCard(data.sfp_interface);
         updateResources(data.resource, data.ppp_active_count, data.nas, data.clock);
         renderDhcp(data.dhcp_clients);
+        setApiStatus(true);
         document.getElementById('lastUpdate').textContent = fmtTime();
     } catch (err) {
+        setApiStatus(false, err.message);
+        showApiError(err.message);
         console.error('Poll Error:', err);
     }
+}
+
+function showApiError(msg) {
+    let el = document.getElementById('apiErrorBanner');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'apiErrorBanner';
+        el.style.cssText = 'background:rgba(255,69,58,0.12);border:1px solid rgba(255,69,58,0.3);border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;font-size:0.8rem;font-weight:600;color:var(--ios-red);';
+        el.innerHTML = `<i class="bi bi-exclamation-triangle-fill" style="font-size:1.1rem"></i><div><div style="font-weight:800">Falha ao conectar ao MikroTik</div><div id="apiErrorMsg" style="color:rgba(255,255,255,0.5);font-weight:500;margin-top:2px;font-size:0.72rem"></div></div><button onclick="loadOverview()" style="margin-left:auto;background:rgba(255,69,58,0.2);border:1px solid rgba(255,69,58,0.3);color:var(--ios-red);border-radius:8px;padding:5px 12px;cursor:pointer;font-weight:700;font-size:0.72rem"><i class="bi bi-arrow-clockwise me-1"></i>Tentar novamente</button>`;
+        document.getElementById('cardsGrid').before(el);
+    }
+    document.getElementById('apiErrorMsg').textContent = msg;
+}
+
+function hideApiError() {
+    const el = document.getElementById('apiErrorBanner');
+    if (el) el.remove();
 }
 
 // ──────────────────────────────────────────────
