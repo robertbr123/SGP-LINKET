@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS cpe_devices (
     rx_power FLOAT,                          -- Potência óptica dBm (ONUs GPON)
     ssid VARCHAR(100),
     ssid_5g VARCHAR(100),
+    ssid_24g VARCHAR(100),
     firmware_version VARCHAR(100),
     uptime_seconds INTEGER DEFAULT 0,
     obs TEXT,

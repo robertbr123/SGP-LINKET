@@ -152,9 +152,29 @@ class GenieACSClient:
         self._delete(f"/devices/{encoded}")
 
     def parse_device(self, raw):
-        """Extrai os campos mais importantes de um device GenieACS para exibição."""
+        """Extrai os campos mais importantes de um device GenieACS para exibição.
+        Suporta TR-181 (Device.*), TR-098 (InternetGatewayDevice.*) e DeviceID.*.
+        """
         def gv(obj, *paths, default=None):
-            """Navega no JSON do GenieACS que tem estrutura {_value, _type, _writable...}."""
+            """Navega no JSON do GenieACS {_value, _type, _writable...}."""
+            for path in paths:
+                parts = path.split(".")
+                cur = obj
+                for p in parts:
+                    if not isinstance(cur, dict):
+                        cur = None
+                        break
+                    cur = cur.get(p)
+                if cur is not None:
+                    if isinstance(cur, dict) and "_value" in cur:
+                        v = cur["_value"]
+                        return v if v not in (None, "") else None
+                    if not isinstance(cur, dict):
+                        return cur
+            return default
+
+        def gv_any(obj, *paths, default=None):
+            """Igual a gv mas aceita valor vazio como válido."""
             for path in paths:
                 parts = path.split(".")
                 cur = obj
@@ -170,46 +190,118 @@ class GenieACSClient:
                         return cur
             return default
 
-        dev_id = raw.get("_id", "")
+        def find_ssid_by_index(obj, idx):
+            """Busca SSID em WLANConfiguration.<idx>."""
+            return gv(obj,
+                f"InternetGatewayDevice.LANDevice.1.WLANConfiguration.{idx}.SSID",
+                f"Device.WiFi.SSID.{idx}.SSID",
+                default=None)
+
+        def find_all_ssids(obj):
+            """Varre WLANConfiguration.1-8 e devolve lista de SSIDs não vazios."""
+            ssids = []
+            igd = obj.get("InternetGatewayDevice", {}).get("LANDevice", {}).get("1", {}).get("WLANConfiguration", {})
+            for k, v in igd.items():
+                if k.isdigit() and isinstance(v, dict):
+                    ssid_node = v.get("SSID", {})
+                    val = ssid_node.get("_value", "") if isinstance(ssid_node, dict) else ""
+                    if val:
+                        ssids.append((int(k), val))
+            ssids.sort()
+            return ssids
+
+        dev_id  = raw.get("_id", "")
         dev_info = raw.get("_deviceId", {})
 
-        # Uptime pode vir em segundos ou formato "Xd Xh Xm Xs"
-        uptime_raw = gv(raw, "Device.DeviceInfo.UpTime",
-                            "InternetGatewayDevice.DeviceInfo.UpTime", default=0)
+        # Uptime: alguns firmwares não expõem
+        uptime_raw = gv(raw,
+            "InternetGatewayDevice.DeviceInfo.UpTime",
+            "Device.DeviceInfo.UpTime",
+            default=0)
         try:
-            uptime_sec = int(uptime_raw)
+            uptime_sec = int(uptime_raw or 0)
         except Exception:
             uptime_sec = 0
 
+        # Fabricante: DeviceID.Manufacturer (Intelbras/Huawei) ou DeviceInfo
+        fabricante = (
+            gv(raw, "DeviceID.Manufacturer", default=None)
+            or dev_info.get("_Manufacturer", "")
+            or gv(raw, "InternetGatewayDevice.DeviceInfo.Manufacturer",
+                       "Device.DeviceInfo.Manufacturer", default="")
+        )
+
+        # Firmware
+        firmware = gv(raw,
+            "InternetGatewayDevice.DeviceInfo.SoftwareVersion",
+            "Device.DeviceInfo.SoftwareVersion",
+            default="")
+
+        # IP WAN: PPPoE tem prioridade sobre IP puro
+        ip_wan = (
+            gv(raw, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress", default=None)
+            or gv(raw, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress", default=None)
+            or gv(raw, "Device.IP.Interface.1.IPv4Address.1.IPAddress", default="")
+        ) or ""
+
+        # MAC WAN: PPPoE → Ethernet WAN → fallback
+        mac_wan = (
+            gv(raw, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.MACAddress", default=None)
+            or gv(raw, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANEthernetInterfaceConfig.MACAddress", default=None)
+            or gv(raw, "Device.Ethernet.Interface.1.MACAddress", default="")
+        ) or ""
+
+        # IP LAN
+        ip_lan = (
+            gv(raw, "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.IPInterface.1.IPInterfaceIPAddress", default=None)
+            or gv(raw, "Device.LAN.IPAddress", default="")
+        ) or ""
+
+        # SSIDs — descobre automaticamente quais índices têm valor
+        all_ssids = find_all_ssids(raw)
+        # Intelbras AX1800: índice 1 = 5GHz, índice 6 = 2.4GHz
+        # Lógica: o SSID de menor índice com valor é o "principal",
+        # mas permitimos fallback para índices maiores
+        ssid_main  = all_ssids[0][1] if all_ssids else ""
+        ssid_other = all_ssids[1][1] if len(all_ssids) > 1 else ""
+
+        # Tenta identificar qual é 2.4 e qual é 5G pelo canal (se disponível)
+        # Se não encontrar, usa posição: menor índice = 5G (padrão Intelbras)
+        ssid_5g  = ssid_main
+        ssid_24g = ssid_other
+
+        # Sinal óptico (ONUs GPON)
+        rx_power = (
+            gv(raw, "InternetGatewayDevice.WANDevice.1.X_PON_RxPower", default=None)
+            or gv(raw, "Device.Optical.Interface.1.CurrentPower", default=None)
+        )
+        if rx_power is not None:
+            try:
+                rx_power = float(rx_power)
+            except Exception:
+                rx_power = None
+
+        # Todos os SSIDs para exibição expandida
+        all_ssids_display = [{"idx": s[0], "ssid": s[1]} for s in all_ssids]
+
         return {
-            "genieacs_id": dev_id,
-            "serial": dev_info.get("_SerialNumber", "") or gv(raw, "Device.DeviceInfo.SerialNumber",
-                                                                    "InternetGatewayDevice.DeviceInfo.SerialNumber", default=""),
-            "oui": dev_info.get("_OUI", ""),
-            "modelo": dev_info.get("_ProductClass", "") or gv(raw, "Device.DeviceInfo.ModelName",
-                                                                    "InternetGatewayDevice.DeviceInfo.ModelName", default=""),
-            "fabricante": gv(raw, "Device.DeviceInfo.Manufacturer",
-                                  "InternetGatewayDevice.DeviceInfo.Manufacturer", default=""),
-            "firmware": gv(raw, "Device.DeviceInfo.SoftwareVersion",
-                               "InternetGatewayDevice.DeviceInfo.SoftwareVersion", default=""),
-            "ip_wan": gv(raw, "Device.IP.Interface.1.IPv4Address.1.IPAddress",
-                              "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress",
-                              default=""),
-            "ip_lan": gv(raw, "Device.LAN.IPAddress",
-                              "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.IPInterface.1.IPInterfaceIPAddress",
-                              default=""),
-            "ssid": gv(raw, "Device.WiFi.SSID.1.SSID",
-                            "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID", default=""),
-            "ssid_5g": gv(raw, "Device.WiFi.SSID.5.SSID",
-                               "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID", default=""),
-            "rx_power": gv(raw, "Device.Optical.Interface.1.CurrentPower",
-                               "InternetGatewayDevice.WANDevice.1.X_PON_RxPower", default=None),
-            "uptime_sec": uptime_sec,
-            "online": raw.get("_lastInform") is not None,
-            "last_inform": raw.get("_lastInform", ""),
-            "mac_wan": gv(raw, "Device.Ethernet.Interface.1.MACAddress",
-                              "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANEthernetInterfaceConfig.MACAddress",
-                              default=""),
+            "genieacs_id":  dev_id,
+            "serial":       dev_info.get("_SerialNumber", "") or gv(raw, "InternetGatewayDevice.DeviceInfo.SerialNumber", "Device.DeviceInfo.SerialNumber", default=""),
+            "oui":          dev_info.get("_OUI", ""),
+            "modelo":       dev_info.get("_ProductClass", "") or gv(raw, "InternetGatewayDevice.DeviceInfo.ModelName", "Device.DeviceInfo.ModelName", default=""),
+            "fabricante":   fabricante,
+            "firmware":     firmware,
+            "ip_wan":       ip_wan,
+            "ip_lan":       ip_lan,
+            "mac_wan":      mac_wan,
+            "ssid":         ssid_5g,
+            "ssid_5g":      ssid_5g,
+            "ssid_24g":     ssid_24g,
+            "all_ssids":    all_ssids_display,
+            "rx_power":     rx_power,
+            "uptime_sec":   uptime_sec,
+            "online":       raw.get("_lastInform") is not None,
+            "last_inform":  raw.get("_lastInform", ""),
         }
 
 _genieacs = GenieACSClient()
@@ -2908,6 +3000,7 @@ def _cpe_ensure_table():
                 rx_power FLOAT,
                 ssid VARCHAR(100),
                 ssid_5g VARCHAR(100),
+                ssid_24g VARCHAR(100),
                 firmware_version VARCHAR(100),
                 uptime_seconds INTEGER DEFAULT 0,
                 obs TEXT,
@@ -2916,6 +3009,7 @@ def _cpe_ensure_table():
             );
             CREATE INDEX IF NOT EXISTS cpe_devices_cliente_id  ON cpe_devices(cliente_id);
             CREATE INDEX IF NOT EXISTS cpe_devices_genieacs_id ON cpe_devices(genieacs_id);
+            ALTER TABLE cpe_devices ADD COLUMN IF NOT EXISTS ssid_24g VARCHAR(100);
         """)
     conn.commit()
     conn.close()
@@ -3024,14 +3118,14 @@ def cpe_vincular():
         cur.execute("""
             INSERT INTO cpe_devices
                 (cliente_id, serial_number, mac_address, modelo, fabricante, genieacs_id,
-                 ip_wan, ip_lan, online, ultima_conexao, rx_power, ssid, ssid_5g,
+                 ip_wan, ip_lan, online, ultima_conexao, rx_power, ssid, ssid_5g, ssid_24g,
                  firmware_version, uptime_seconds, obs)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (genieacs_id) DO UPDATE SET
                 cliente_id=EXCLUDED.cliente_id, ip_wan=EXCLUDED.ip_wan,
                 online=EXCLUDED.online, ultima_conexao=EXCLUDED.ultima_conexao,
                 rx_power=EXCLUDED.rx_power, ssid=EXCLUDED.ssid, ssid_5g=EXCLUDED.ssid_5g,
-                firmware_version=EXCLUDED.firmware_version,
+                ssid_24g=EXCLUDED.ssid_24g, firmware_version=EXCLUDED.firmware_version,
                 uptime_seconds=EXCLUDED.uptime_seconds, obs=EXCLUDED.obs,
                 atualizado_em=NOW()
         """, (
@@ -3040,7 +3134,7 @@ def cpe_vincular():
             parsed["ip_wan"], parsed["ip_lan"],
             parsed["online"],
             datetime.now(timezone.utc) if parsed["online"] else None,
-            parsed["rx_power"], parsed["ssid"], parsed["ssid_5g"],
+            parsed["rx_power"], parsed["ssid"], parsed["ssid_5g"], parsed["ssid_24g"],
             parsed["firmware"], parsed["uptime_sec"], obs,
         ))
     conn.commit()
@@ -3115,17 +3209,19 @@ def cpe_set_wifi(cpe_id):
     if not ssid and not password:
         return jsonify({"error": "Informe SSID ou senha."}), 400
 
-    # Monta paths TR-181 e TR-098 para maior compatibilidade
+    # Monta paths TR-098 para Intelbras AX1800:
+    # WLANConfiguration.1 = 5 GHz, WLANConfiguration.6 = 2.4 GHz
+    # Também tenta TR-181 Device.WiFi.* como fallback
     if band == "5":
-        ssid_paths = ["Device.WiFi.SSID.5.SSID",
-                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID"]
-        pass_paths = ["Device.WiFi.AccessPoint.5.Security.KeyPassphrase",
-                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.KeyPassphrase"]
+        ssid_paths = ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID",
+                      "Device.WiFi.SSID.1.SSID"]
+        pass_paths = ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase",
+                      "Device.WiFi.AccessPoint.1.Security.KeyPassphrase"]
     else:
-        ssid_paths = ["Device.WiFi.SSID.1.SSID",
-                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID"]
-        pass_paths = ["Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
-                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase"]
+        ssid_paths = ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.6.SSID",
+                      "Device.WiFi.SSID.6.SSID"]
+        pass_paths = ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.6.KeyPassphrase",
+                      "Device.WiFi.AccessPoint.6.Security.KeyPassphrase"]
 
     params = []
     if ssid:
@@ -3138,7 +3234,7 @@ def cpe_set_wifi(cpe_id):
         # Atualiza SSID no banco local também
         if ssid:
             conn = get_db()
-            col = "ssid_5g" if band == "5" else "ssid"
+            col = "ssid_5g" if band == "5" else "ssid_24g"
             with conn.cursor() as cur:
                 cur.execute(f"UPDATE cpe_devices SET {col}=%s, atualizado_em=NOW() WHERE id=%s", (ssid, cpe_id))
             conn.commit()
@@ -3195,12 +3291,12 @@ def cpe_sync_all():
                     UPDATE cpe_devices SET
                         ip_wan=%s, ip_lan=%s, online=%s,
                         ultima_conexao=CASE WHEN %s THEN NOW() ELSE ultima_conexao END,
-                        rx_power=%s, ssid=%s, ssid_5g=%s,
+                        rx_power=%s, ssid=%s, ssid_5g=%s, ssid_24g=%s,
                         firmware_version=%s, uptime_seconds=%s, atualizado_em=NOW()
                     WHERE id=%s
                 """, (
                     p["ip_wan"], p["ip_lan"], p["online"], p["online"],
-                    p["rx_power"], p["ssid"], p["ssid_5g"],
+                    p["rx_power"], p["ssid"], p["ssid_5g"], p["ssid_24g"],
                     p["firmware"], p["uptime_sec"], cpe["id"],
                 ))
             conn.commit()

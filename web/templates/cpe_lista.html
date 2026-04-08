@@ -5,24 +5,55 @@
 
 {% block extra_css %}
 <style>
+/* === Variáveis iOS — Light (padrão) === */
 :root {
-    --ios-bg: #000; --ios-surface: rgba(28,28,30,0.92);
-    --ios-border: rgba(255,255,255,0.1);
+    --ios-bg: #f2f2f7;
+    --ios-surface: #ffffff;
+    --ios-border: rgba(0,0,0,.1);
+    --ios-blue: #007AFF; --ios-green: #34C759; --ios-red: #FF3B30;
+    --ios-orange: #FF9500; --ios-yellow: #FFCC00;
+    --ios-teal: #32ADE6; --ios-purple: #AF52DE;
+    --t2: rgba(0,0,0,.5); --t3: rgba(0,0,0,.28);
+    --text-primary: #1c1c1e;
+    --card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.05);
+    --input-bg: rgba(0,0,0,.05); --input-border: rgba(0,0,0,.12);
+    --ghost-bg: rgba(0,0,0,.05); --ghost-border: rgba(0,0,0,.12);
+    --offline-dot: rgba(0,0,0,.18);
+    --rx-track: rgba(0,0,0,.08);
+    --modal-bg: #f9f9fb; --modal-border: rgba(0,0,0,.1);
+    --modal-handle: rgba(0,0,0,.15);
+    --device-item-bg: rgba(0,0,0,.04);
+}
+/* === Dark mode === */
+[data-bs-theme="dark"] {
+    --ios-bg: #000;
+    --ios-surface: rgba(28,28,30,.92);
+    --ios-border: rgba(255,255,255,.1);
     --ios-blue: #0A84FF; --ios-green: #30D158; --ios-red: #FF453A;
     --ios-orange: #FF9F0A; --ios-yellow: #FFD60A;
     --ios-teal: #5AC8FA; --ios-purple: #BF5AF2;
-    --t2: rgba(255,255,255,0.55); --t3: rgba(255,255,255,0.3);
+    --t2: rgba(255,255,255,.55); --t3: rgba(255,255,255,.3);
+    --text-primary: #ffffff;
+    --card-shadow: 0 4px 24px rgba(0,0,0,.45);
+    --input-bg: rgba(255,255,255,.06); --input-border: rgba(255,255,255,.1);
+    --ghost-bg: rgba(255,255,255,.07); --ghost-border: rgba(255,255,255,.12);
+    --offline-dot: rgba(255,255,255,.2);
+    --rx-track: rgba(255,255,255,.08);
+    --modal-bg: #1c1c1e; --modal-border: rgba(255,255,255,.1);
+    --modal-handle: rgba(255,255,255,.2);
+    --device-item-bg: rgba(255,255,255,.04);
 }
-body, .main-content { background: var(--ios-bg) !important; color: white; }
+body, .main-content { background: var(--ios-bg) !important; color: var(--text-primary); }
+
 .ios-card {
     background: var(--ios-surface); border: 1px solid var(--ios-border);
-    border-radius: 18px; padding: 18px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+    border-radius: 18px; padding: 18px; box-shadow: var(--card-shadow);
     transition: transform .15s, border-color .15s;
-    position: relative;
+    position: relative; color: var(--text-primary);
 }
-.ios-card:hover { transform: translateY(-2px); border-color: rgba(10,132,255,.25); }
-.ios-card::before {
+.ios-card:hover { transform: translateY(-2px); border-color: rgba(0,122,255,.25); }
+[data-bs-theme="dark"] .ios-card:hover { border-color: rgba(10,132,255,.25); }
+[data-bs-theme="dark"] .ios-card::before {
     content:''; position:absolute; top:0; left:0; right:0; height:1px;
     background: linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);
     border-radius: 18px 18px 0 0;
@@ -34,30 +65,29 @@ body, .main-content { background: var(--ios-bg) !important; color: white; }
 .cpe-row {
     background: var(--ios-surface); border: 1px solid var(--ios-border);
     border-radius: 14px; padding: 14px 18px;
-    display: grid;
-    grid-template-columns: auto 1fr auto auto auto;
+    display: grid; grid-template-columns: auto 1fr auto auto auto;
     align-items: center; gap: 14px;
-    transition: border-color .15s;
-    text-decoration: none; color: inherit;
+    transition: border-color .15s, background .15s;
+    text-decoration: none; color: var(--text-primary);
+    box-shadow: var(--card-shadow);
 }
-.cpe-row:hover { border-color: rgba(10,132,255,.3); background: rgba(10,132,255,.05); }
+.cpe-row:hover { border-color: rgba(0,122,255,.3); background: rgba(0,122,255,.04); }
+[data-bs-theme="dark"] .cpe-row:hover { border-color: rgba(10,132,255,.3); background: rgba(10,132,255,.05); }
 
-.cpe-status-dot {
-    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-}
-.dot-online  { background: var(--ios-green); box-shadow: 0 0 0 3px rgba(48,209,88,.25); animation: pulse-g 2s ease-in-out infinite; }
-.dot-offline { background: rgba(255,255,255,.2); }
-@keyframes pulse-g { 0%,100%{box-shadow:0 0 0 3px rgba(48,209,88,.25)} 50%{box-shadow:0 0 0 6px rgba(48,209,88,.08)} }
+.cpe-status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.dot-online  { background: var(--ios-green); box-shadow: 0 0 0 3px rgba(52,199,89,.25); animation: pulse-g 2s ease-in-out infinite; }
+.dot-offline { background: var(--offline-dot); }
+@keyframes pulse-g { 0%,100%{box-shadow:0 0 0 3px rgba(52,199,89,.25)} 50%{box-shadow:0 0 0 6px rgba(52,199,89,.08)} }
 
 .badge-ios {
     padding: 3px 10px; border-radius: 8px; font-size: .62rem;
     font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
     display: inline-flex; align-items: center; gap: 4px;
 }
-.badge-online  { background: rgba(48,209,88,.12); color: var(--ios-green); border: 1px solid rgba(48,209,88,.25); }
-.badge-offline { background: rgba(255,255,255,.06); color: var(--t2); border: 1px solid rgba(255,255,255,.1); }
-.badge-suspenso { background: rgba(255,69,58,.12); color: var(--ios-red); border: 1px solid rgba(255,69,58,.25); }
-.badge-ativo    { background: rgba(10,132,255,.12); color: var(--ios-blue); border: 1px solid rgba(10,132,255,.25); }
+.badge-online  { background: rgba(52,199,89,.1); color: var(--ios-green); border: 1px solid rgba(52,199,89,.3); }
+.badge-offline { background: var(--ghost-bg); color: var(--t2); border: 1px solid var(--ghost-border); }
+.badge-suspenso { background: rgba(255,59,48,.1); color: var(--ios-red); border: 1px solid rgba(255,59,48,.25); }
+.badge-ativo    { background: rgba(0,122,255,.1); color: var(--ios-blue); border: 1px solid rgba(0,122,255,.25); }
 
 .ios-btn {
     border: none; border-radius: 12px; padding: 9px 18px;
@@ -65,68 +95,79 @@ body, .main-content { background: var(--ios-bg) !important; color: white; }
     display: inline-flex; align-items: center; gap: 7px;
     transition: filter .15s, transform .15s;
 }
-.ios-btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
-.btn-blue { background: var(--ios-blue); color: white; box-shadow: 0 2px 12px rgba(10,132,255,.35); }
-.btn-ghost { background: rgba(255,255,255,.07); color: var(--t2); border: 1px solid rgba(255,255,255,.12); }
+.ios-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.btn-blue { background: var(--ios-blue); color: white; box-shadow: 0 2px 12px rgba(0,122,255,.3); }
+.btn-ghost { background: var(--ghost-bg); color: var(--t2); border: 1px solid var(--ghost-border); }
 
 .search-input {
-    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
-    border-radius: 12px; padding: 9px 14px; color: white;
+    background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius: 12px; padding: 9px 14px; color: var(--text-primary);
     font-size: .85rem; font-weight: 500; outline: none; width: 260px;
 }
-.search-input:focus { border-color: var(--ios-blue); background: rgba(10,132,255,.08); }
+.search-input:focus { border-color: var(--ios-blue); }
 .search-input::placeholder { color: var(--t3); }
 
 .section-label { font-size: .65rem; font-weight: 800; text-transform: uppercase;
     letter-spacing: .12em; color: var(--t2); margin-bottom: 10px; }
 
 .rx-bar-wrap { width: 80px; }
-.rx-bar { height: 3px; border-radius: 10px; background: rgba(255,255,255,.08); margin-top: 3px; overflow: hidden; }
+.rx-bar { height: 3px; border-radius: 10px; background: var(--rx-track); margin-top: 3px; overflow: hidden; }
 .rx-fill { height: 100%; border-radius: 10px; transition: width .5s; }
 
 /* Modal */
-.ios-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7);
+.ios-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45);
     backdrop-filter:blur(8px); z-index:9999; display:flex;
     align-items:flex-end; justify-content:center;
     opacity:0; pointer-events:none; transition:opacity .3s; }
+[data-bs-theme="dark"] .ios-modal-overlay { background: rgba(0,0,0,.7); }
 .ios-modal-overlay.open { opacity:1; pointer-events:all; }
-.ios-modal { background:#1c1c1e; border:1px solid rgba(255,255,255,.1);
+.ios-modal { background: var(--modal-bg); border: 1px solid var(--modal-border);
+    border-top: none;
     border-radius:24px 24px 0 0; width:100%; max-width:560px;
     transform:translateY(100%); transition:transform .4s cubic-bezier(.32,.72,0,1);
-    box-shadow:0 -20px 60px rgba(0,0,0,.7); }
+    box-shadow: 0 -4px 30px rgba(0,0,0,.12); }
+[data-bs-theme="dark"] .ios-modal { box-shadow: 0 -20px 60px rgba(0,0,0,.7); }
 .ios-modal-overlay.open .ios-modal { transform:translateY(0); }
-.modal-handle { width:36px; height:4px; background:rgba(255,255,255,.2);
+.modal-handle { width:36px; height:4px; background: var(--modal-handle);
     border-radius:2px; margin:12px auto 0; }
 .modal-header { padding:16px 24px 0; display:flex; justify-content:space-between; align-items:center; }
-.modal-title { font-size:1.05rem; font-weight:800; color:white; }
-.modal-close { width:28px; height:28px; background:rgba(255,255,255,.1);
-    border:none; border-radius:50%; color:var(--t2); display:flex;
+.modal-title { font-size:1.05rem; font-weight:800; color: var(--text-primary); }
+.modal-close { width:28px; height:28px; background: var(--ghost-bg);
+    border: 1px solid var(--ghost-border); border-radius:50%; color:var(--t2); display:flex;
     align-items:center; justify-content:center; cursor:pointer; font-size:.9rem; }
 .modal-body { padding:18px 24px 28px; }
 .ios-label { font-size:.7rem; font-weight:700; text-transform:uppercase;
     letter-spacing:.08em; color:var(--t2); margin-bottom:5px; }
 .ios-input {
-    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
-    border-radius:11px; padding:9px 14px; color:white; font-size:.85rem;
+    background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius:11px; padding:9px 14px; color: var(--text-primary); font-size:.85rem;
     font-weight:500; width:100%; outline:none; transition:border-color .2s;
 }
-.ios-input:focus { border-color:var(--ios-blue); background:rgba(10,132,255,.08); }
-.ios-select { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
-    border-radius:11px; padding:9px 14px; color:white; font-size:.85rem;
+.ios-input:focus { border-color: var(--ios-blue); }
+.ios-input::placeholder { color: var(--t3); }
+.ios-select { background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius:11px; padding:9px 14px; color: var(--text-primary); font-size:.85rem;
     font-weight:500; width:100%; outline:none; }
-.ios-select option { background:#1c1c1e; }
-.confirm-btn { background:var(--ios-blue); border:none; border-radius:14px;
+.confirm-btn { background: var(--ios-blue); border:none; border-radius:14px;
     padding:13px; color:white; font-size:.88rem; font-weight:800;
     cursor:pointer; width:100%; margin-top:14px;
-    box-shadow:0 4px 16px rgba(10,132,255,.35); transition:filter .2s; }
-.confirm-btn:hover { filter:brightness(1.1); }
+    box-shadow: 0 4px 16px rgba(0,122,255,.3); transition:filter .2s; }
+.confirm-btn:hover { filter:brightness(1.08); }
+
+.device-item {
+    background: var(--device-item-bg); border: 2px solid var(--ghost-border);
+    border-radius:10px; padding:10px 12px; cursor:pointer; transition:all .15s;
+    color: var(--text-primary);
+}
+.device-item-sub { font-size:.68rem; color:var(--t2); margin-top:3px; display:flex; gap:10px; flex-wrap:wrap; }
 
 .empty-state { text-align:center; padding:60px 20px; color:var(--t3); }
 .empty-state i { font-size:3rem; display:block; margin-bottom:12px; }
 
-.genieacs-warn { background:rgba(255,69,58,.1); border:1px solid rgba(255,69,58,.25);
+.genieacs-warn { background:rgba(255,59,48,.08); border:1px solid rgba(255,59,48,.2);
     border-radius:14px; padding:12px 16px; font-size:.8rem;
     color:var(--ios-red); font-weight:600; display:flex; align-items:center; gap:10px; }
+[data-bs-theme="dark"] .genieacs-warn { background:rgba(255,69,58,.1); border-color:rgba(255,69,58,.25); }
 </style>
 {% endblock %}
 
@@ -250,7 +291,7 @@ body, .main-content { background: var(--ios-bg) !important; color: white; }
     {% else %}
     <div class="ios-card empty-state">
         <i class="bi bi-router"></i>
-        <div style="font-size:1rem;font-weight:700;color:white;margin-bottom:6px">Nenhum CPE vinculado</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:6px">Nenhum CPE vinculado</div>
         <div style="font-size:.8rem">Clique em <strong>Vincular CPE</strong> para associar um dispositivo TR-069 a um cliente.</div>
     </div>
     {% endif %}
@@ -318,21 +359,21 @@ function handleOverlayClick(e) {
 
 async function loadGenieacsDevices() {
     const list = document.getElementById('devicesList');
-    list.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:.75rem;padding:8px">Carregando...</div>';
+    list.innerHTML = '<div style="color:var(--t3);font-size:.75rem;padding:8px">Carregando...</div>';
     try {
         const r = await fetch('/api/cpe/genieacs/devices');
         const data = await r.json();
         if (data.error) { list.innerHTML = `<div style="color:var(--ios-red);font-size:.75rem">${data.error}</div>`; return; }
-        if (!data.length) { list.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:.75rem;padding:8px">Nenhum device novo encontrado.</div>'; return; }
+        if (!data.length) { list.innerHTML = '<div style="color:var(--t3);font-size:.75rem;padding:8px">Nenhum device novo encontrado.</div>'; return; }
 
         list.innerHTML = data.map(d => `
             <div onclick="selectDevice('${d.genieacs_id}')"
-                 style="background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;cursor:pointer;transition:all .15s"
-                 onmouseover="this.style.borderColor='rgba(10,132,255,.4)'"
-                 onmouseout="this.style.borderColor='rgba(255,255,255,.07)'"
+                 class="device-item"
+                 onmouseover="this.style.borderColor='var(--ios-blue)'"
+                 onmouseout="this.style.borderColor='var(--ghost-border)'"
                  id="dev_${CSS.escape(d.genieacs_id)}">
-                <div style="font-weight:700;font-size:.82rem;color:white">${d.fabricante || ''} ${d.modelo || d.genieacs_id}</div>
-                <div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">
+                <div style="font-weight:700;font-size:.82rem">${d.fabricante || ''} ${d.modelo || d.genieacs_id}</div>
+                <div class="device-item-sub">
                     ${d.serial ? `<span>Serial: ${d.serial}</span>` : ''}
                     ${d.ip_wan ? `<span>WAN: ${d.ip_wan}</span>` : ''}
                     <span class="${d.online ? 'badge-online' : 'badge-offline'}" style="padding:1px 7px;border-radius:6px;font-size:.6rem">${d.online ? 'Online' : 'Offline'}</span>
@@ -347,9 +388,9 @@ async function loadGenieacsDevices() {
 function selectDevice(id) {
     document.getElementById('genieacsIdInput').value = id;
     document.getElementById('genieacsIdHidden').value = id;
-    document.querySelectorAll('#devicesList > div').forEach(el => el.style.borderColor = 'rgba(255,255,255,.07)');
+    document.querySelectorAll('#devicesList .device-item').forEach(el => el.style.borderColor = 'var(--ghost-border)');
     const el = document.getElementById('dev_' + CSS.escape(id));
-    if (el) el.style.borderColor = 'rgba(10,132,255,.6)';
+    if (el) el.style.borderColor = 'var(--ios-blue)';
 }
 
 function prepareSubmit(e, form) {

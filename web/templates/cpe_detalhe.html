@@ -8,22 +8,59 @@
 
 {% block extra_css %}
 <style>
+/* === Variáveis iOS — Light (padrão) === */
 :root {
-    --ios-bg:#000; --ios-surface:rgba(28,28,30,.92);
-    --ios-border:rgba(255,255,255,.1);
-    --ios-blue:#0A84FF; --ios-green:#30D158; --ios-red:#FF453A;
-    --ios-orange:#FF9F0A; --ios-yellow:#FFD60A;
-    --ios-teal:#5AC8FA; --ios-purple:#BF5AF2;
-    --t2:rgba(255,255,255,.55); --t3:rgba(255,255,255,.3);
+    --ios-bg: #f2f2f7;
+    --ios-surface: #ffffff;
+    --ios-border: rgba(0,0,0,.1);
+    --ios-blue: #007AFF; --ios-green: #34C759; --ios-red: #FF3B30;
+    --ios-orange: #FF9500; --ios-yellow: #FFCC00;
+    --ios-teal: #32ADE6; --ios-purple: #AF52DE;
+    --t2: rgba(0,0,0,.5); --t3: rgba(0,0,0,.28);
+    --text-primary: #1c1c1e;
+    --card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.05);
+    --input-bg: rgba(0,0,0,.05); --input-border: rgba(0,0,0,.12);
+    --ghost-bg: rgba(0,0,0,.05); --ghost-border: rgba(0,0,0,.12);
+    --id-row-bg: rgba(0,0,0,.04); --id-row-border: rgba(0,0,0,.06);
+    --rx-track: rgba(0,0,0,.08);
+    --offline-dot: rgba(0,0,0,.18);
+    --toast-bg: rgba(255,255,255,.97); --toast-border: rgba(0,0,0,.1);
+    --wifi-toggle-bg: rgba(0,0,0,.07);
+    --btn-ghost-bg: rgba(0,0,0,.05); --btn-ghost-border: rgba(0,0,0,.12);
+    --btn-red-bg: rgba(255,59,48,.1); --btn-red-border: rgba(255,59,48,.25);
+    --cliente-card-grad: linear-gradient(135deg,rgba(0,122,255,.08) 0%,rgba(248,248,255,.98) 70%);
 }
-body, .main-content { background: var(--ios-bg) !important; color: white; }
+/* === Dark mode === */
+[data-bs-theme="dark"] {
+    --ios-bg: #000;
+    --ios-surface: rgba(28,28,30,.92);
+    --ios-border: rgba(255,255,255,.1);
+    --ios-blue: #0A84FF; --ios-green: #30D158; --ios-red: #FF453A;
+    --ios-orange: #FF9F0A; --ios-yellow: #FFD60A;
+    --ios-teal: #5AC8FA; --ios-purple: #BF5AF2;
+    --t2: rgba(255,255,255,.55); --t3: rgba(255,255,255,.3);
+    --text-primary: #ffffff;
+    --card-shadow: 0 4px 24px rgba(0,0,0,.45);
+    --input-bg: rgba(255,255,255,.06); --input-border: rgba(255,255,255,.1);
+    --ghost-bg: rgba(255,255,255,.07); --ghost-border: rgba(255,255,255,.12);
+    --id-row-bg: rgba(255,255,255,.04); --id-row-border: rgba(255,255,255,.05);
+    --rx-track: rgba(255,255,255,.08);
+    --offline-dot: rgba(255,255,255,.2);
+    --toast-bg: rgba(28,28,30,.97); --toast-border: rgba(255,255,255,.12);
+    --wifi-toggle-bg: rgba(255,255,255,.07);
+    --btn-ghost-bg: rgba(255,255,255,.07); --btn-ghost-border: rgba(255,255,255,.12);
+    --btn-red-bg: rgba(255,69,58,.15); --btn-red-border: rgba(255,69,58,.3);
+    --cliente-card-grad: linear-gradient(135deg,rgba(10,132,255,.12) 0%,rgba(28,28,30,.95) 70%);
+}
+
+body, .main-content { background: var(--ios-bg) !important; color: var(--text-primary); }
 
 .ios-card {
     background: var(--ios-surface); border: 1px solid var(--ios-border);
     border-radius: 18px; padding: 20px;
-    box-shadow: 0 4px 24px rgba(0,0,0,.45); position: relative;
+    box-shadow: var(--card-shadow); position: relative; color: var(--text-primary);
 }
-.ios-card::before {
+[data-bs-theme="dark"] .ios-card::before {
     content:''; position:absolute; top:0; left:0; right:0; height:1px;
     background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);
     border-radius:18px 18px 0 0;
@@ -38,23 +75,23 @@ body, .main-content { background: var(--ios-bg) !important; color: white; }
 
 .card-label { font-size:.62rem; font-weight:800; text-transform:uppercase;
     letter-spacing:.12em; color:var(--t2); margin-bottom:4px; }
-.card-title { font-size:.95rem; font-weight:700; color:white;
+.card-title { font-size:.95rem; font-weight:700; color:var(--text-primary);
     display:flex; align-items:center; gap:8px; margin-bottom:14px; }
 
 .id-row { display:flex; justify-content:space-between; align-items:center;
-    padding:10px 14px; background:rgba(255,255,255,.04);
-    border:1px solid rgba(255,255,255,.05); border-radius:12px; }
+    padding:10px 14px; background: var(--id-row-bg);
+    border:1px solid var(--id-row-border); border-radius:12px; }
 .id-key { font-size:.65rem; font-weight:700; text-transform:uppercase;
     letter-spacing:.08em; color:var(--t2); }
-.id-val { font-size:.82rem; font-weight:700; color:white; }
+.id-val { font-size:.82rem; font-weight:700; color:var(--text-primary); }
 
 .badge-ios { padding:4px 10px; border-radius:8px; font-size:.62rem;
     font-weight:800; text-transform:uppercase; letter-spacing:.06em;
     display:inline-flex; align-items:center; gap:4px; }
-.badge-online  { background:rgba(48,209,88,.15); color:var(--ios-green); border:1px solid rgba(48,209,88,.25); }
-.badge-offline { background:rgba(255,255,255,.06); color:var(--t2); border:1px solid rgba(255,255,255,.1); }
-.badge-ativo   { background:rgba(10,132,255,.12); color:var(--ios-blue); border:1px solid rgba(10,132,255,.25); }
-.badge-suspenso{ background:rgba(255,69,58,.12); color:var(--ios-red); border:1px solid rgba(255,69,58,.25); }
+.badge-online  { background:rgba(52,199,89,.1); color:var(--ios-green); border:1px solid rgba(52,199,89,.3); }
+.badge-offline { background: var(--ghost-bg); color:var(--t2); border:1px solid var(--ghost-border); }
+.badge-ativo   { background:rgba(0,122,255,.1); color:var(--ios-blue); border:1px solid rgba(0,122,255,.25); }
+.badge-suspenso{ background:rgba(255,59,48,.1); color:var(--ios-red); border:1px solid rgba(255,59,48,.25); }
 
 .action-btn {
     width:100%; border:none; border-radius:14px; padding:13px;
@@ -62,54 +99,57 @@ body, .main-content { background: var(--ios-bg) !important; color: white; }
     display:flex; align-items:center; justify-content:center; gap:8px;
     transition:filter .15s, transform .15s; margin-bottom:8px;
 }
-.action-btn:hover { filter:brightness(1.1); transform:translateY(-1px); }
+.action-btn:hover { filter:brightness(1.08); transform:translateY(-1px); }
 .action-btn:last-child { margin-bottom:0; }
-.btn-blue   { background:var(--ios-blue); color:white; box-shadow:0 2px 12px rgba(10,132,255,.3); }
-.btn-orange { background:var(--ios-orange); color:white; box-shadow:0 2px 12px rgba(255,159,10,.3); }
-.btn-red    { background:rgba(255,69,58,.15); color:var(--ios-red); border:1px solid rgba(255,69,58,.3); }
-.btn-ghost  { background:rgba(255,255,255,.07); color:var(--t2); border:1px solid rgba(255,255,255,.12); }
+.btn-blue   { background:var(--ios-blue); color:white; box-shadow:0 2px 12px rgba(0,122,255,.3); }
+.btn-orange { background:var(--ios-orange); color:white; box-shadow:0 2px 12px rgba(255,149,0,.3); }
+.btn-red    { background: var(--btn-red-bg); color:var(--ios-red); border:1px solid var(--btn-red-border); }
+.btn-ghost  { background: var(--btn-ghost-bg); color:var(--t2); border:1px solid var(--btn-ghost-border); }
 
 /* RX Power gauge */
 .rx-gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:10px 0; }
 .rx-gauge-val { font-size:2.8rem; font-weight:900; letter-spacing:-.03em; }
-.rx-gauge-unit { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; }
-.rx-bar-h { height:6px; border-radius:10px; background:rgba(255,255,255,.08);
+.rx-gauge-unit { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--t2); }
+.rx-bar-h { height:6px; border-radius:10px; background: var(--rx-track);
     margin:10px 0; overflow:hidden; }
 .rx-fill-h { height:100%; border-radius:10px; transition:width .6s; }
 
 /* Wi-Fi card */
-.wifi-band-toggle { display:flex; background:rgba(255,255,255,.07);
+.wifi-band-toggle { display:flex; background: var(--wifi-toggle-bg);
     border-radius:12px; padding:3px; gap:3px; margin-bottom:14px; }
 .wifi-band-btn { flex:1; border:none; border-radius:9px; padding:7px;
     font-size:.72rem; font-weight:700; cursor:pointer;
     background:none; color:var(--t2); transition:all .2s; }
-.wifi-band-btn.active { background:rgba(10,132,255,.9); color:white; }
+.wifi-band-btn.active { background:rgba(0,122,255,.9); color:white; }
+[data-bs-theme="dark"] .wifi-band-btn.active { background:rgba(10,132,255,.9); }
 
-.ios-input { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
-    border-radius:11px; padding:9px 14px; color:white; font-size:.85rem;
+.ios-input { background: var(--input-bg); border:1px solid var(--input-border);
+    border-radius:11px; padding:9px 14px; color:var(--text-primary); font-size:.85rem;
     font-weight:500; width:100%; outline:none; transition:border-color .2s; }
-.ios-input:focus { border-color:var(--ios-blue); background:rgba(10,132,255,.08); }
+.ios-input:focus { border-color:var(--ios-blue); }
 .ios-input::placeholder { color:var(--t3); }
 
 /* Cliente card */
-.cliente-card { background:linear-gradient(135deg,rgba(10,132,255,.12) 0%,rgba(28,28,30,.95) 70%); }
+.cliente-card { background: var(--cliente-card-grad); }
 
 /* Live dot */
 .live-dot { width:8px; height:8px; border-radius:50%;
-    background:var(--ios-green); box-shadow:0 0 0 3px rgba(48,209,88,.25);
+    background:var(--ios-green); box-shadow:0 0 0 3px rgba(52,199,89,.25);
     animation:pulse-g 2s ease-in-out infinite; flex-shrink:0; }
-.live-dot.offline { background:rgba(255,255,255,.2); animation:none; box-shadow:none; }
-@keyframes pulse-g { 0%,100%{box-shadow:0 0 0 3px rgba(48,209,88,.25)} 50%{box-shadow:0 0 0 6px rgba(48,209,88,.08)} }
+.live-dot.offline { background: var(--offline-dot); animation:none; box-shadow:none; }
+@keyframes pulse-g { 0%,100%{box-shadow:0 0 0 3px rgba(52,199,89,.25)} 50%{box-shadow:0 0 0 6px rgba(52,199,89,.08)} }
 
-.genieacs-warn { background:rgba(255,69,58,.1); border:1px solid rgba(255,69,58,.25);
+.genieacs-warn { background:rgba(255,59,48,.08); border:1px solid rgba(255,59,48,.2);
     border-radius:14px; padding:12px 16px; font-size:.8rem;
     color:var(--ios-red); font-weight:600; display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+[data-bs-theme="dark"] .genieacs-warn { background:rgba(255,69,58,.1); border-color:rgba(255,69,58,.25); }
 
 .toast-container { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
-.toast-msg { background:rgba(28,28,30,.97); border:1px solid rgba(255,255,255,.12);
+.toast-msg { background: var(--toast-bg); border:1px solid var(--toast-border);
     border-radius:14px; padding:13px 18px; font-size:.82rem; font-weight:600;
-    color:white; box-shadow:0 8px 32px rgba(0,0,0,.5);
+    color:var(--text-primary); box-shadow:0 8px 32px rgba(0,0,0,.2);
     animation:slideUp .3s ease; max-width:340px; display:flex; align-items:center; gap:10px; }
+[data-bs-theme="dark"] .toast-msg { box-shadow: 0 8px 32px rgba(0,0,0,.5); }
 .toast-ok { border-left:3px solid var(--ios-green); }
 .toast-err{ border-left:3px solid var(--ios-red); }
 @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
@@ -283,8 +323,8 @@ body, .main-content { background: var(--ios-bg) !important; color: white; }
             <div style="display:flex;flex-direction:column;gap:10px">
                 <div>
                     <div class="card-label">SSID atual</div>
-                    <div style="font-size:.9rem;font-weight:700;color:white" id="currentSsid">
-                        {{ (live.ssid if live) or cpe.ssid or '—' }}
+                    <div style="font-size:.9rem;font-weight:700;color:var(--text-primary)" id="currentSsid">
+                        {{ (live.ssid_24g if live and live.ssid_24g) or cpe.ssid_24g or (live.ssid if live) or cpe.ssid or '—' }}
                     </div>
                 </div>
                 <div>
@@ -343,8 +383,8 @@ function selectBand(b) {
     selectedBand = b;
     document.getElementById('band24Btn').classList.toggle('active', b === '2.4');
     document.getElementById('band5Btn').classList.toggle('active', b === '5');
-    const ssid5 = {{ (live.ssid_5g if live and live.ssid_5g) or cpe.ssid_5g | tojson }};
-    const ssid24 = {{ (live.ssid if live and live.ssid) or cpe.ssid | tojson }};
+    const ssid5  = {{ ((live.ssid_5g if live and live.ssid_5g) or cpe.ssid_5g or '') | tojson }};
+    const ssid24 = {{ ((live.ssid_24g if live and live.ssid_24g) or cpe.ssid_24g or (live.ssid if live) or cpe.ssid or '') | tojson }};
     document.getElementById('currentSsid').textContent = b === '5' ? (ssid5 || '—') : (ssid24 || '—');
 }
 
