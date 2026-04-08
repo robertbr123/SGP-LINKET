@@ -151,6 +151,73 @@ class GenieACSClient:
         encoded = urllib.parse.quote(device_id, safe="")
         self._delete(f"/devices/{encoded}")
 
+    def parse_lan_hosts(self, raw):
+        """Extrai lista de hosts LAN do device (TR-098 e TR-181).
+        Retorna lista de dicts: {hostname, ip, mac, active, iface}
+        """
+        hosts = []
+
+        # TR-098: InternetGatewayDevice.LANDevice.1.Hosts.Host.{n}.*
+        try:
+            host_root = (
+                raw.get("InternetGatewayDevice", {})
+                   .get("LANDevice", {})
+                   .get("1", {})
+                   .get("Hosts", {})
+                   .get("Host", {})
+            )
+            for idx, h in host_root.items():
+                if not idx.isdigit() or not isinstance(h, dict):
+                    continue
+                def _v(node, key):
+                    n = node.get(key, {})
+                    return n.get("_value", "") if isinstance(n, dict) else (n or "")
+                ip  = _v(h, "IPAddress")
+                mac = _v(h, "MACAddress")
+                if not ip and not mac:
+                    continue
+                hosts.append({
+                    "hostname": _v(h, "HostName") or "*",
+                    "ip":       ip,
+                    "mac":      mac.upper(),
+                    "active":   bool(_v(h, "Active")),
+                    "iface":    _v(h, "InterfaceType") or "",
+                })
+        except Exception:
+            pass
+
+        # TR-181 fallback: Device.Hosts.Host.{n}.*
+        if not hosts:
+            try:
+                host_root = (
+                    raw.get("Device", {})
+                       .get("Hosts", {})
+                       .get("Host", {})
+                )
+                for idx, h in host_root.items():
+                    if not idx.isdigit() or not isinstance(h, dict):
+                        continue
+                    def _v(node, key):
+                        n = node.get(key, {})
+                        return n.get("_value", "") if isinstance(n, dict) else (n or "")
+                    ip  = _v(h, "IPAddress")
+                    mac = _v(h, "PhysAddress")
+                    if not ip and not mac:
+                        continue
+                    hosts.append({
+                        "hostname": _v(h, "HostName") or "*",
+                        "ip":       ip,
+                        "mac":      mac.upper(),
+                        "active":   bool(_v(h, "Active")),
+                        "iface":    _v(h, "InterfaceType") or "",
+                    })
+            except Exception:
+                pass
+
+        # ordena: ativos primeiro, depois por IP
+        hosts.sort(key=lambda x: (not x["active"], x["ip"]))
+        return hosts
+
     def parse_device(self, raw):
         """Extrai os campos mais importantes de um device GenieACS para exibição.
         Suporta TR-181 (Device.*), TR-098 (InternetGatewayDevice.*) e DeviceID.*.
@@ -3259,6 +3326,25 @@ def cpe_api_status(cpe_id):
             return jsonify({"online": False})
         parsed = _genieacs.parse_device(raw)
         return jsonify(parsed)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cpe/<int:cpe_id>/hosts")
+@login_required
+def cpe_api_hosts(cpe_id):
+    """Retorna lista de hosts LAN do CPE via GenieACS."""
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        return jsonify({"error": "CPE não encontrado"}), 404
+    if not _genieacs.ping():
+        return jsonify({"error": "GenieACS indisponível"}), 503
+    try:
+        raw = _genieacs.get_device(cpe["genieacs_id"])
+        if not raw:
+            return jsonify({"hosts": [], "total": 0})
+        hosts = _genieacs.parse_lan_hosts(raw)
+        return jsonify({"hosts": hosts, "total": len(hosts), "active": sum(1 for h in hosts if h["active"])})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

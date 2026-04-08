@@ -153,6 +153,25 @@ body, .main-content { background: var(--ios-bg) !important; color: var(--text-pr
 .toast-ok { border-left:3px solid var(--ios-green); }
 .toast-err{ border-left:3px solid var(--ios-red); }
 @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Hosts table */
+.hosts-table { width:100%; border-collapse:collapse; font-size:.78rem; }
+.hosts-table th { font-size:.6rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.1em; color:var(--t2); padding:6px 10px; text-align:left;
+    border-bottom:1px solid var(--ios-border); }
+.hosts-table td { padding:9px 10px; border-bottom:1px solid var(--id-row-border);
+    color:var(--text-primary); vertical-align:middle; }
+.hosts-table tr:last-child td { border-bottom:none; }
+.hosts-table tr:hover td { background: var(--id-row-bg); }
+.host-dot { width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; flex-shrink:0; }
+.host-dot.on  { background:var(--ios-green); box-shadow:0 0 0 2px rgba(52,199,89,.2); }
+.host-dot.off { background:var(--offline-dot); }
+.host-mac { font-family:monospace; font-size:.68rem; color:var(--t2); }
+.host-iface { font-size:.6rem; padding:2px 7px; border-radius:6px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.05em; }
+.iface-wifi { background:rgba(0,122,255,.1); color:var(--ios-blue); }
+.iface-eth  { background:rgba(50,173,230,.1); color:var(--ios-teal); }
 </style>
 {% endblock %}
 
@@ -341,6 +360,21 @@ body, .main-content { background: var(--ios-bg) !important; color: var(--text-pr
             </div>
         </div>
 
+        <!-- Card: Dispositivos na Rede LAN -->
+        <div class="ios-card span-2" id="hostsCard">
+            <div class="card-label">Wi-Fi / LAN</div>
+            <div class="card-title" style="justify-content:space-between">
+                <span><i class="bi bi-people-fill" style="color:var(--ios-teal)"></i> Dispositivos Conectados</span>
+                <span id="hostsCount" style="font-size:.75rem;font-weight:700;color:var(--t2)">—</span>
+            </div>
+            <div id="hostsList">
+                <div style="text-align:center;padding:20px;color:var(--t3);font-size:.8rem">
+                    <i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite;display:block;font-size:1.5rem;margin-bottom:8px"></i>
+                    Carregando dispositivos...
+                </div>
+            </div>
+        </div>
+
         <!-- Card: Ações Remotas -->
         <div class="ios-card">
             <div class="card-label">Controle</div>
@@ -484,6 +518,70 @@ function fmtUptime(sec) {
 if (LIVE_OK && GEN_ID) {
     pollStatus();
     setInterval(pollStatus, 10000);
+    loadHosts();
+    setInterval(loadHosts, 30000);
+}
+
+async function loadHosts() {
+    if (!LIVE_OK || !GEN_ID) return;
+    const list = document.getElementById('hostsList');
+    const countEl = document.getElementById('hostsCount');
+    try {
+        const r = await fetch(`/api/cpe/${CPE_ID}/hosts`);
+        const d = await r.json();
+        if (d.error) {
+            list.innerHTML = `<div style="color:var(--ios-red);font-size:.78rem;padding:10px">${d.error}</div>`;
+            return;
+        }
+        const hosts = d.hosts || [];
+        countEl.textContent = `${d.active} ativos · ${d.total} total`;
+
+        if (!hosts.length) {
+            list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3);font-size:.78rem">Nenhum dispositivo detectado.</div>';
+            return;
+        }
+
+        const ifaceClass = (iface) => {
+            if (!iface) return '';
+            const i = iface.toLowerCase();
+            if (i.includes('802.11') || i.includes('wifi') || i.includes('wireless')) return 'iface-wifi';
+            if (i.includes('eth') || i.includes('lan')) return 'iface-eth';
+            return '';
+        };
+        const ifaceLabel = (iface) => {
+            if (!iface) return '';
+            const i = iface.toLowerCase();
+            if (i.includes('802.11') || i.includes('wifi') || i.includes('wireless')) return 'Wi-Fi';
+            if (i.includes('eth')) return 'Ethernet';
+            return iface;
+        };
+
+        list.innerHTML = `
+            <table class="hosts-table">
+                <thead>
+                    <tr>
+                        <th>Dispositivo</th>
+                        <th>IP</th>
+                        <th>MAC</th>
+                        <th>Interface</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${hosts.map(h => `
+                    <tr>
+                        <td>
+                            <span class="host-dot ${h.active ? 'on' : 'off'}"></span>
+                            <strong>${h.hostname}</strong>
+                        </td>
+                        <td style="font-family:monospace">${h.ip || '—'}</td>
+                        <td class="host-mac">${h.mac || '—'}</td>
+                        <td>${h.iface ? `<span class="host-iface ${ifaceClass(h.iface)}">${ifaceLabel(h.iface)}</span>` : '—'}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    } catch(e) {
+        list.innerHTML = `<div style="color:var(--ios-red);font-size:.78rem;padding:10px">${e.message}</div>`;
+    }
 }
 </script>
 {% endblock %}
