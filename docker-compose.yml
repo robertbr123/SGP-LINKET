@@ -267,6 +267,12 @@ services:
     restart: unless-stopped
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     networks:
       - radius_net
 
@@ -284,9 +290,10 @@ services:
       GENIEACS_CWMP_PORT: "7547"
       GENIEACS_CWMP_INTERFACE: "0.0.0.0"
     ports:
-      - "7547:7547"           # CPEs conectam aqui via HTTP/TR-069
+      - "7547:7547"
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - radius_net
 
@@ -303,9 +310,10 @@ services:
       GENIEACS_NBI_PORT: "7557"
       GENIEACS_NBI_INTERFACE: "0.0.0.0"
     ports:
-      - "7557:7557"           # REST API usada pelo SGP-LINKET
+      - "7557:7557"
     depends_on:
-      - genieacs-cwmp
+      mongodb:
+        condition: service_healthy
     networks:
       - radius_net
 
@@ -322,9 +330,10 @@ services:
       GENIEACS_UI_PORT: "3000"
       GENIEACS_UI_JWT_SECRET: ${SECRET_KEY:-troque-esta-chave-secreta}
     ports:
-      - "3001:3000"           # Painel web do GenieACS (admin técnico)
+      - "3001:3000"
     depends_on:
-      - genieacs-cwmp
+      mongodb:
+        condition: service_healthy
     networks:
       - radius_net
 
