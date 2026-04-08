@@ -1,0 +1,449 @@
+{% extends "base.html" %}
+{% block title %}CPE — {{ cpe.cliente_nome }}{% endblock %}
+{% block page_title %}CPE / TR-069{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('cpe_lista') }}">CPE / TR-069</a></li>
+<li class="breadcrumb-item active">{{ cpe.cliente_nome }}</li>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ios-bg:#000; --ios-surface:rgba(28,28,30,.92);
+    --ios-border:rgba(255,255,255,.1);
+    --ios-blue:#0A84FF; --ios-green:#30D158; --ios-red:#FF453A;
+    --ios-orange:#FF9F0A; --ios-yellow:#FFD60A;
+    --ios-teal:#5AC8FA; --ios-purple:#BF5AF2;
+    --t2:rgba(255,255,255,.55); --t3:rgba(255,255,255,.3);
+}
+body, .main-content { background: var(--ios-bg) !important; color: white; }
+
+.ios-card {
+    background: var(--ios-surface); border: 1px solid var(--ios-border);
+    border-radius: 18px; padding: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.45); position: relative;
+}
+.ios-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:1px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);
+    border-radius:18px 18px 0 0;
+}
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+.span-2 { grid-column: span 2; }
+@media(max-width:700px){ .span-2 { grid-column: span 1; } }
+
+.card-label { font-size:.62rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.12em; color:var(--t2); margin-bottom:4px; }
+.card-title { font-size:.95rem; font-weight:700; color:white;
+    display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+
+.id-row { display:flex; justify-content:space-between; align-items:center;
+    padding:10px 14px; background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.05); border-radius:12px; }
+.id-key { font-size:.65rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--t2); }
+.id-val { font-size:.82rem; font-weight:700; color:white; }
+
+.badge-ios { padding:4px 10px; border-radius:8px; font-size:.62rem;
+    font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+    display:inline-flex; align-items:center; gap:4px; }
+.badge-online  { background:rgba(48,209,88,.15); color:var(--ios-green); border:1px solid rgba(48,209,88,.25); }
+.badge-offline { background:rgba(255,255,255,.06); color:var(--t2); border:1px solid rgba(255,255,255,.1); }
+.badge-ativo   { background:rgba(10,132,255,.12); color:var(--ios-blue); border:1px solid rgba(10,132,255,.25); }
+.badge-suspenso{ background:rgba(255,69,58,.12); color:var(--ios-red); border:1px solid rgba(255,69,58,.25); }
+
+.action-btn {
+    width:100%; border:none; border-radius:14px; padding:13px;
+    font-size:.82rem; font-weight:800; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:filter .15s, transform .15s; margin-bottom:8px;
+}
+.action-btn:hover { filter:brightness(1.1); transform:translateY(-1px); }
+.action-btn:last-child { margin-bottom:0; }
+.btn-blue   { background:var(--ios-blue); color:white; box-shadow:0 2px 12px rgba(10,132,255,.3); }
+.btn-orange { background:var(--ios-orange); color:white; box-shadow:0 2px 12px rgba(255,159,10,.3); }
+.btn-red    { background:rgba(255,69,58,.15); color:var(--ios-red); border:1px solid rgba(255,69,58,.3); }
+.btn-ghost  { background:rgba(255,255,255,.07); color:var(--t2); border:1px solid rgba(255,255,255,.12); }
+
+/* RX Power gauge */
+.rx-gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:10px 0; }
+.rx-gauge-val { font-size:2.8rem; font-weight:900; letter-spacing:-.03em; }
+.rx-gauge-unit { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; }
+.rx-bar-h { height:6px; border-radius:10px; background:rgba(255,255,255,.08);
+    margin:10px 0; overflow:hidden; }
+.rx-fill-h { height:100%; border-radius:10px; transition:width .6s; }
+
+/* Wi-Fi card */
+.wifi-band-toggle { display:flex; background:rgba(255,255,255,.07);
+    border-radius:12px; padding:3px; gap:3px; margin-bottom:14px; }
+.wifi-band-btn { flex:1; border:none; border-radius:9px; padding:7px;
+    font-size:.72rem; font-weight:700; cursor:pointer;
+    background:none; color:var(--t2); transition:all .2s; }
+.wifi-band-btn.active { background:rgba(10,132,255,.9); color:white; }
+
+.ios-input { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+    border-radius:11px; padding:9px 14px; color:white; font-size:.85rem;
+    font-weight:500; width:100%; outline:none; transition:border-color .2s; }
+.ios-input:focus { border-color:var(--ios-blue); background:rgba(10,132,255,.08); }
+.ios-input::placeholder { color:var(--t3); }
+
+/* Cliente card */
+.cliente-card { background:linear-gradient(135deg,rgba(10,132,255,.12) 0%,rgba(28,28,30,.95) 70%); }
+
+/* Live dot */
+.live-dot { width:8px; height:8px; border-radius:50%;
+    background:var(--ios-green); box-shadow:0 0 0 3px rgba(48,209,88,.25);
+    animation:pulse-g 2s ease-in-out infinite; flex-shrink:0; }
+.live-dot.offline { background:rgba(255,255,255,.2); animation:none; box-shadow:none; }
+@keyframes pulse-g { 0%,100%{box-shadow:0 0 0 3px rgba(48,209,88,.25)} 50%{box-shadow:0 0 0 6px rgba(48,209,88,.08)} }
+
+.genieacs-warn { background:rgba(255,69,58,.1); border:1px solid rgba(255,69,58,.25);
+    border-radius:14px; padding:12px 16px; font-size:.8rem;
+    color:var(--ios-red); font-weight:600; display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+
+.toast-container { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+.toast-msg { background:rgba(28,28,30,.97); border:1px solid rgba(255,255,255,.12);
+    border-radius:14px; padding:13px 18px; font-size:.82rem; font-weight:600;
+    color:white; box-shadow:0 8px 32px rgba(0,0,0,.5);
+    animation:slideUp .3s ease; max-width:340px; display:flex; align-items:center; gap:10px; }
+.toast-ok { border-left:3px solid var(--ios-green); }
+.toast-err{ border-left:3px solid var(--ios-red); }
+@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="padding:20px">
+
+    {% if not genieacs_ok %}
+    <div class="genieacs-warn">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        GenieACS indisponível — exibindo dados do banco local.
+    </div>
+    {% endif %}
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px;flex-wrap:wrap">
+        <div class="live-dot {{ '' if (live and live.online) or cpe.online else 'offline' }}" id="liveDot"></div>
+        <div>
+            <div style="font-size:1.4rem;font-weight:900;letter-spacing:-.02em">{{ cpe.cliente_nome }}</div>
+            <div style="font-size:.75rem;color:var(--t2);margin-top:2px;display:flex;gap:10px;flex-wrap:wrap">
+                {% if cpe.pppoe_login %}<span><i class="bi bi-person-circle" style="color:var(--ios-blue)"></i> {{ cpe.pppoe_login }}</span>{% endif %}
+                {% if cpe.genieacs_id %}<span style="font-family:monospace;font-size:.68rem;color:var(--t3)">{{ cpe.genieacs_id }}</span>{% endif %}
+            </div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <span class="badge-ios {{ 'badge-online' if (live and live.online) or cpe.online else 'badge-offline' }}" id="statusBadge">
+                <i class="bi {{ 'bi-check-circle-fill' if (live and live.online) or cpe.online else 'bi-dash-circle' }}"></i>
+                {{ 'Online' if (live and live.online) or cpe.online else 'Offline' }}
+            </span>
+            <span class="badge-ios {{ 'badge-suspenso' if cpe.cliente_status == 'suspenso' else 'badge-ativo' }}">
+                {{ cpe.cliente_status|capitalize }}
+            </span>
+            <span id="lastPoll" style="font-size:.65rem;color:var(--t3)">—</span>
+        </div>
+    </div>
+
+    <div class="cards-grid">
+
+        <!-- Card: Dados do Cliente (vinculado) -->
+        <div class="ios-card cliente-card">
+            <div class="card-label">Assinante</div>
+            <div class="card-title"><i class="bi bi-person-fill" style="color:var(--ios-blue)"></i> Dados do Cliente</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <div class="id-row">
+                    <span class="id-key">Nome</span>
+                    <span class="id-val">{{ cpe.cliente_nome }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">PPPoE Login</span>
+                    <span class="id-val" style="font-family:monospace">{{ cpe.pppoe_login or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">Plano</span>
+                    <span class="id-val">{{ cpe.plano }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">Velocidade</span>
+                    <span class="id-val">↓{{ cpe.velocidade_down }}M / ↑{{ cpe.velocidade_up }}M</span>
+                </div>
+                {% if cpe.cliente_ip %}
+                <div class="id-row">
+                    <span class="id-key">IP RADIUS</span>
+                    <span class="id-val" style="font-family:monospace">{{ cpe.cliente_ip }}</span>
+                </div>
+                {% endif %}
+            </div>
+            <a href="{{ url_for('editar_cliente', cliente_id=cpe.cliente_id) }}"
+               style="display:block;margin-top:12px;text-align:center;font-size:.72rem;font-weight:700;color:var(--ios-blue);text-decoration:none">
+               <i class="bi bi-pencil"></i> Editar cadastro do cliente
+            </a>
+        </div>
+
+        <!-- Card: Informações do Equipamento -->
+        <div class="ios-card">
+            <div class="card-label">Hardware</div>
+            <div class="card-title"><i class="bi bi-router-fill" style="color:var(--ios-yellow)"></i> Equipamento</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <div class="id-row">
+                    <span class="id-key">Fabricante</span>
+                    <span class="id-val" id="liveFabricante">{{ (live.fabricante if live) or cpe.fabricante or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">Modelo</span>
+                    <span class="id-val" id="liveModelo">{{ (live.modelo if live) or cpe.modelo or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">Serial</span>
+                    <span class="id-val" id="liveSerial" style="font-family:monospace;font-size:.75rem">{{ (live.serial if live) or cpe.serial_number or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">Firmware</span>
+                    <span class="id-val" id="liveFirmware" style="font-family:monospace;font-size:.72rem">{{ (live.firmware if live) or cpe.firmware_version or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">Uptime</span>
+                    <span class="id-val" id="liveUptime">{{ fmtUptime((live.uptime_sec if live) or cpe.uptime_seconds or 0) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card: Rede -->
+        <div class="ios-card">
+            <div class="card-label">Conectividade</div>
+            <div class="card-title"><i class="bi bi-globe2" style="color:var(--ios-teal)"></i> Rede</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <div class="id-row">
+                    <span class="id-key">IP WAN</span>
+                    <span class="id-val" id="liveIpWan" style="font-family:monospace">{{ (live.ip_wan if live) or cpe.ip_wan or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">IP LAN</span>
+                    <span class="id-val" id="liveIpLan" style="font-family:monospace">{{ (live.ip_lan if live) or cpe.ip_lan or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">MAC WAN</span>
+                    <span class="id-val" id="liveMac" style="font-family:monospace;font-size:.72rem">{{ (live.mac_wan if live) or '—' }}</span>
+                </div>
+                <div class="id-row">
+                    <span class="id-key">Última conexão</span>
+                    <span class="id-val" style="font-size:.75rem">
+                        {{ cpe.ultima_conexao.strftime('%d/%m/%Y %H:%M:%S') if cpe.ultima_conexao else '—' }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card: Sinal Óptico -->
+        {% set rx = (live.rx_power if live and live.rx_power is not none) or cpe.rx_power %}
+        <div class="ios-card">
+            <div class="card-label">GPON / ONU</div>
+            <div class="card-title"><i class="bi bi-reception-4" style="color:var(--ios-purple)"></i> Sinal Óptico</div>
+            {% if rx is not none %}
+            <div class="rx-gauge-wrap">
+                <div class="rx-gauge-val" id="liveRx"
+                     style="color:{% if rx > -20 %}var(--ios-green){% elif rx > -27 %}var(--ios-orange){% else %}var(--ios-red){% endif %}">
+                    {{ "%.1f"|format(rx) }}
+                </div>
+                <div class="rx-gauge-unit" style="color:var(--t2)">dBm — Rx Power</div>
+                <div class="rx-bar-h" style="width:100%">
+                    {% set pct = [([(rx + 40) / 20 * 100, 0]|max), 100]|min %}
+                    <div class="rx-fill-h" id="rxBar"
+                         style="width:{{ pct }}%;background:{% if rx > -20 %}var(--ios-green){% elif rx > -27 %}var(--ios-orange){% else %}var(--ios-red){% endif %}">
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;width:100%;font-size:.58rem;color:var(--t3)">
+                    <span>-40 dBm</span><span style="color:var(--ios-red)">-30</span>
+                    <span style="color:var(--ios-orange)">-25</span><span style="color:var(--ios-green)">-20</span><span>-10</span>
+                </div>
+                <div style="margin-top:10px;font-size:.7rem;font-weight:700;color:{% if rx > -20 %}var(--ios-green){% elif rx > -27 %}var(--ios-orange){% else %}var(--ios-red){% endif %}">
+                    {% if rx > -20 %}Sinal Excelente{% elif rx > -23 %}Sinal Bom{% elif rx > -27 %}Sinal Fraco{% else %}Sinal Crítico{% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div style="text-align:center;padding:20px;color:var(--t3)">
+                <i class="bi bi-reception-0" style="font-size:2rem;display:block;margin-bottom:8px"></i>
+                Dado de sinal não disponível para este modelo.
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Card: Wi-Fi -->
+        <div class="ios-card">
+            <div class="card-label">Wi-Fi</div>
+            <div class="card-title"><i class="bi bi-wifi" style="color:var(--ios-green)"></i> Configuração Wi-Fi</div>
+            <div class="wifi-band-toggle">
+                <button class="wifi-band-btn active" id="band24Btn" onclick="selectBand('2.4')">2.4 GHz</button>
+                <button class="wifi-band-btn" id="band5Btn" onclick="selectBand('5')">5 GHz</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+                <div>
+                    <div class="card-label">SSID atual</div>
+                    <div style="font-size:.9rem;font-weight:700;color:white" id="currentSsid">
+                        {{ (live.ssid if live) or cpe.ssid or '—' }}
+                    </div>
+                </div>
+                <div>
+                    <div class="card-label">Novo SSID</div>
+                    <input class="ios-input" id="wifiSsid" placeholder="Deixe em branco para manter">
+                </div>
+                <div>
+                    <div class="card-label">Nova Senha</div>
+                    <input class="ios-input" type="password" id="wifiPass" placeholder="Mínimo 8 caracteres">
+                </div>
+                <button class="action-btn btn-blue" onclick="applyWifi()">
+                    <i class="bi bi-wifi"></i> Aplicar Wi-Fi
+                </button>
+            </div>
+        </div>
+
+        <!-- Card: Ações Remotas -->
+        <div class="ios-card">
+            <div class="card-label">Controle</div>
+            <div class="card-title"><i class="bi bi-terminal-fill" style="color:var(--ios-orange)"></i> Ações Remotas</div>
+            <button class="action-btn btn-blue" onclick="doAction('refresh')">
+                <i class="bi bi-arrow-repeat"></i> Atualizar Dados Agora
+            </button>
+            <button class="action-btn btn-orange" onclick="doAction('reboot')">
+                <i class="bi bi-power"></i> Reiniciar Equipamento
+            </button>
+            <button class="action-btn btn-red" onclick="confirmReset()">
+                <i class="bi bi-exclamation-triangle"></i> Reset de Fábrica
+            </button>
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07)">
+                <form method="POST" action="{{ url_for('cpe_desvincular', cpe_id=cpe.id) }}"
+                      onsubmit="return confirm('Remover este CPE do sistema?')">
+                    <button type="submit" class="action-btn btn-ghost" style="font-size:.72rem">
+                        <i class="bi bi-trash"></i> Desvincular CPE
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div><!-- /cards-grid -->
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CPE_ID   = {{ cpe.id }};
+const GEN_ID   = {{ cpe.genieacs_id | tojson }};
+const LIVE_OK  = {{ 'true' if genieacs_ok else 'false' }};
+
+let selectedBand = '2.4';
+
+function selectBand(b) {
+    selectedBand = b;
+    document.getElementById('band24Btn').classList.toggle('active', b === '2.4');
+    document.getElementById('band5Btn').classList.toggle('active', b === '5');
+    const ssid5 = {{ (live.ssid_5g if live and live.ssid_5g) or cpe.ssid_5g | tojson }};
+    const ssid24 = {{ (live.ssid if live and live.ssid) or cpe.ssid | tojson }};
+    document.getElementById('currentSsid').textContent = b === '5' ? (ssid5 || '—') : (ssid24 || '—');
+}
+
+function toast(msg, ok=true) {
+    const c = document.getElementById('toastContainer');
+    const el = document.createElement('div');
+    el.className = `toast-msg ${ok ? 'toast-ok' : 'toast-err'}`;
+    el.innerHTML = `<i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-x-circle-fill'}" style="color:${ok ? 'var(--ios-green)' : 'var(--ios-red)'}"></i> ${msg}`;
+    c.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+}
+
+async function doAction(action) {
+    if (action === 'reboot' && !confirm('Reiniciar o equipamento do cliente?')) return;
+    try {
+        const r = await fetch(`/cpe/${CPE_ID}/${action}`, {method:'POST'});
+        const d = await r.json();
+        if (d.error) toast(d.error, false);
+        else toast(d.msg || 'Comando enviado!');
+    } catch(e) { toast(e.message, false); }
+}
+
+function confirmReset() {
+    if (!confirm('⚠️ ATENÇÃO: Isso vai resetar o equipamento para as configurações de fábrica.\nTodas as configurações serão perdidas!\n\nDeseja continuar?')) return;
+    doAction('factory-reset');
+}
+
+async function applyWifi() {
+    const ssid = document.getElementById('wifiSsid').value.trim();
+    const pass = document.getElementById('wifiPass').value.trim();
+    if (!ssid && !pass) { toast('Informe o SSID ou a senha.', false); return; }
+    if (pass && pass.length < 8) { toast('A senha deve ter no mínimo 8 caracteres.', false); return; }
+    try {
+        const r = await fetch(`/cpe/${CPE_ID}/wifi`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ssid, password: pass, band: selectedBand})
+        });
+        const d = await r.json();
+        if (d.error) toast(d.error, false);
+        else {
+            toast(d.msg || 'Wi-Fi atualizado!');
+            if (ssid) document.getElementById('currentSsid').textContent = ssid;
+            document.getElementById('wifiSsid').value = '';
+            document.getElementById('wifiPass').value = '';
+        }
+    } catch(e) { toast(e.message, false); }
+}
+
+// Polling ao vivo a cada 10s
+async function pollStatus() {
+    if (!LIVE_OK || !GEN_ID) return;
+    try {
+        const r = await fetch(`/api/cpe/${CPE_ID}/status`);
+        const d = await r.json();
+        if (d.error) return;
+
+        const dot   = document.getElementById('liveDot');
+        const badge = document.getElementById('statusBadge');
+        const isOn  = d.online;
+
+        dot.className   = `live-dot ${isOn ? '' : 'offline'}`;
+        badge.className = `badge-ios ${isOn ? 'badge-online' : 'badge-offline'}`;
+        badge.innerHTML = `<i class="bi ${isOn ? 'bi-check-circle-fill' : 'bi-dash-circle'}"></i> ${isOn ? 'Online' : 'Offline'}`;
+
+        const set = (id, val) => { const el=document.getElementById(id); if(el&&val) el.textContent=val; };
+        set('liveIpWan',    d.ip_wan);
+        set('liveIpLan',    d.ip_lan);
+        set('liveFirmware', d.firmware);
+        set('liveSerial',   d.serial);
+        set('liveModelo',   d.modelo);
+        set('liveFabricante', d.fabricante);
+        set('liveMac',      d.mac_wan);
+        if (d.uptime_sec) set('liveUptime', fmtUptime(d.uptime_sec));
+        if (d.rx_power != null) {
+            set('liveRx', d.rx_power.toFixed(1));
+            const pct = Math.min(100, Math.max(0, (d.rx_power + 40) / 20 * 100));
+            const bar = document.getElementById('rxBar');
+            if (bar) {
+                bar.style.width = pct + '%';
+                bar.style.background = d.rx_power > -20 ? 'var(--ios-green)' : d.rx_power > -27 ? 'var(--ios-orange)' : 'var(--ios-red)';
+            }
+        }
+        document.getElementById('lastPoll').textContent = new Date().toLocaleTimeString('pt-BR');
+    } catch(e) { /* silencioso */ }
+}
+
+function fmtUptime(sec) {
+    if (!sec) return '—';
+    const d = Math.floor(sec/86400), h = Math.floor((sec%86400)/3600),
+          m = Math.floor((sec%3600)/60);
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+}
+
+if (LIVE_OK && GEN_ID) {
+    pollStatus();
+    setInterval(pollStatus, 10000);
+}
+</script>
+{% endblock %}

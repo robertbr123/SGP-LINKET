@@ -44,11 +44,175 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
+@app.template_global()
+def fmtUptime(sec):
+    sec = int(sec or 0)
+    d = sec // 86400; h = (sec % 86400) // 3600; m = (sec % 3600) // 60
+    if d: return f"{d}d {h}h {m}m"
+    if h: return f"{h}h {m}m"
+    return f"{m}m"
+
 try:
     import librouteros
     MIKROTIK_AVAILABLE = True
 except ImportError:
     MIKROTIK_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
+# GenieACS — cliente da NBI REST API
+# ---------------------------------------------------------------------------
+
+class GenieACSClient:
+    """Encapsula chamadas à GenieACS NBI (porta 7557)."""
+
+    def __init__(self):
+        self.base = os.environ.get("GENIEACS_NBI_URL", "http://genieacs-nbi:7557").rstrip("/")
+        self.timeout = 8
+
+    def _get(self, path, params=None):
+        r = requests.get(f"{self.base}{path}", params=params, timeout=self.timeout)
+        r.raise_for_status()
+        return r.json()
+
+    def _post(self, path, data):
+        r = requests.post(f"{self.base}{path}", json=data, timeout=self.timeout)
+        r.raise_for_status()
+        try:
+            return r.json()
+        except Exception:
+            return {}
+
+    def _delete(self, path):
+        r = requests.delete(f"{self.base}{path}", timeout=self.timeout)
+        r.raise_for_status()
+
+    def ping(self):
+        """Verifica se GenieACS está acessível."""
+        try:
+            requests.get(f"{self.base}/devices?limit=1", timeout=3)
+            return True
+        except Exception:
+            return False
+
+    def list_devices(self, query=None, limit=200, skip=0):
+        """Lista CPEs. query é dict MongoDB-style, ex: {'_deviceId._SerialNumber': 'ABC'}."""
+        params = {"limit": limit, "skip": skip}
+        if query:
+            params["query"] = json.dumps(query)
+        return self._get("/devices", params=params)
+
+    def get_device(self, device_id):
+        """Retorna dados completos de um CPE pelo ID GenieACS."""
+        import urllib.parse
+        encoded = urllib.parse.quote(device_id, safe="")
+        devices = self._get(f"/devices", params={"query": json.dumps({"_id": device_id})})
+        return devices[0] if devices else None
+
+    def reboot(self, device_id):
+        """Envia task de reboot ao CPE."""
+        import urllib.parse
+        encoded = urllib.parse.quote(device_id, safe="")
+        return self._post(f"/devices/{encoded}/tasks?timeout=3000&connection_request", {"name": "reboot"})
+
+    def refresh(self, device_id):
+        """Força o CPE a se conectar ao ACS imediatamente."""
+        import urllib.parse
+        encoded = urllib.parse.quote(device_id, safe="")
+        return self._post(f"/devices/{encoded}/tasks?connection_request", {"name": "getParameterValues", "parameterNames": ["Device.DeviceInfo."]})
+
+    def get_param(self, device_id, param_path):
+        """Lê um parâmetro TR-069 via task."""
+        import urllib.parse
+        encoded = urllib.parse.quote(device_id, safe="")
+        return self._post(f"/devices/{encoded}/tasks?timeout=10000&connection_request",
+                          {"name": "getParameterValues", "parameterNames": [param_path]})
+
+    def set_params(self, device_id, param_values):
+        """
+        Seta parâmetros TR-069.
+        param_values: lista de [path, valor, tipo]
+        ex: [["Device.WiFi.SSID.1.SSID", "MeuWifi", "xsd:string"]]
+        """
+        import urllib.parse
+        encoded = urllib.parse.quote(device_id, safe="")
+        return self._post(f"/devices/{encoded}/tasks?timeout=15000&connection_request",
+                          {"name": "setParameterValues", "parameterValues": param_values})
+
+    def factory_reset(self, device_id):
+        """Envia task de reset de fábrica."""
+        import urllib.parse
+        encoded = urllib.parse.quote(device_id, safe="")
+        return self._post(f"/devices/{encoded}/tasks?timeout=3000&connection_request",
+                          {"name": "factoryReset"})
+
+    def delete_device(self, device_id):
+        """Remove CPE do GenieACS."""
+        import urllib.parse
+        encoded = urllib.parse.quote(device_id, safe="")
+        self._delete(f"/devices/{encoded}")
+
+    def parse_device(self, raw):
+        """Extrai os campos mais importantes de um device GenieACS para exibição."""
+        def gv(obj, *paths, default=None):
+            """Navega no JSON do GenieACS que tem estrutura {_value, _type, _writable...}."""
+            for path in paths:
+                parts = path.split(".")
+                cur = obj
+                for p in parts:
+                    if not isinstance(cur, dict):
+                        cur = None
+                        break
+                    cur = cur.get(p)
+                if cur is not None:
+                    if isinstance(cur, dict) and "_value" in cur:
+                        return cur["_value"]
+                    if not isinstance(cur, dict):
+                        return cur
+            return default
+
+        dev_id = raw.get("_id", "")
+        dev_info = raw.get("_deviceId", {})
+
+        # Uptime pode vir em segundos ou formato "Xd Xh Xm Xs"
+        uptime_raw = gv(raw, "Device.DeviceInfo.UpTime",
+                            "InternetGatewayDevice.DeviceInfo.UpTime", default=0)
+        try:
+            uptime_sec = int(uptime_raw)
+        except Exception:
+            uptime_sec = 0
+
+        return {
+            "genieacs_id": dev_id,
+            "serial": dev_info.get("_SerialNumber", "") or gv(raw, "Device.DeviceInfo.SerialNumber",
+                                                                    "InternetGatewayDevice.DeviceInfo.SerialNumber", default=""),
+            "oui": dev_info.get("_OUI", ""),
+            "modelo": dev_info.get("_ProductClass", "") or gv(raw, "Device.DeviceInfo.ModelName",
+                                                                    "InternetGatewayDevice.DeviceInfo.ModelName", default=""),
+            "fabricante": gv(raw, "Device.DeviceInfo.Manufacturer",
+                                  "InternetGatewayDevice.DeviceInfo.Manufacturer", default=""),
+            "firmware": gv(raw, "Device.DeviceInfo.SoftwareVersion",
+                               "InternetGatewayDevice.DeviceInfo.SoftwareVersion", default=""),
+            "ip_wan": gv(raw, "Device.IP.Interface.1.IPv4Address.1.IPAddress",
+                              "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress",
+                              default=""),
+            "ip_lan": gv(raw, "Device.LAN.IPAddress",
+                              "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.IPInterface.1.IPInterfaceIPAddress",
+                              default=""),
+            "ssid": gv(raw, "Device.WiFi.SSID.1.SSID",
+                            "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID", default=""),
+            "ssid_5g": gv(raw, "Device.WiFi.SSID.5.SSID",
+                               "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID", default=""),
+            "rx_power": gv(raw, "Device.Optical.Interface.1.CurrentPower",
+                               "InternetGatewayDevice.WANDevice.1.X_PON_RxPower", default=None),
+            "uptime_sec": uptime_sec,
+            "online": raw.get("_lastInform") is not None,
+            "last_inform": raw.get("_lastInform", ""),
+            "mac_wan": gv(raw, "Device.Ethernet.Interface.1.MACAddress",
+                              "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANEthernetInterfaceConfig.MACAddress",
+                              default=""),
+        }
+
+_genieacs = GenieACSClient()
 
 # ---------------------------------------------------------------------------
 # DB helpers
@@ -2718,6 +2882,370 @@ def stream_stats():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---------------------------------------------------------------------------
+# CPE / TR-069 — GenieACS integration
+# ---------------------------------------------------------------------------
+
+def _cpe_ensure_table():
+    """Garante que a tabela cpe_devices existe (auto-migrate)."""
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS cpe_devices (
+                id SERIAL PRIMARY KEY,
+                cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+                serial_number VARCHAR(150),
+                mac_address VARCHAR(20),
+                modelo VARCHAR(150),
+                fabricante VARCHAR(100),
+                genieacs_id VARCHAR(300) UNIQUE,
+                ip_wan VARCHAR(50),
+                ip_lan VARCHAR(50),
+                online BOOLEAN DEFAULT FALSE,
+                ultima_conexao TIMESTAMP,
+                rx_power FLOAT,
+                ssid VARCHAR(100),
+                ssid_5g VARCHAR(100),
+                firmware_version VARCHAR(100),
+                uptime_seconds INTEGER DEFAULT 0,
+                obs TEXT,
+                criado_em TIMESTAMP DEFAULT NOW(),
+                atualizado_em TIMESTAMP DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS cpe_devices_cliente_id  ON cpe_devices(cliente_id);
+            CREATE INDEX IF NOT EXISTS cpe_devices_genieacs_id ON cpe_devices(genieacs_id);
+        """)
+    conn.commit()
+    conn.close()
+
+
+@app.route("/cpe")
+@login_required
+def cpe_lista():
+    _cpe_ensure_table()
+    genieacs_ok = _genieacs.ping()
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT c.id AS cliente_id, c.nome AS cliente_nome, c.pppoe_login,
+                   c.status AS cliente_status, c.plano,
+                   cpe.id, cpe.serial_number, cpe.modelo, cpe.fabricante,
+                   cpe.genieacs_id, cpe.ip_wan, cpe.online, cpe.ultima_conexao,
+                   cpe.rx_power, cpe.ssid, cpe.firmware_version, cpe.obs
+            FROM cpe_devices cpe
+            JOIN clientes c ON c.id = cpe.cliente_id
+            ORDER BY cpe.online DESC, c.nome
+        """)
+        cpes_vinculados = cur.fetchall()
+
+        # Clientes sem CPE vinculado (para o modal de vincular)
+        cur.execute("""
+            SELECT c.id, c.nome, c.pppoe_login, c.plano
+            FROM clientes c
+            WHERE NOT EXISTS (SELECT 1 FROM cpe_devices cpe WHERE cpe.cliente_id = c.id)
+            ORDER BY c.nome
+        """)
+        clientes_sem_cpe = cur.fetchall()
+
+        # Estatísticas rápidas
+        cur.execute("SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE online) AS on_ FROM cpe_devices")
+        stats = cur.fetchone()
+    conn.close()
+
+    return render_template("cpe_lista.html",
+        cpes=cpes_vinculados,
+        clientes_sem_cpe=clientes_sem_cpe,
+        stats=stats,
+        genieacs_ok=genieacs_ok,
+    )
+
+
+@app.route("/cpe/<int:cpe_id>")
+@login_required
+def cpe_detalhe(cpe_id):
+    _cpe_ensure_table()
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT cpe.*, c.nome AS cliente_nome, c.pppoe_login, c.plano,
+                   c.velocidade_down, c.velocidade_up, c.status AS cliente_status,
+                   c.ip AS cliente_ip, c.id AS cliente_id
+            FROM cpe_devices cpe
+            JOIN clientes c ON c.id = cpe.cliente_id
+            WHERE cpe.id = %s
+        """, (cpe_id,))
+        cpe = cur.fetchone()
+    conn.close()
+    if not cpe:
+        flash("CPE não encontrado.", "danger")
+        return redirect(url_for("cpe_lista"))
+
+    # Busca dados ao vivo do GenieACS
+    live = None
+    genieacs_ok = _genieacs.ping()
+    if genieacs_ok and cpe["genieacs_id"]:
+        try:
+            raw = _genieacs.get_device(cpe["genieacs_id"])
+            if raw:
+                live = _genieacs.parse_device(raw)
+        except Exception as e:
+            log.warning("GenieACS get_device error: %s", e)
+
+    return render_template("cpe_detalhe.html", cpe=cpe, live=live, genieacs_ok=genieacs_ok)
+
+
+@app.route("/cpe/vincular", methods=["POST"])
+@login_required
+def cpe_vincular():
+    """Vincula um device GenieACS a um cliente do sistema."""
+    _cpe_ensure_table()
+    genieacs_id = request.form.get("genieacs_id", "").strip()
+    cliente_id  = request.form.get("cliente_id", "").strip()
+    obs         = request.form.get("obs", "").strip()
+
+    if not genieacs_id or not cliente_id:
+        flash("Preencha todos os campos.", "danger")
+        return redirect(url_for("cpe_lista"))
+
+    try:
+        raw = _genieacs.get_device(genieacs_id)
+        if not raw:
+            flash("Device não encontrado no GenieACS.", "danger")
+            return redirect(url_for("cpe_lista"))
+        parsed = _genieacs.parse_device(raw)
+    except Exception as e:
+        flash(f"Erro ao consultar GenieACS: {e}", "danger")
+        return redirect(url_for("cpe_lista"))
+
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO cpe_devices
+                (cliente_id, serial_number, mac_address, modelo, fabricante, genieacs_id,
+                 ip_wan, ip_lan, online, ultima_conexao, rx_power, ssid, ssid_5g,
+                 firmware_version, uptime_seconds, obs)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (genieacs_id) DO UPDATE SET
+                cliente_id=EXCLUDED.cliente_id, ip_wan=EXCLUDED.ip_wan,
+                online=EXCLUDED.online, ultima_conexao=EXCLUDED.ultima_conexao,
+                rx_power=EXCLUDED.rx_power, ssid=EXCLUDED.ssid, ssid_5g=EXCLUDED.ssid_5g,
+                firmware_version=EXCLUDED.firmware_version,
+                uptime_seconds=EXCLUDED.uptime_seconds, obs=EXCLUDED.obs,
+                atualizado_em=NOW()
+        """, (
+            cliente_id, parsed["serial"], parsed["mac_wan"],
+            parsed["modelo"], parsed["fabricante"], genieacs_id,
+            parsed["ip_wan"], parsed["ip_lan"],
+            parsed["online"],
+            datetime.now(timezone.utc) if parsed["online"] else None,
+            parsed["rx_power"], parsed["ssid"], parsed["ssid_5g"],
+            parsed["firmware"], parsed["uptime_sec"], obs,
+        ))
+    conn.commit()
+    conn.close()
+    flash("CPE vinculado com sucesso!", "success")
+    return redirect(url_for("cpe_lista"))
+
+
+@app.route("/cpe/<int:cpe_id>/desvincular", methods=["POST"])
+@login_required
+def cpe_desvincular(cpe_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM cpe_devices WHERE id=%s", (cpe_id,))
+    conn.commit()
+    conn.close()
+    flash("CPE desvinculado.", "success")
+    return redirect(url_for("cpe_lista"))
+
+
+@app.route("/cpe/<int:cpe_id>/reboot", methods=["POST"])
+@login_required
+def cpe_reboot(cpe_id):
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        return jsonify({"error": "CPE não encontrado"}), 404
+    try:
+        _genieacs.reboot(cpe["genieacs_id"])
+        return jsonify({"ok": True, "msg": "Reboot enviado ao CPE."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/cpe/<int:cpe_id>/factory-reset", methods=["POST"])
+@login_required
+def cpe_factory_reset(cpe_id):
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        return jsonify({"error": "CPE não encontrado"}), 404
+    try:
+        _genieacs.factory_reset(cpe["genieacs_id"])
+        return jsonify({"ok": True, "msg": "Reset de fábrica enviado."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/cpe/<int:cpe_id>/refresh", methods=["POST"])
+@login_required
+def cpe_refresh(cpe_id):
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        return jsonify({"error": "CPE não encontrado"}), 404
+    try:
+        _genieacs.refresh(cpe["genieacs_id"])
+        return jsonify({"ok": True, "msg": "Refresh enviado."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/cpe/<int:cpe_id>/wifi", methods=["POST"])
+@login_required
+def cpe_set_wifi(cpe_id):
+    """Altera SSID e/ou senha Wi-Fi via TR-069."""
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        return jsonify({"error": "CPE não encontrado"}), 404
+
+    ssid     = request.json.get("ssid", "").strip()
+    password = request.json.get("password", "").strip()
+    band     = request.json.get("band", "2.4")   # "2.4" ou "5"
+
+    if not ssid and not password:
+        return jsonify({"error": "Informe SSID ou senha."}), 400
+
+    # Monta paths TR-181 e TR-098 para maior compatibilidade
+    if band == "5":
+        ssid_paths = ["Device.WiFi.SSID.5.SSID",
+                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID"]
+        pass_paths = ["Device.WiFi.AccessPoint.5.Security.KeyPassphrase",
+                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.KeyPassphrase"]
+    else:
+        ssid_paths = ["Device.WiFi.SSID.1.SSID",
+                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID"]
+        pass_paths = ["Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
+                      "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase"]
+
+    params = []
+    if ssid:
+        params.append([ssid_paths[0], ssid, "xsd:string"])
+    if password:
+        params.append([pass_paths[0], password, "xsd:string"])
+
+    try:
+        _genieacs.set_params(cpe["genieacs_id"], params)
+        # Atualiza SSID no banco local também
+        if ssid:
+            conn = get_db()
+            col = "ssid_5g" if band == "5" else "ssid"
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE cpe_devices SET {col}=%s, atualizado_em=NOW() WHERE id=%s", (ssid, cpe_id))
+            conn.commit()
+            conn.close()
+        return jsonify({"ok": True, "msg": "Configuração Wi-Fi enviada ao CPE."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cpe/<int:cpe_id>/status")
+@login_required
+def cpe_api_status(cpe_id):
+    """Retorna status ao vivo do CPE para polling do frontend."""
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        return jsonify({"error": "CPE não encontrado"}), 404
+    if not _genieacs.ping():
+        return jsonify({"error": "GenieACS indisponível"}), 503
+    try:
+        raw = _genieacs.get_device(cpe["genieacs_id"])
+        if not raw:
+            return jsonify({"online": False})
+        parsed = _genieacs.parse_device(raw)
+        return jsonify(parsed)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cpe/sync", methods=["POST"])
+@login_required
+def cpe_sync_all():
+    """Sincroniza status de todos os CPEs vinculados com o GenieACS."""
+    _cpe_ensure_table()
+    if not _genieacs.ping():
+        return jsonify({"error": "GenieACS indisponível"}), 503
+
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT id, genieacs_id FROM cpe_devices WHERE genieacs_id IS NOT NULL")
+        cpes = cur.fetchall()
+    conn.close()
+
+    updated = 0
+    errors = 0
+    for cpe in cpes:
+        try:
+            raw = _genieacs.get_device(cpe["genieacs_id"])
+            if not raw:
+                continue
+            p = _genieacs.parse_device(raw)
+            conn = get_db()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE cpe_devices SET
+                        ip_wan=%s, ip_lan=%s, online=%s,
+                        ultima_conexao=CASE WHEN %s THEN NOW() ELSE ultima_conexao END,
+                        rx_power=%s, ssid=%s, ssid_5g=%s,
+                        firmware_version=%s, uptime_seconds=%s, atualizado_em=NOW()
+                    WHERE id=%s
+                """, (
+                    p["ip_wan"], p["ip_lan"], p["online"], p["online"],
+                    p["rx_power"], p["ssid"], p["ssid_5g"],
+                    p["firmware"], p["uptime_sec"], cpe["id"],
+                ))
+            conn.commit()
+            conn.close()
+            updated += 1
+        except Exception as e:
+            log.warning("CPE sync error id=%s: %s", cpe["id"], e)
+            errors += 1
+
+    return jsonify({"updated": updated, "errors": errors, "total": len(cpes)})
+
+
+@app.route("/api/cpe/genieacs/devices")
+@login_required
+def cpe_genieacs_devices():
+    """Lista devices do GenieACS que ainda não estão vinculados no sistema."""
+    if not _genieacs.ping():
+        return jsonify({"error": "GenieACS indisponível"}), 503
+    try:
+        raw_list = _genieacs.list_devices(limit=500)
+        # IDs já vinculados
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT genieacs_id FROM cpe_devices WHERE genieacs_id IS NOT NULL")
+            vinculados = {r[0] for r in cur.fetchall()}
+        conn.close()
+
+        result = []
+        for raw in raw_list:
+            p = _genieacs.parse_device(raw)
+            p["ja_vinculado"] = p["genieacs_id"] in vinculados
+            result.append(p)
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def _get_cpe_or_404(cpe_id):
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM cpe_devices WHERE id=%s", (cpe_id,))
+        cpe = cur.fetchone()
+    conn.close()
+    return cpe
 
 
 # ---------------------------------------------------------------------------

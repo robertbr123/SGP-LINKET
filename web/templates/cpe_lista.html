@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% block title %}CPE / TR-069 — SGP-LINKET{% endblock %}
+{% block page_title %}CPE / TR-069{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">CPE / TR-069</li>{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --ios-bg: #000; --ios-surface: rgba(28,28,30,0.92);
+    --ios-border: rgba(255,255,255,0.1);
+    --ios-blue: #0A84FF; --ios-green: #30D158; --ios-red: #FF453A;
+    --ios-orange: #FF9F0A; --ios-yellow: #FFD60A;
+    --ios-teal: #5AC8FA; --ios-purple: #BF5AF2;
+    --t2: rgba(255,255,255,0.55); --t3: rgba(255,255,255,0.3);
+}
+body, .main-content { background: var(--ios-bg) !important; color: white; }
+.ios-card {
+    background: var(--ios-surface); border: 1px solid var(--ios-border);
+    border-radius: 18px; padding: 18px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+    transition: transform .15s, border-color .15s;
+    position: relative;
+}
+.ios-card:hover { transform: translateY(-2px); border-color: rgba(10,132,255,.25); }
+.ios-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:1px;
+    background: linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);
+    border-radius: 18px 18px 0 0;
+}
+.stat-card { text-align: center; padding: 20px; }
+.stat-n { font-size: 2.4rem; font-weight: 900; line-height: 1; letter-spacing: -.03em; }
+.stat-l { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; margin-top: 4px; }
+
+.cpe-row {
+    background: var(--ios-surface); border: 1px solid var(--ios-border);
+    border-radius: 14px; padding: 14px 18px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto;
+    align-items: center; gap: 14px;
+    transition: border-color .15s;
+    text-decoration: none; color: inherit;
+}
+.cpe-row:hover { border-color: rgba(10,132,255,.3); background: rgba(10,132,255,.05); }
+
+.cpe-status-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.dot-online  { background: var(--ios-green); box-shadow: 0 0 0 3px rgba(48,209,88,.25); animation: pulse-g 2s ease-in-out infinite; }
+.dot-offline { background: rgba(255,255,255,.2); }
+@keyframes pulse-g { 0%,100%{box-shadow:0 0 0 3px rgba(48,209,88,.25)} 50%{box-shadow:0 0 0 6px rgba(48,209,88,.08)} }
+
+.badge-ios {
+    padding: 3px 10px; border-radius: 8px; font-size: .62rem;
+    font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.badge-online  { background: rgba(48,209,88,.12); color: var(--ios-green); border: 1px solid rgba(48,209,88,.25); }
+.badge-offline { background: rgba(255,255,255,.06); color: var(--t2); border: 1px solid rgba(255,255,255,.1); }
+.badge-suspenso { background: rgba(255,69,58,.12); color: var(--ios-red); border: 1px solid rgba(255,69,58,.25); }
+.badge-ativo    { background: rgba(10,132,255,.12); color: var(--ios-blue); border: 1px solid rgba(10,132,255,.25); }
+
+.ios-btn {
+    border: none; border-radius: 12px; padding: 9px 18px;
+    font-size: .8rem; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: filter .15s, transform .15s;
+}
+.ios-btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.btn-blue { background: var(--ios-blue); color: white; box-shadow: 0 2px 12px rgba(10,132,255,.35); }
+.btn-ghost { background: rgba(255,255,255,.07); color: var(--t2); border: 1px solid rgba(255,255,255,.12); }
+
+.search-input {
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 9px 14px; color: white;
+    font-size: .85rem; font-weight: 500; outline: none; width: 260px;
+}
+.search-input:focus { border-color: var(--ios-blue); background: rgba(10,132,255,.08); }
+.search-input::placeholder { color: var(--t3); }
+
+.section-label { font-size: .65rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--t2); margin-bottom: 10px; }
+
+.rx-bar-wrap { width: 80px; }
+.rx-bar { height: 3px; border-radius: 10px; background: rgba(255,255,255,.08); margin-top: 3px; overflow: hidden; }
+.rx-fill { height: 100%; border-radius: 10px; transition: width .5s; }
+
+/* Modal */
+.ios-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7);
+    backdrop-filter:blur(8px); z-index:9999; display:flex;
+    align-items:flex-end; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .3s; }
+.ios-modal-overlay.open { opacity:1; pointer-events:all; }
+.ios-modal { background:#1c1c1e; border:1px solid rgba(255,255,255,.1);
+    border-radius:24px 24px 0 0; width:100%; max-width:560px;
+    transform:translateY(100%); transition:transform .4s cubic-bezier(.32,.72,0,1);
+    box-shadow:0 -20px 60px rgba(0,0,0,.7); }
+.ios-modal-overlay.open .ios-modal { transform:translateY(0); }
+.modal-handle { width:36px; height:4px; background:rgba(255,255,255,.2);
+    border-radius:2px; margin:12px auto 0; }
+.modal-header { padding:16px 24px 0; display:flex; justify-content:space-between; align-items:center; }
+.modal-title { font-size:1.05rem; font-weight:800; color:white; }
+.modal-close { width:28px; height:28px; background:rgba(255,255,255,.1);
+    border:none; border-radius:50%; color:var(--t2); display:flex;
+    align-items:center; justify-content:center; cursor:pointer; font-size:.9rem; }
+.modal-body { padding:18px 24px 28px; }
+.ios-label { font-size:.7rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--t2); margin-bottom:5px; }
+.ios-input {
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+    border-radius:11px; padding:9px 14px; color:white; font-size:.85rem;
+    font-weight:500; width:100%; outline:none; transition:border-color .2s;
+}
+.ios-input:focus { border-color:var(--ios-blue); background:rgba(10,132,255,.08); }
+.ios-select { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+    border-radius:11px; padding:9px 14px; color:white; font-size:.85rem;
+    font-weight:500; width:100%; outline:none; }
+.ios-select option { background:#1c1c1e; }
+.confirm-btn { background:var(--ios-blue); border:none; border-radius:14px;
+    padding:13px; color:white; font-size:.88rem; font-weight:800;
+    cursor:pointer; width:100%; margin-top:14px;
+    box-shadow:0 4px 16px rgba(10,132,255,.35); transition:filter .2s; }
+.confirm-btn:hover { filter:brightness(1.1); }
+
+.empty-state { text-align:center; padding:60px 20px; color:var(--t3); }
+.empty-state i { font-size:3rem; display:block; margin-bottom:12px; }
+
+.genieacs-warn { background:rgba(255,69,58,.1); border:1px solid rgba(255,69,58,.25);
+    border-radius:14px; padding:12px 16px; font-size:.8rem;
+    color:var(--ios-red); font-weight:600; display:flex; align-items:center; gap:10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="padding:20px">
+
+    {% if not genieacs_ok %}
+    <div class="genieacs-warn mb-3">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <div>
+            <strong>GenieACS indisponível.</strong>
+            Verifique se os containers <code>genieacs-cwmp</code> e <code>genieacs-nbi</code> estão rodando.
+            Os dados exibidos são do banco local.
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:24px">
+        <div class="ios-card stat-card">
+            <div class="stat-n">{{ stats.n or 0 }}</div>
+            <div class="stat-l" style="color:var(--ios-blue)">Total CPEs</div>
+        </div>
+        <div class="ios-card stat-card">
+            <div class="stat-n" style="color:var(--ios-green)">{{ stats.on_ or 0 }}</div>
+            <div class="stat-l" style="color:var(--ios-green)">Online</div>
+        </div>
+        <div class="ios-card stat-card">
+            <div class="stat-n" style="color:var(--t3)">{{ (stats.n or 0) - (stats.on_ or 0) }}</div>
+            <div class="stat-l">Offline</div>
+        </div>
+    </div>
+
+    <!-- Topbar -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+        <div style="font-size:.75rem;font-weight:900;letter-spacing:.12em;color:var(--ios-blue);text-transform:uppercase;display:flex;align-items:center;gap:7px">
+            <i class="bi bi-router-fill"></i> CPE / TR-069
+        </div>
+        <input class="search-input" type="text" id="searchInput" placeholder="Buscar por cliente, serial, modelo...">
+        <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="ios-btn btn-ghost" id="btnSync" onclick="syncAll()">
+                <i class="bi bi-arrow-repeat"></i> Sincronizar
+            </button>
+            <button class="ios-btn btn-blue" onclick="openVincularModal()">
+                <i class="bi bi-plus"></i> Vincular CPE
+            </button>
+        </div>
+    </div>
+
+    <!-- Lista de CPEs -->
+    {% if cpes %}
+    <div style="display:flex;flex-direction:column;gap:8px" id="cpeList">
+        {% for cpe in cpes %}
+        <a href="{{ url_for('cpe_detalhe', cpe_id=cpe.id) }}" class="cpe-row"
+           data-search="{{ (cpe.cliente_nome or '') + ' ' + (cpe.serial_number or '') + ' ' + (cpe.modelo or '') + ' ' + (cpe.ip_wan or '') }}">
+
+            <!-- Status dot -->
+            <div class="cpe-status-dot {{ 'dot-online' if cpe.online else 'dot-offline' }}"></div>
+
+            <!-- Info principal -->
+            <div>
+                <div style="font-weight:700;font-size:.9rem">{{ cpe.cliente_nome }}</div>
+                <div style="font-size:.72rem;color:var(--t2);margin-top:2px;display:flex;gap:10px;flex-wrap:wrap">
+                    {% if cpe.pppoe_login %}
+                    <span><i class="bi bi-person-circle" style="color:var(--ios-blue)"></i> {{ cpe.pppoe_login }}</span>
+                    {% endif %}
+                    {% if cpe.modelo %}
+                    <span><i class="bi bi-cpu" style="color:var(--t3)"></i> {{ cpe.fabricante or '' }} {{ cpe.modelo }}</span>
+                    {% endif %}
+                    {% if cpe.serial_number %}
+                    <span><i class="bi bi-upc" style="color:var(--t3)"></i> {{ cpe.serial_number }}</span>
+                    {% endif %}
+                    {% if cpe.ip_wan %}
+                    <span><i class="bi bi-globe2" style="color:var(--t3)"></i> {{ cpe.ip_wan }}</span>
+                    {% endif %}
+                    {% if cpe.ssid %}
+                    <span><i class="bi bi-wifi" style="color:var(--t3)"></i> {{ cpe.ssid }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Rx Power -->
+            {% if cpe.rx_power is not none %}
+            <div class="rx-bar-wrap" style="text-align:center">
+                <div style="font-size:.7rem;font-weight:700;color:{% if cpe.rx_power > -20 %}var(--ios-green){% elif cpe.rx_power > -27 %}var(--ios-orange){% else %}var(--ios-red){% endif %}">
+                    {{ "%.1f"|format(cpe.rx_power) }} dBm
+                </div>
+                <div class="rx-bar">
+                    {% set pct = [([(cpe.rx_power + 40) / 20 * 100, 0]|max), 100]|min %}
+                    <div class="rx-fill" style="width:{{ pct }}%;background:{% if cpe.rx_power > -20 %}var(--ios-green){% elif cpe.rx_power > -27 %}var(--ios-orange){% else %}var(--ios-red){% endif %}"></div>
+                </div>
+                <div style="font-size:.55rem;color:var(--t3);margin-top:2px">Rx Power</div>
+            </div>
+            {% else %}
+            <div></div>
+            {% endif %}
+
+            <!-- Badge plano -->
+            <div>
+                <div style="font-size:.65rem;font-weight:700;color:var(--ios-blue)">{{ cpe.plano }}</div>
+                {% if cpe.ultima_conexao %}
+                <div style="font-size:.6rem;color:var(--t3);margin-top:2px">
+                    {{ cpe.ultima_conexao.strftime('%d/%m %H:%M') if cpe.ultima_conexao }}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Badges status -->
+            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+                <span class="badge-ios {{ 'badge-online' if cpe.online else 'badge-offline' }}">
+                    <i class="bi {{ 'bi-check-circle-fill' if cpe.online else 'bi-dash-circle' }}"></i>
+                    {{ 'Online' if cpe.online else 'Offline' }}
+                </span>
+                <span class="badge-ios {{ 'badge-suspenso' if cpe.cliente_status == 'suspenso' else 'badge-ativo' }}">
+                    {{ cpe.cliente_status|capitalize }}
+                </span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="ios-card empty-state">
+        <i class="bi bi-router"></i>
+        <div style="font-size:1rem;font-weight:700;color:white;margin-bottom:6px">Nenhum CPE vinculado</div>
+        <div style="font-size:.8rem">Clique em <strong>Vincular CPE</strong> para associar um dispositivo TR-069 a um cliente.</div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Modal Vincular CPE -->
+<div class="ios-modal-overlay" id="vincularOverlay" onclick="handleOverlayClick(event)">
+    <div class="ios-modal">
+        <div class="modal-handle"></div>
+        <div class="modal-header">
+            <span class="modal-title">Vincular CPE ao Cliente</span>
+            <button class="modal-close" onclick="closeVincularModal()"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <!-- Passo 1: buscar devices do GenieACS -->
+            <div id="stepBuscar">
+                <div class="ios-label">Devices no GenieACS</div>
+                <div style="font-size:.72rem;color:var(--t2);margin-bottom:12px">
+                    Selecione um device detectado pelo GenieACS ou informe o ID manualmente.
+                </div>
+                <button class="ios-btn btn-ghost w-100 mb-3" style="width:100%;justify-content:center" onclick="loadGenieacsDevices()">
+                    <i class="bi bi-search"></i> Buscar Devices Disponíveis
+                </button>
+                <div id="devicesList" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+
+                <div class="ios-label mt-3">ID GenieACS (manual)</div>
+                <input class="ios-input" id="genieacsIdInput" placeholder="ex: HWTC-HG8245H-SERIAL123">
+            </div>
+
+            <form method="POST" action="{{ url_for('cpe_vincular') }}">
+                <input type="hidden" name="genieacs_id" id="genieacsIdHidden">
+
+                <div class="ios-label mt-3">Cliente</div>
+                <select class="ios-select" name="cliente_id" id="clienteSelect">
+                    <option value="">— Selecione o cliente —</option>
+                    {% for c in clientes_sem_cpe %}
+                    <option value="{{ c.id }}">{{ c.nome }}{% if c.pppoe_login %} ({{ c.pppoe_login }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+
+                <div class="ios-label mt-3">Observação (opcional)</div>
+                <input class="ios-input" name="obs" placeholder="Ex: ONU GPON sala principal">
+
+                <button type="submit" class="confirm-btn" onclick="prepareSubmit(event, this.form)">
+                    <i class="bi bi-link-45deg me-2"></i>Vincular CPE
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openVincularModal() {
+    document.getElementById('vincularOverlay').classList.add('open');
+}
+function closeVincularModal() {
+    document.getElementById('vincularOverlay').classList.remove('open');
+}
+function handleOverlayClick(e) {
+    if (e.target.id === 'vincularOverlay') closeVincularModal();
+}
+
+async function loadGenieacsDevices() {
+    const list = document.getElementById('devicesList');
+    list.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:.75rem;padding:8px">Carregando...</div>';
+    try {
+        const r = await fetch('/api/cpe/genieacs/devices');
+        const data = await r.json();
+        if (data.error) { list.innerHTML = `<div style="color:var(--ios-red);font-size:.75rem">${data.error}</div>`; return; }
+        if (!data.length) { list.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:.75rem;padding:8px">Nenhum device novo encontrado.</div>'; return; }
+
+        list.innerHTML = data.map(d => `
+            <div onclick="selectDevice('${d.genieacs_id}')"
+                 style="background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;cursor:pointer;transition:all .15s"
+                 onmouseover="this.style.borderColor='rgba(10,132,255,.4)'"
+                 onmouseout="this.style.borderColor='rgba(255,255,255,.07)'"
+                 id="dev_${CSS.escape(d.genieacs_id)}">
+                <div style="font-weight:700;font-size:.82rem;color:white">${d.fabricante || ''} ${d.modelo || d.genieacs_id}</div>
+                <div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">
+                    ${d.serial ? `<span>Serial: ${d.serial}</span>` : ''}
+                    ${d.ip_wan ? `<span>WAN: ${d.ip_wan}</span>` : ''}
+                    <span class="${d.online ? 'badge-online' : 'badge-offline'}" style="padding:1px 7px;border-radius:6px;font-size:.6rem">${d.online ? 'Online' : 'Offline'}</span>
+                    ${d.ja_vinculado ? '<span style="color:var(--ios-orange);font-size:.6rem">Já vinculado</span>' : ''}
+                </div>
+            </div>`).join('');
+    } catch(e) {
+        list.innerHTML = `<div style="color:var(--ios-red);font-size:.75rem">${e.message}</div>`;
+    }
+}
+
+function selectDevice(id) {
+    document.getElementById('genieacsIdInput').value = id;
+    document.getElementById('genieacsIdHidden').value = id;
+    document.querySelectorAll('#devicesList > div').forEach(el => el.style.borderColor = 'rgba(255,255,255,.07)');
+    const el = document.getElementById('dev_' + CSS.escape(id));
+    if (el) el.style.borderColor = 'rgba(10,132,255,.6)';
+}
+
+function prepareSubmit(e, form) {
+    const manual = document.getElementById('genieacsIdInput').value.trim();
+    const hidden = document.getElementById('genieacsIdHidden').value.trim();
+    const final = hidden || manual;
+    if (!final) { e.preventDefault(); alert('Informe ou selecione um device.'); return; }
+    document.getElementById('genieacsIdHidden').value = final;
+
+    if (!form.querySelector('[name=cliente_id]').value) {
+        e.preventDefault(); alert('Selecione um cliente.'); return;
+    }
+}
+
+async function syncAll() {
+    const btn = document.getElementById('btnSync');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite"></i> Sincronizando...';
+    try {
+        const r = await fetch('/api/cpe/sync', {method:'POST'});
+        const d = await r.json();
+        if (d.error) { alert('Erro: ' + d.error); }
+        else { alert(`Sincronizado! ${d.updated} CPEs atualizados, ${d.errors} erros.`); location.reload(); }
+    } catch(e) { alert('Erro: ' + e.message); }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sincronizar'; }
+}
+
+// Busca local
+document.getElementById('searchInput').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#cpeList .cpe-row').forEach(row => {
+        row.style.display = row.dataset.search.toLowerCase().includes(q) ? '' : 'none';
+    });
+});
+
+document.getElementById('genieacsIdInput').addEventListener('input', function() {
+    document.getElementById('genieacsIdHidden').value = this.value.trim();
+});
+</script>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+.w-100 { width: 100%; justify-content: center; }
+.mb-3 { margin-bottom: 12px; }
+.mt-3 { margin-top: 12px; }
+</style>
+{% endblock %}

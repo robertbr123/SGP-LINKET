@@ -367,6 +367,9 @@
         <a href="{{ url_for('monitoramento') }}" class="{{ 'active' if request.endpoint == 'monitoramento' }}">
             <i class="bi bi-activity"></i> Monitoramento
         </a>
+        <a href="{{ url_for('cpe_lista') }}" class="{{ 'active' if request.endpoint in ('cpe_lista','cpe_detalhe') }}">
+            <i class="bi bi-router-fill"></i> CPE / TR-069
+        </a>
 
         <div class="nav-label">Sistema</div>
         <a href="{{ url_for('gerenciar_usuarios') }}" class="{{ 'active' if request.endpoint == 'gerenciar_usuarios' }}">

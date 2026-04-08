@@ -1,5 +1,4 @@
 # Variáveis de ambiente — NUNCA commitar o .env real
-.env
 
 # Python
 __pycache__/

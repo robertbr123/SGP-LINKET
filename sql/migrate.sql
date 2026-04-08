@@ -73,3 +73,32 @@ CREATE INDEX IF NOT EXISTS alertas_consumo_cliente ON alertas_consumo (cliente_i
 
 -- Coluna para rastrear notificação já enviada no mês corrente
 ALTER TABLE alertas_consumo ADD COLUMN IF NOT EXISTS ultimo_alerta_em TIMESTAMP;
+
+-- =============================================================================
+-- CPE Devices (GenieACS / TR-069)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS cpe_devices (
+    id SERIAL PRIMARY KEY,
+    cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+    serial_number VARCHAR(150),
+    mac_address VARCHAR(20),
+    modelo VARCHAR(150),
+    fabricante VARCHAR(100),
+    genieacs_id VARCHAR(300) UNIQUE,        -- ID canônico do GenieACS (OUI-Class-Serial)
+    ip_wan VARCHAR(50),
+    ip_lan VARCHAR(50),
+    online BOOLEAN DEFAULT FALSE,
+    ultima_conexao TIMESTAMP,
+    rx_power FLOAT,                          -- Potência óptica dBm (ONUs GPON)
+    ssid VARCHAR(100),
+    ssid_5g VARCHAR(100),
+    firmware_version VARCHAR(100),
+    uptime_seconds INTEGER DEFAULT 0,
+    obs TEXT,
+    criado_em TIMESTAMP DEFAULT NOW(),
+    atualizado_em TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS cpe_devices_cliente_id  ON cpe_devices(cliente_id);
+CREATE INDEX IF NOT EXISTS cpe_devices_genieacs_id ON cpe_devices(genieacs_id);
+CREATE INDEX IF NOT EXISTS cpe_devices_online       ON cpe_devices(online);

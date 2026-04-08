@@ -219,6 +219,7 @@ services:
       NOC_CHURN_CRIT_PCT: ${NOC_CHURN_CRIT_PCT:-12}
       NOC_AAA_WARN_PCT: ${NOC_AAA_WARN_PCT:-2}
       NOC_AAA_CRIT_PCT: ${NOC_AAA_CRIT_PCT:-8}
+      GENIEACS_NBI_URL: ${GENIEACS_NBI_URL:-http://genieacs-nbi:7557}
     networks:
       - radius_net
       - wg_net
@@ -257,9 +258,69 @@ services:
     networks:
       - radius_net
 
+  # ---------------------------------------------------------------------------
+  # GenieACS — ACS para TR-069 (gerência remota de CPEs/ONUs/roteadores)
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:6-jammy
+    container_name: genieacs_mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - radius_net
+
+  genieacs-cwmp:
+    image: genieacs/genieacs:latest
+    container_name: genieacs_cwmp
+    restart: unless-stopped
+    command: genieacs-cwmp
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongodb/genieacs
+      GENIEACS_CWMP_SSL: "false"
+      GENIEACS_CWMP_PORT: "7547"
+    ports:
+      - "7547:7547"           # CPEs conectam aqui via HTTP/TR-069
+    depends_on:
+      - mongodb
+    networks:
+      - radius_net
+
+  genieacs-nbi:
+    image: genieacs/genieacs:latest
+    container_name: genieacs_nbi
+    restart: unless-stopped
+    command: genieacs-nbi
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongodb/genieacs
+      GENIEACS_NBI_PORT: "7557"
+    ports:
+      - "7557:7557"           # REST API usada pelo SGP-LINKET
+    depends_on:
+      - mongodb
+    networks:
+      - radius_net
+
+  genieacs-ui:
+    image: genieacs/genieacs:latest
+    container_name: genieacs_ui
+    restart: unless-stopped
+    command: genieacs-ui
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongodb/genieacs
+      GENIEACS_UI_PORT: "3000"
+      GENIEACS_UI_JWT_SECRET: ${SECRET_KEY:-troque-esta-chave-secreta}
+    ports:
+      - "3000:3000"           # Painel web do GenieACS (admin técnico)
+    depends_on:
+      - mongodb
+    networks:
+      - radius_net
+
 volumes:
   postgres_data:
   wireguard_data:
+  mongo_data:
 
 networks:
   radius_net:
