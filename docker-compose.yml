@@ -262,7 +262,7 @@ services:
   # GenieACS — ACS para TR-069 (gerência remota de CPEs/ONUs/roteadores)
   # ---------------------------------------------------------------------------
   mongodb:
-    image: mongo:6-jammy
+    image: mongo:4.4
     container_name: genieacs_mongo
     restart: unless-stopped
     volumes:
@@ -271,7 +271,10 @@ services:
       - radius_net
 
   genieacs-cwmp:
-    image: drumsergio/genieacs:latest
+    build:
+      context: ./genieacs
+      dockerfile: Dockerfile
+    image: sgp-genieacs:local
     container_name: genieacs_cwmp
     restart: unless-stopped
     command: genieacs-cwmp
@@ -288,7 +291,7 @@ services:
       - radius_net
 
   genieacs-nbi:
-    image: drumsergio/genieacs:latest
+    image: sgp-genieacs:local
     container_name: genieacs_nbi
     restart: unless-stopped
     command: genieacs-nbi
@@ -299,12 +302,12 @@ services:
     ports:
       - "7557:7557"           # REST API usada pelo SGP-LINKET
     depends_on:
-      - mongodb
+      - genieacs-cwmp
     networks:
       - radius_net
 
   genieacs-ui:
-    image: drumsergio/genieacs:latest
+    image: sgp-genieacs:local
     container_name: genieacs_ui
     restart: unless-stopped
     command: genieacs-ui
@@ -315,7 +318,7 @@ services:
     ports:
       - "3001:3000"           # Painel web do GenieACS (admin técnico)
     depends_on:
-      - mongodb
+      - genieacs-cwmp
     networks:
       - radius_net
 
