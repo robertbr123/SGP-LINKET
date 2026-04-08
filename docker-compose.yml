@@ -313,7 +313,7 @@ services:
       GENIEACS_UI_PORT: "3000"
       GENIEACS_UI_JWT_SECRET: ${SECRET_KEY:-troque-esta-chave-secreta}
     ports:
-      - "3000:3000"           # Painel web do GenieACS (admin técnico)
+      - "3001:3000"           # Painel web do GenieACS (admin técnico)
     depends_on:
       - mongodb
     networks:
