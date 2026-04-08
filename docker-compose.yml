@@ -271,7 +271,7 @@ services:
       - radius_net
 
   genieacs-cwmp:
-    image: genieacs/genieacs:latest
+    image: drumsergio/genieacs:latest
     container_name: genieacs_cwmp
     restart: unless-stopped
     command: genieacs-cwmp
@@ -279,6 +279,7 @@ services:
       GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongodb/genieacs
       GENIEACS_CWMP_SSL: "false"
       GENIEACS_CWMP_PORT: "7547"
+      GENIEACS_CWMP_INTERFACE: "0.0.0.0"
     ports:
       - "7547:7547"           # CPEs conectam aqui via HTTP/TR-069
     depends_on:
@@ -287,13 +288,14 @@ services:
       - radius_net
 
   genieacs-nbi:
-    image: genieacs/genieacs:latest
+    image: drumsergio/genieacs:latest
     container_name: genieacs_nbi
     restart: unless-stopped
     command: genieacs-nbi
     environment:
       GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongodb/genieacs
       GENIEACS_NBI_PORT: "7557"
+      GENIEACS_NBI_INTERFACE: "0.0.0.0"
     ports:
       - "7557:7557"           # REST API usada pelo SGP-LINKET
     depends_on:
@@ -302,7 +304,7 @@ services:
       - radius_net
 
   genieacs-ui:
-    image: genieacs/genieacs:latest
+    image: drumsergio/genieacs:latest
     container_name: genieacs_ui
     restart: unless-stopped
     command: genieacs-ui
