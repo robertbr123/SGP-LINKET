@@ -291,6 +291,9 @@ services:
       - radius_net
 
   genieacs-nbi:
+    build:
+      context: ./genieacs
+      dockerfile: Dockerfile
     image: sgp-genieacs:local
     container_name: genieacs_nbi
     restart: unless-stopped
@@ -307,6 +310,9 @@ services:
       - radius_net
 
   genieacs-ui:
+    build:
+      context: ./genieacs
+      dockerfile: Dockerfile
     image: sgp-genieacs:local
     container_name: genieacs_ui
     restart: unless-stopped
