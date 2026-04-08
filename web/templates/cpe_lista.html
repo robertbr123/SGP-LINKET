@@ -243,8 +243,8 @@ body, .main-content { background: var(--ios-bg) !important; color: var(--text-pr
                     {% if cpe.ip_wan %}
                     <span><i class="bi bi-globe2" style="color:var(--t3)"></i> {{ cpe.ip_wan }}</span>
                     {% endif %}
-                    {% if cpe.ssid %}
-                    <span><i class="bi bi-wifi" style="color:var(--t3)"></i> {{ cpe.ssid }}</span>
+                    {% if cpe.ssid_24g or cpe.ssid_5g or cpe.ssid %}
+                    <span><i class="bi bi-wifi" style="color:var(--t3)"></i> {{ cpe.ssid_24g or cpe.ssid_5g or cpe.ssid }}</span>
                     {% endif %}
                 </div>
             </div>
@@ -329,7 +329,7 @@ body, .main-content { background: var(--ios-bg) !important; color: var(--text-pr
                 <select class="ios-select" name="cliente_id" id="clienteSelect">
                     <option value="">— Selecione o cliente —</option>
                     {% for c in clientes_sem_cpe %}
-                    <option value="{{ c.id }}">{{ c.nome }}{% if c.pppoe_login %} ({{ c.pppoe_login }}){% endif %}</option>
+                    <option value="{{ c.id }}">{{ c.nome }}{% if c.pppoe_login %} ({{ c.pppoe_login }}){% endif %}{% if c.cpes_count %} — {{ c.cpes_count }} CPE{% if c.cpes_count > 1 %}s{% endif %}{% endif %}</option>
                     {% endfor %}
                 </select>
 

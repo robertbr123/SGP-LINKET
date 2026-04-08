@@ -3094,21 +3094,24 @@ def cpe_lista():
                    c.status AS cliente_status, c.plano,
                    cpe.id, cpe.serial_number, cpe.modelo, cpe.fabricante,
                    cpe.genieacs_id, cpe.ip_wan, cpe.online, cpe.ultima_conexao,
-                   cpe.rx_power, cpe.ssid, cpe.firmware_version, cpe.obs
+                   cpe.rx_power, cpe.ssid, cpe.ssid_5g, cpe.ssid_24g,
+                   cpe.firmware_version, cpe.obs
             FROM cpe_devices cpe
             JOIN clientes c ON c.id = cpe.cliente_id
             ORDER BY cpe.online DESC, c.nome
         """)
         cpes_vinculados = cur.fetchall()
 
-        # Clientes sem CPE vinculado (para o modal de vincular)
+        # Todos os clientes (um cliente pode ter mais de 1 CPE)
         cur.execute("""
-            SELECT c.id, c.nome, c.pppoe_login, c.plano
+            SELECT c.id, c.nome, c.pppoe_login, c.plano,
+                   COUNT(cpe.id) AS cpes_count
             FROM clientes c
-            WHERE NOT EXISTS (SELECT 1 FROM cpe_devices cpe WHERE cpe.cliente_id = c.id)
+            LEFT JOIN cpe_devices cpe ON cpe.cliente_id = c.id
+            GROUP BY c.id, c.nome, c.pppoe_login, c.plano
             ORDER BY c.nome
         """)
-        clientes_sem_cpe = cur.fetchall()
+        clientes_sem_cpe = cur.fetchall()  # nome mantido por compatibilidade com template
 
         # Estatísticas rápidas
         cur.execute("SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE online) AS on_ FROM cpe_devices")
