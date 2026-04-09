@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Chamados{% endblock %}
+{% block page_title %}Chamados{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Chamados</li>{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div>
+            <span class="badge bg-danger fs-6" id="badgeAbertos">
+                {{ chamados | selectattr('status','eq','aberto') | list | length }} abertos
+            </span>
+        </div>
+        <a href="{{ url_for('config_alertas') }}" class="btn btn-outline-secondary btn-sm ms-auto">
+            <i class="bi bi-gear"></i> Configurar Alertas
+        </a>
+    </div>
+
+    {% if chamados %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Status</th>
+                <th>Tipo</th>
+                <th>Cliente</th>
+                <th>CPE</th>
+                <th>Descrição</th>
+                <th>Aberto em</th>
+                <th>Resolvido em</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for ch in chamados %}
+        <tr id="row-{{ ch.id }}">
+            <td class="text-muted small">{{ ch.id }}</td>
+            <td>
+                {% if ch.status == 'aberto' %}
+                <span class="badge bg-danger">Aberto</span>
+                {% elif ch.status == 'em_atendimento' %}
+                <span class="badge bg-warning text-dark">Em Atendimento</span>
+                {% else %}
+                <span class="badge bg-success">Resolvido</span>
+                {% endif %}
+            </td>
+            <td>
+                {% set icons = {'cpe_offline':'x-circle-fill','rx_critico':'reception-1','sem_conexao':'wifi-off'} %}
+                <i class="bi bi-{{ icons.get(ch.tipo, 'exclamation-circle') }}"></i>
+                {{ ch.tipo | replace('_',' ') | title }}
+            </td>
+            <td>
+                {% if ch.cliente_nome %}
+                <a href="{{ url_for('editar_cliente', cliente_id=ch.cliente_id) }}">{{ ch.cliente_nome }}</a>
+                {% if ch.pppoe_login %}<div class="small text-muted font-monospace">{{ ch.pppoe_login }}</div>{% endif %}
+                {% else %}—{% endif %}
+            </td>
+            <td>
+                {% if ch.cpe_id %}
+                <a href="{{ url_for('cpe_detalhe', cpe_id=ch.cpe_id) }}" class="small">
+                    {{ ch.fabricante or '' }} {{ ch.modelo or ch.cpe_id }}
+                </a>
+                {% if ch.ip_wan %}<div class="small text-muted font-monospace">{{ ch.ip_wan }}</div>{% endif %}
+                {% else %}—{% endif %}
+            </td>
+            <td class="small">{{ ch.descricao or '—' }}</td>
+            <td class="small text-muted text-nowrap">
+                {{ ch.criado_em.strftime('%d/%m/%Y %H:%M') if ch.criado_em else '—' }}
+            </td>
+            <td class="small text-muted text-nowrap">
+                {{ ch.resolvido_em.strftime('%d/%m/%Y %H:%M') if ch.resolvido_em else '—' }}
+            </td>
+            <td>
+                {% if ch.status == 'aberto' %}
+                <button class="btn btn-outline-success btn-sm"
+                        onclick="resolver({{ ch.id }})">
+                    <i class="bi bi-check2"></i> Resolver
+                </button>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-ticket-detailed" style="font-size:3rem;display:block;margin-bottom:12px"></i>
+        <div>Nenhum chamado registrado.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function resolver(id) {
+    if (!confirm('Marcar chamado #' + id + ' como resolvido?')) return;
+    const r = await fetch(`/api/chamados/${id}/resolver`, {method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+        const row = document.getElementById('row-' + id);
+        row.querySelector('td:nth-child(2)').innerHTML = '<span class="badge bg-success">Resolvido</span>';
+        row.querySelector('button')?.remove();
+    }
+}
+</script>
+{% endblock %}

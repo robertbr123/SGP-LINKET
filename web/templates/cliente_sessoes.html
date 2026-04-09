@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Sessões — {{ cliente.nome }}{% endblock %}
+{% block page_title %}Histórico de Sessões{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('listar_clientes') }}">Clientes</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('editar_cliente', cliente_id=cliente.id) }}">{{ cliente.nome }}</a></li>
+<li class="breadcrumb-item active">Sessões</li>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --sg-bg: #f2f2f7; --sg-surface: #fff; --sg-border: rgba(0,0,0,.09);
+    --sg-blue: #007AFF; --sg-green: #34C759; --sg-red: #FF3B30;
+    --sg-orange: #FF9500; --sg-purple: #AF52DE;
+    --t2: rgba(0,0,0,.5); --t3: rgba(0,0,0,.28);
+    --text: #1c1c1e; --shadow: 0 1px 4px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.05);
+}
+[data-bs-theme="dark"] {
+    --sg-bg: #000; --sg-surface: rgba(28,28,30,.95); --sg-border: rgba(255,255,255,.1);
+    --sg-blue: #0A84FF; --sg-green: #30D158; --sg-red: #FF453A;
+    --sg-orange: #FF9F0A; --sg-purple: #BF5AF2;
+    --t2: rgba(255,255,255,.55); --t3: rgba(255,255,255,.3);
+    --text: #fff; --shadow: 0 4px 24px rgba(0,0,0,.4);
+}
+body,.main-content { background: var(--sg-bg) !important; color: var(--text); }
+.sg-card { background: var(--sg-surface); border: 1px solid var(--sg-border);
+    border-radius: 16px; padding: 18px; box-shadow: var(--shadow); }
+.sg-label { font-size:.6rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.12em; color:var(--t2); margin-bottom:3px; }
+.sg-val { font-size:1.6rem; font-weight:900; letter-spacing:-.03em; }
+.grid-stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+.sess-table { width:100%; border-collapse:collapse; font-size:.78rem; }
+.sess-table th { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.1em;
+    color:var(--t2); padding:8px 10px; border-bottom:1px solid var(--sg-border); text-align:left; }
+.sess-table td { padding:9px 10px; border-bottom:1px solid var(--sg-border); color:var(--text); }
+.sess-table tr:last-child td { border-bottom:none; }
+.sess-table tr:hover td { background:rgba(0,122,255,.04); }
+[data-bs-theme="dark"] .sess-table tr:hover td { background:rgba(10,132,255,.05); }
+.badge-active { background:rgba(52,199,89,.12); color:var(--sg-green);
+    border:1px solid rgba(52,199,89,.3); padding:2px 8px; border-radius:6px;
+    font-size:.6rem; font-weight:800; text-transform:uppercase; }
+.badge-closed { background:rgba(0,0,0,.06); color:var(--t2);
+    border:1px solid var(--sg-border); padding:2px 8px; border-radius:6px;
+    font-size:.6rem; font-weight:700; }
+[data-bs-theme="dark"] .badge-closed { background:rgba(255,255,255,.06); }
+.coa-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+.coa-btn { border:none; border-radius:12px; padding:9px 18px; font-size:.8rem;
+    font-weight:700; cursor:pointer; display:inline-flex; align-items:center;
+    gap:7px; transition:filter .15s,transform .15s; }
+.coa-btn:hover { filter:brightness(1.08); transform:translateY(-1px); }
+.coa-block   { background:#FF3B30; color:white; }
+.coa-unblock { background:#34C759; color:white; }
+.coa-rate    { background:var(--sg-blue); color:white; }
+.rate-input  { background:rgba(0,0,0,.05); border:1px solid var(--sg-border);
+    border-radius:10px; padding:8px 12px; color:var(--text);
+    font-size:.82rem; width:110px; outline:none; }
+[data-bs-theme="dark"] .rate-input { background:rgba(255,255,255,.06); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="padding:20px">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px;flex-wrap:wrap">
+        <div>
+            <div style="font-size:1.3rem;font-weight:900">{{ cliente.nome }}</div>
+            <div style="font-size:.75rem;color:var(--t2);margin-top:2px">
+                <i class="bi bi-person-circle" style="color:var(--sg-blue)"></i> {{ cliente.pppoe_login }}
+                &nbsp;·&nbsp; Plano: <strong>{{ cliente.plano }}</strong>
+                &nbsp;·&nbsp; {{ cliente.velocidade_down }}↓ / {{ cliente.velocidade_up }}↑ Mbps
+            </div>
+        </div>
+        <div style="margin-left:auto">
+            <a href="{{ url_for('editar_cliente', cliente_id=cliente.id) }}"
+               style="color:var(--sg-blue);font-size:.8rem;font-weight:700;text-decoration:none">
+                <i class="bi bi-pencil"></i> Editar cliente
+            </a>
+        </div>
+    </div>
+
+    <!-- CoA Actions -->
+    <div class="sg-card mb-3" style="margin-bottom:16px">
+        <div class="sg-label">Controle de Acesso em Tempo Real (CoA)</div>
+        <div class="coa-bar" style="margin-top:10px">
+            <button class="coa-btn coa-block"   onclick="sendCoa('block')">
+                <i class="bi bi-slash-circle"></i> Bloquear
+            </button>
+            <button class="coa-btn coa-unblock" onclick="sendCoa('unblock')">
+                <i class="bi bi-check-circle"></i> Desbloquear
+            </button>
+            <div style="display:flex;align-items:center;gap:6px">
+                <input class="rate-input" id="rateInput" placeholder="ex: 20M/10M"
+                       title="Formato: Download/Upload — ex: 20M/10M">
+                <button class="coa-btn coa-rate" onclick="sendCoa('set_rate')">
+                    <i class="bi bi-speedometer2"></i> Alterar Velocidade
+                </button>
+            </div>
+        </div>
+        <div id="coaMsg" style="font-size:.78rem;margin-top:6px;display:none"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid-stats">
+        <div class="sg-card" style="text-align:center">
+            <div class="sg-label">Total sessões</div>
+            <div class="sg-val">{{ resumo.total or 0 }}</div>
+        </div>
+        <div class="sg-card" style="text-align:center">
+            <div class="sg-label">Ativas agora</div>
+            <div class="sg-val" style="color:var(--sg-green)">{{ resumo.ativas or 0 }}</div>
+        </div>
+        <div class="sg-card" style="text-align:center">
+            <div class="sg-label">Total consumido</div>
+            <div class="sg-val" style="font-size:1.1rem;margin-top:4px">{{ resumo.total_bytes_fmt }}</div>
+        </div>
+        <div class="sg-card" style="text-align:center">
+            <div class="sg-label">Duração média</div>
+            <div class="sg-val" style="font-size:1.1rem;margin-top:4px">{{ resumo.avg_fmt }}</div>
+        </div>
+        {% if resumo.ultima_conexao %}
+        <div class="sg-card" style="text-align:center">
+            <div class="sg-label">Última conexão</div>
+            <div style="font-size:.82rem;font-weight:700;margin-top:6px">
+                {{ resumo.ultima_conexao.strftime('%d/%m/%Y %H:%M') }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Gráfico bytes por dia -->
+    <div class="sg-card" style="margin-bottom:20px">
+        <div class="sg-label" style="margin-bottom:12px">Consumo diário — últimos 30 dias (MB)</div>
+        <canvas id="chartConsumo" height="80"></canvas>
+    </div>
+
+    <!-- IPs usados -->
+    {% if ips_usados %}
+    <div class="sg-card" style="margin-bottom:20px">
+        <div class="sg-label" style="margin-bottom:10px">IPs utilizados</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            {% for ip in ips_usados %}
+            <span style="background:rgba(0,122,255,.1);color:var(--sg-blue);border:1px solid rgba(0,122,255,.2);
+                border-radius:8px;padding:4px 12px;font-size:.75rem;font-weight:700;font-family:monospace">
+                {{ ip.framedipaddress }}
+                <span style="font-weight:400;color:var(--t2)">×{{ ip.vezes }}</span>
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabela de sessões -->
+    <div class="sg-card">
+        <div class="sg-label" style="margin-bottom:12px">Sessões — últimos 90 dias</div>
+        {% if sessoes %}
+        <div style="overflow-x:auto">
+        <table class="sess-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Início</th>
+                    <th>Fim</th>
+                    <th>Duração</th>
+                    <th>NAS / IP</th>
+                    <th>↓ Download</th>
+                    <th>↑ Upload</th>
+                    <th>Total</th>
+                    <th>Encerramento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in sessoes %}
+                <tr>
+                    <td>
+                        {% if s.ativa %}
+                        <span class="badge-active"><i class="bi bi-circle-fill" style="font-size:.5rem"></i> Ativa</span>
+                        {% else %}
+                        <span class="badge-closed">Encerrada</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:.72rem;white-space:nowrap">
+                        {{ s.acctstarttime.strftime('%d/%m/%Y %H:%M:%S') if s.acctstarttime else '—' }}
+                    </td>
+                    <td style="font-size:.72rem;white-space:nowrap">
+                        {{ s.acctstoptime.strftime('%d/%m/%Y %H:%M:%S') if s.acctstoptime else '—' }}
+                    </td>
+                    <td>{{ s.duracao_fmt }}</td>
+                    <td style="font-family:monospace;font-size:.7rem">
+                        {{ s.nasipaddress }}<br>
+                        <span style="color:var(--sg-blue)">{{ s.framedipaddress or '—' }}</span>
+                    </td>
+                    <td style="color:var(--sg-green)">{{ s.down_fmt }}</td>
+                    <td style="color:var(--sg-orange)">{{ s.up_fmt }}</td>
+                    <td style="font-weight:700">{{ s.total_bytes_fmt }}</td>
+                    <td style="font-size:.68rem;color:var(--t2)">{{ s.acctterminatecause or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:40px;color:var(--t3)">
+            <i class="bi bi-clock-history" style="font-size:2rem;display:block;margin-bottom:8px"></i>
+            Nenhuma sessão registrada nos últimos 90 dias.
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const CLIENTE_ID = {{ cliente.id }};
+
+// Gráfico
+const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+const gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.07)';
+const textColor = isDark ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.45)';
+
+new Chart(document.getElementById('chartConsumo'), {
+    type: 'bar',
+    data: {
+        labels: {{ grafico_labels | safe }},
+        datasets: [
+            {
+                label: '↓ Download (MB)',
+                data: {{ grafico_down | safe }},
+                backgroundColor: 'rgba(52,199,89,.7)',
+                borderRadius: 4,
+            },
+            {
+                label: '↑ Upload (MB)',
+                data: {{ grafico_up | safe }},
+                backgroundColor: 'rgba(0,122,255,.6)',
+                borderRadius: 4,
+            }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { labels: { color: textColor, font: { size: 11 } } } },
+        scales: {
+            x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+            y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } }
+        }
+    }
+});
+
+// CoA
+async function sendCoa(action) {
+    const msg = document.getElementById('coaMsg');
+    const rate = document.getElementById('rateInput').value.trim();
+    if (action === 'block' && !confirm('Bloquear acesso deste cliente agora?')) return;
+    if (action === 'set_rate' && !rate) { showMsg('Informe a velocidade. Ex: 20M/10M', false); return; }
+
+    try {
+        const r = await fetch(`/api/clientes/${CLIENTE_ID}/coa`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({action, rate})
+        });
+        const d = await r.json();
+        showMsg(d.msg || d.error, d.ok !== false && !d.error);
+    } catch(e) { showMsg(e.message, false); }
+}
+
+function showMsg(txt, ok) {
+    const el = document.getElementById('coaMsg');
+    el.style.display = 'block';
+    el.style.color = ok ? 'var(--sg-green)' : 'var(--sg-red)';
+    el.innerHTML = `<i class="bi ${ok ? 'bi-check-circle' : 'bi-x-circle'}"></i> ${txt}`;
+    setTimeout(() => el.style.display = 'none', 5000);
+}
+</script>
+{% endblock %}

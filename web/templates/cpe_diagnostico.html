@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Diagnóstico — {{ cpe.cliente_nome }}{% endblock %}
+{% block page_title %}CPE / TR-069{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('cpe_lista') }}">CPE / TR-069</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('cpe_detalhe', cpe_id=cpe.id) }}">{{ cpe.cliente_nome }}</a></li>
+<li class="breadcrumb-item active">Diagnóstico</li>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --bg:#f2f2f7; --surface:#fff; --border:rgba(0,0,0,.09);
+    --blue:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500;
+    --t2:rgba(0,0,0,.5); --t3:rgba(0,0,0,.28); --text:#1c1c1e;
+    --shadow:0 1px 4px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.05);
+    --input-bg:rgba(0,0,0,.05); --input-border:rgba(0,0,0,.12);
+}
+[data-bs-theme="dark"] {
+    --bg:#000; --surface:rgba(28,28,30,.95); --border:rgba(255,255,255,.1);
+    --blue:#0A84FF; --green:#30D158; --red:#FF453A; --orange:#FF9F0A;
+    --t2:rgba(255,255,255,.55); --t3:rgba(255,255,255,.3); --text:#fff;
+    --shadow:0 4px 24px rgba(0,0,0,.4);
+    --input-bg:rgba(255,255,255,.06); --input-border:rgba(255,255,255,.1);
+}
+body,.main-content { background:var(--bg) !important; color:var(--text); }
+.card { background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:20px; box-shadow:var(--shadow); margin-bottom:16px; }
+.label { font-size:.6rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.12em; color:var(--t2); margin-bottom:8px; }
+.ios-input { background:var(--input-bg); border:1px solid var(--input-border);
+    border-radius:11px; padding:9px 14px; color:var(--text); font-size:.85rem;
+    font-weight:500; outline:none; transition:border-color .2s; }
+.ios-input:focus { border-color:var(--blue); }
+.run-btn { background:var(--blue); color:white; border:none; border-radius:12px;
+    padding:10px 22px; font-size:.82rem; font-weight:700; cursor:pointer;
+    display:inline-flex; align-items:center; gap:8px; transition:filter .15s; }
+.run-btn:hover { filter:brightness(1.08); }
+.run-btn:disabled { opacity:.5; cursor:not-allowed; }
+.type-toggle { display:flex; background:var(--input-bg); border-radius:12px;
+    padding:3px; gap:3px; width:fit-content; margin-bottom:16px; }
+.type-btn { border:none; border-radius:9px; padding:7px 18px;
+    font-size:.75rem; font-weight:700; cursor:pointer;
+    background:none; color:var(--t2); transition:all .2s; }
+.type-btn.active { background:var(--blue); color:white; }
+#output { background:var(--input-bg); border:1px solid var(--input-border);
+    border-radius:14px; padding:16px; font-family:monospace; font-size:.78rem;
+    color:var(--text); min-height:180px; white-space:pre-wrap; line-height:1.6; }
+.stat-row { display:flex; gap:24px; flex-wrap:wrap; margin-top:12px; }
+.stat-item { text-align:center; }
+.stat-v { font-size:1.4rem; font-weight:900; letter-spacing:-.02em; }
+.stat-l { font-size:.6rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.1em; color:var(--t2); }
+.hop-row { display:flex; gap:12px; align-items:center; padding:7px 0;
+    border-bottom:1px solid var(--border); font-size:.78rem; }
+.hop-row:last-child { border-bottom:none; }
+.hop-n { width:24px; text-align:center; font-weight:800; color:var(--t2); }
+.hop-host { flex:1; font-family:monospace; }
+.hop-rtt { color:var(--blue); font-weight:700; min-width:80px; text-align:right; }
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="padding:20px;max-width:720px">
+
+    <div style="margin-bottom:18px">
+        <div style="font-size:1.2rem;font-weight:900">{{ cpe.cliente_nome }}</div>
+        <div style="font-size:.75rem;color:var(--t2);margin-top:2px">
+            {{ cpe.fabricante }} {{ cpe.modelo }} &nbsp;·&nbsp;
+            <span style="font-family:monospace">{{ cpe.ip_wan or '—' }}</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="label">Tipo de diagnóstico</div>
+        <div class="type-toggle">
+            <button class="type-btn active" id="btnPing" onclick="setType('ping')">
+                <i class="bi bi-reception-4"></i> Ping
+            </button>
+            <button class="type-btn" id="btnTrace" onclick="setType('traceroute')">
+                <i class="bi bi-diagram-3"></i> Traceroute
+            </button>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <div>
+                <div class="label">Host / IP destino</div>
+                <input class="ios-input" id="hostInput" value="8.8.8.8" style="width:220px">
+            </div>
+            <div id="countWrap">
+                <div class="label">Repetições</div>
+                <input class="ios-input" id="countInput" type="number" value="10" min="1" max="50" style="width:80px">
+            </div>
+            <div style="margin-top:18px">
+                <button class="run-btn" id="runBtn" onclick="runDiag()">
+                    <i class="bi bi-play-fill"></i> Executar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resultado Ping -->
+    <div class="card" id="resultPing" style="display:none">
+        <div class="label">Resultado — Ping</div>
+        <div class="stat-row" id="pingStats"></div>
+    </div>
+
+    <!-- Resultado Traceroute -->
+    <div class="card" id="resultTrace" style="display:none">
+        <div class="label">Resultado — Traceroute</div>
+        <div id="traceHops"></div>
+    </div>
+
+    <!-- Output bruto / loading -->
+    <div class="card">
+        <div class="label">Log</div>
+        <div id="output">Aguardando execução...</div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CPE_ID = {{ cpe.id }};
+let diagType = 'ping';
+
+function setType(t) {
+    diagType = t;
+    document.getElementById('btnPing').classList.toggle('active', t === 'ping');
+    document.getElementById('btnTrace').classList.toggle('active', t === 'traceroute');
+    document.getElementById('countWrap').style.display = t === 'ping' ? '' : 'none';
+}
+
+async function runDiag() {
+    const host  = document.getElementById('hostInput').value.trim();
+    const count = parseInt(document.getElementById('countInput').value) || 10;
+    const btn   = document.getElementById('runBtn');
+    const out   = document.getElementById('output');
+
+    if (!host) { out.textContent = 'Informe um host ou IP.'; return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite"></i> Executando...';
+    out.textContent = `Enviando tarefa ${diagType} para o CPE...\nAguardando resposta (pode levar até 30s)...`;
+    document.getElementById('resultPing').style.display  = 'none';
+    document.getElementById('resultTrace').style.display = 'none';
+
+    try {
+        const r = await fetch(`/api/cpe/${CPE_ID}/diagnostico`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({type: diagType, host, count})
+        });
+        const d = await r.json();
+
+        if (!d.ok || d.error) {
+            out.textContent = `Erro: ${d.error || 'Falha no diagnóstico'}`;
+            return;
+        }
+
+        const res = d.result;
+        out.textContent = JSON.stringify(res, null, 2);
+
+        if (diagType === 'ping') {
+            const ok = res.success || 0;
+            const fail = res.failure || 0;
+            const total = ok + fail;
+            const loss = total > 0 ? ((fail/total)*100).toFixed(0) : 0;
+            const color = loss == 0 ? 'var(--green)' : loss < 20 ? 'var(--orange)' : 'var(--red)';
+            document.getElementById('pingStats').innerHTML = `
+                <div class="stat-item"><div class="stat-v" style="color:var(--green)">${ok}</div><div class="stat-l">Sucesso</div></div>
+                <div class="stat-item"><div class="stat-v" style="color:var(--red)">${fail}</div><div class="stat-l">Falha</div></div>
+                <div class="stat-item"><div class="stat-v" style="color:${color}">${loss}%</div><div class="stat-l">Perda</div></div>
+                ${res.avg_rtt != null ? `<div class="stat-item"><div class="stat-v">${res.avg_rtt}ms</div><div class="stat-l">RTT Médio</div></div>` : ''}
+                ${res.min_rtt != null ? `<div class="stat-item"><div class="stat-v">${res.min_rtt}ms</div><div class="stat-l">RTT Mín</div></div>` : ''}
+                ${res.max_rtt != null ? `<div class="stat-item"><div class="stat-v">${res.max_rtt}ms</div><div class="stat-l">RTT Máx</div></div>` : ''}
+            `;
+            document.getElementById('resultPing').style.display = '';
+        } else {
+            const hops = res.hops || [];
+            if (hops.length) {
+                document.getElementById('traceHops').innerHTML = hops.map(h => `
+                    <div class="hop-row">
+                        <span class="hop-n">${h.hop}</span>
+                        <span class="hop-host">${h.host || '*'}</span>
+                        <span class="hop-rtt">${h.rtt ? h.rtt + 'ms' : '—'}</span>
+                        ${h.error && h.error !== '0' ? `<span style="color:var(--red);font-size:.68rem">${h.error}</span>` : ''}
+                    </div>`).join('');
+                document.getElementById('resultTrace').style.display = '';
+            }
+        }
+    } catch(e) {
+        out.textContent = `Erro: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Executar';
+    }
+}
+</script>
+{% endblock %}

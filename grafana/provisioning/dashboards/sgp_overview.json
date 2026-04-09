@@ -1,0 +1,75 @@
+{
+  "title": "SGP-LINKET Overview",
+  "uid": "sgp-overview",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Clientes Ativos",
+      "gridPos": {"x":0,"y":0,"w":4,"h":4},
+      "targets": [{"expr":"sgp_clientes_total{status=\"ativo\"}","legendFormat":"Ativos"}],
+      "options": {"colorMode":"background","graphMode":"area"}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Clientes Suspensos",
+      "gridPos": {"x":4,"y":0,"w":4,"h":4},
+      "targets": [{"expr":"sgp_clientes_total{status=\"suspenso\"}","legendFormat":"Suspensos"}],
+      "options": {"colorMode":"background","graphMode":"area"}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Sessões Ativas",
+      "gridPos": {"x":8,"y":0,"w":4,"h":4},
+      "targets": [{"expr":"sgp_sessoes_ativas_total","legendFormat":"Sessões"}],
+      "options": {"colorMode":"background","graphMode":"area"}
+    },
+    {
+      "id": 4, "type": "stat", "title": "CPEs Online",
+      "gridPos": {"x":12,"y":0,"w":4,"h":4},
+      "targets": [{"expr":"sgp_cpe_online_total","legendFormat":"Online"}],
+      "options": {"colorMode":"background","graphMode":"area","thresholds":{"steps":[{"color":"red","value":0},{"color":"green","value":1}]}}
+    },
+    {
+      "id": 5, "type": "stat", "title": "CPEs Offline",
+      "gridPos": {"x":16,"y":0,"w":4,"h":4},
+      "targets": [{"expr":"sgp_cpe_offline_total","legendFormat":"Offline"}],
+      "options": {"colorMode":"background","graphMode":"area","thresholds":{"steps":[{"color":"green","value":0},{"color":"red","value":1}]}}
+    },
+    {
+      "id": 6, "type": "stat", "title": "Chamados Abertos",
+      "gridPos": {"x":20,"y":0,"w":4,"h":4},
+      "targets": [{"expr":"sgp_chamados_abertos_total","legendFormat":"Chamados"}],
+      "options": {"colorMode":"background","graphMode":"area","thresholds":{"steps":[{"color":"green","value":0},{"color":"orange","value":1},{"color":"red","value":5}]}}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Sessões Ativas (histórico)",
+      "gridPos": {"x":0,"y":4,"w":12,"h":8},
+      "targets": [{"expr":"sgp_sessoes_ativas_total","legendFormat":"Sessões Ativas"}]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "CPEs Online/Offline",
+      "gridPos": {"x":12,"y":4,"w":12,"h":8},
+      "targets": [
+        {"expr":"sgp_cpe_online_total","legendFormat":"Online"},
+        {"expr":"sgp_cpe_offline_total","legendFormat":"Offline"}
+      ]
+    },
+    {
+      "id": 9, "type": "stat", "title": "Rx Power Médio (dBm)",
+      "gridPos": {"x":0,"y":12,"w":6,"h":4},
+      "targets": [{"expr":"sgp_cpe_rx_power_avg_dbm","legendFormat":"Rx Avg"}],
+      "options": {"colorMode":"background","thresholds":{"steps":[{"color":"red","value":-40},{"color":"orange","value":-27},{"color":"green","value":-20}]}}
+    },
+    {
+      "id": 10, "type": "stat", "title": "CPEs Rx Crítico",
+      "gridPos": {"x":6,"y":12,"w":6,"h":4},
+      "targets": [{"expr":"sgp_cpe_rx_critico_total","legendFormat":"Críticos"}],
+      "options": {"colorMode":"background","thresholds":{"steps":[{"color":"green","value":0},{"color":"red","value":1}]}}
+    },
+    {
+      "id": 11, "type": "stat", "title": "GenieACS",
+      "gridPos": {"x":12,"y":12,"w":6,"h":4},
+      "targets": [{"expr":"sgp_genieacs_up","legendFormat":"GenieACS"}],
+      "options": {"colorMode":"background","thresholds":{"steps":[{"color":"red","value":0},{"color":"green","value":1}]}}
+    }
+  ]
+}

@@ -103,3 +103,63 @@ CREATE TABLE IF NOT EXISTS cpe_devices (
 CREATE INDEX IF NOT EXISTS cpe_devices_cliente_id  ON cpe_devices(cliente_id);
 CREATE INDEX IF NOT EXISTS cpe_devices_genieacs_id ON cpe_devices(genieacs_id);
 CREATE INDEX IF NOT EXISTS cpe_devices_online       ON cpe_devices(online);
+
+-- =============================================================================
+-- CPE Events — histórico de eventos do equipamento (offline/online/reboot/IP)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS cpe_events (
+    id SERIAL PRIMARY KEY,
+    cpe_id INTEGER REFERENCES cpe_devices(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,   -- online, offline, reboot, ip_change, rx_alert, firmware_update
+    detail JSONB DEFAULT '{}',         -- dados extras: ip_anterior, ip_novo, rx_power, etc.
+    criado_em TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS cpe_events_cpe_id    ON cpe_events(cpe_id);
+CREATE INDEX IF NOT EXISTS cpe_events_tipo      ON cpe_events(event_type);
+CREATE INDEX IF NOT EXISTS cpe_events_criado_em ON cpe_events(criado_em DESC);
+
+-- =============================================================================
+-- Chamados — escalada automática de incidentes
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS chamados (
+    id SERIAL PRIMARY KEY,
+    cpe_id INTEGER REFERENCES cpe_devices(id) ON DELETE SET NULL,
+    cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+    tipo VARCHAR(50) NOT NULL,         -- cpe_offline, rx_critico, sem_conexao
+    descricao TEXT,
+    status VARCHAR(20) DEFAULT 'aberto',  -- aberto, em_atendimento, resolvido
+    criado_em TIMESTAMP DEFAULT NOW(),
+    atualizado_em TIMESTAMP DEFAULT NOW(),
+    resolvido_em TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS chamados_status    ON chamados(status);
+CREATE INDEX IF NOT EXISTS chamados_cpe_id   ON chamados(cpe_id);
+CREATE INDEX IF NOT EXISTS chamados_cliente  ON chamados(cliente_id);
+
+-- Configuração de alertas Telegram/notificações
+ALTER TABLE notificacoes_config ADD COLUMN IF NOT EXISTS eventos VARCHAR(300) DEFAULT 'status_change';
+-- Ex: 'status_change,cpe_offline,rx_alert,sem_conexao'
+
+-- Thresholds para alertas de Rx Power e CPE offline
+CREATE TABLE IF NOT EXISTS alertas_config (
+    id SERIAL PRIMARY KEY,
+    chave VARCHAR(100) NOT NULL UNIQUE,  -- rx_power_min, cpe_offline_minutos, etc.
+    valor VARCHAR(200) NOT NULL,
+    descricao TEXT,
+    atualizado_em TIMESTAMP DEFAULT NOW()
+);
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('rx_power_min',      '-27',  'Limiar mínimo de Rx Power em dBm para alerta')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('cpe_offline_minutos', '15', 'Minutos offline para abrir chamado automático')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('telegram_enabled',  'false', 'Ativar alertas Telegram (true/false)')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('telegram_bot_token', '', 'Token do bot Telegram')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('telegram_chat_id',   '', 'Chat ID do grupo/canal Telegram')
+ON CONFLICT (chave) DO NOTHING;

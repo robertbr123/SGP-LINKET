@@ -367,8 +367,11 @@
         <a href="{{ url_for('monitoramento') }}" class="{{ 'active' if request.endpoint == 'monitoramento' }}">
             <i class="bi bi-activity"></i> Monitoramento
         </a>
-        <a href="{{ url_for('cpe_lista') }}" class="{{ 'active' if request.endpoint in ('cpe_lista','cpe_detalhe') }}">
+        <a href="{{ url_for('cpe_lista') }}" class="{{ 'active' if request.endpoint in ('cpe_lista','cpe_detalhe','cpe_diagnostico') }}">
             <i class="bi bi-router-fill"></i> CPE / TR-069
+        </a>
+        <a href="{{ url_for('chamados_lista') }}" class="{{ 'active' if request.endpoint == 'chamados_lista' }}">
+            <i class="bi bi-ticket-detailed-fill"></i> Chamados
         </a>
 
         <div class="nav-label">Sistema</div>
@@ -380,6 +383,9 @@
         </a>
         <a href="{{ url_for('gerenciar_notificacoes') }}" class="{{ 'active' if request.endpoint == 'gerenciar_notificacoes' }}">
             <i class="bi bi-bell-fill"></i> Notificações
+        </a>
+        <a href="{{ url_for('config_alertas') }}" class="{{ 'active' if request.endpoint == 'config_alertas' }}">
+            <i class="bi bi-telegram"></i> Alertas / Telegram
         </a>
         <a href="{{ url_for('backup_restore') }}" class="{{ 'active' if request.endpoint == 'backup_restore' }}">
             <i class="bi bi-hdd-stack-fill"></i> Backup e Restauração

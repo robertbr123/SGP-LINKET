@@ -246,15 +246,59 @@ services:
       SYNC_INTERVAL: ${SYNC_INTERVAL:-300}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      # Configurações SMTP para notificações por email (opcional)
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      # Alertas: dias sem conexão para notificar (0 = desativado)
       OFFLINE_ALERT_DAYS: ${OFFLINE_ALERT_DAYS:-0}
-      # Timeout máximo do ciclo de sync em segundos
       SYNC_MAX_DURATION: ${SYNC_MAX_DURATION:-600}
+      GENIEACS_NBI_URL: ${GENIEACS_NBI_URL:-http://genieacs-nbi:7557}
+      CPE_POLL_INTERVAL: ${CPE_POLL_INTERVAL:-60}
+    networks:
+      - radius_net
+
+  # ---------------------------------------------------------------------------
+  # Prometheus — coleta métricas do /metrics do web
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: radius_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - web
+    networks:
+      - radius_net
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards operacionais
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: radius_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SERVER_HTTP_PORT: 3000
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3002:3000"
+    depends_on:
+      - prometheus
     networks:
       - radius_net
 
@@ -341,6 +385,8 @@ volumes:
   postgres_data:
   wireguard_data:
   mongo_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   radius_net:

@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: 'sgp-linket'
+    static_configs:
+      - targets: ['web:5000']
+    metrics_path: /metrics

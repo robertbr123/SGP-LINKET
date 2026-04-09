@@ -373,6 +373,19 @@ class GenieACSClient:
 
 _genieacs = GenieACSClient()
 
+
+# ---------------------------------------------------------------------------
+# Utilitários globais
+# ---------------------------------------------------------------------------
+
+def fmt_bytes(b):
+    b = b or 0
+    if b >= 1_073_741_824: return f"{b/1_073_741_824:.2f} GB"
+    if b >= 1_048_576:     return f"{b/1_048_576:.2f} MB"
+    if b >= 1024:          return f"{b/1024:.2f} KB"
+    return f"{b} B"
+
+
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
@@ -3531,16 +3544,6 @@ def relatorios():
 
     conn.close()
 
-    # Formata bytes para exibição
-    def fmt_bytes(b):
-        b = b or 0
-        if b >= 1_073_741_824:
-            return f"{b/1_073_741_824:.2f} GB"
-        if b >= 1_048_576:
-            return f"{b/1_048_576:.2f} MB"
-        if b >= 1024:
-            return f"{b/1024:.2f} KB"
-        return f"{b} B"
 
     for row in top_consumidores:
         row["total_fmt"]    = fmt_bytes(row["total_bytes"])
@@ -3580,6 +3583,586 @@ def relatorios():
         grafico_labels=json.dumps(grafico_labels),
         grafico_values=json.dumps(grafico_values),
     )
+
+
+# ---------------------------------------------------------------------------
+# Health Check — /health (público, para Uptime Kuma / Zabbix)
+# ---------------------------------------------------------------------------
+
+@app.route("/health")
+def health_check():
+    status = {"status": "ok", "services": {}, "ts": datetime.now(timezone.utc).isoformat()}
+    ok = True
+
+    # PostgreSQL
+    try:
+        conn = get_db(); conn.cursor().execute("SELECT 1"); conn.close()
+        status["services"]["postgres"] = "ok"
+    except Exception as e:
+        status["services"]["postgres"] = f"error: {e}"; ok = False
+
+    # Redis
+    try:
+        r = get_redis()
+        if r: r.ping(); status["services"]["redis"] = "ok"
+        else: status["services"]["redis"] = "unavailable"
+    except Exception as e:
+        status["services"]["redis"] = f"error: {e}"
+
+    # GenieACS NBI
+    try:
+        up = _genieacs.ping()
+        status["services"]["genieacs"] = "ok" if up else "unreachable"
+    except Exception as e:
+        status["services"]["genieacs"] = f"error: {e}"
+
+    # MikroTik (verifica se tem NAS cadastrado com API configurada)
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM nas WHERE mikrotik_user IS NOT NULL AND mikrotik_user != ''")
+            n = cur.fetchone()[0]
+        conn.close()
+        status["services"]["mikrotik_nas"] = f"{n} configured"
+    except Exception as e:
+        status["services"]["mikrotik_nas"] = f"error: {e}"
+
+    if not ok:
+        status["status"] = "degraded"
+    return jsonify(status), 200 if ok else 503
+
+
+# ---------------------------------------------------------------------------
+# Prometheus /metrics
+# ---------------------------------------------------------------------------
+
+@app.route("/metrics")
+def prometheus_metrics():
+    """Endpoint Prometheus com métricas do sistema."""
+    lines = []
+    ts_ms = int(time.time() * 1000)
+
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            # Clientes por status
+            cur.execute("SELECT status, COUNT(*) FROM clientes GROUP BY status")
+            for row in cur.fetchall():
+                lines.append(f'sgp_clientes_total{{status="{row[0]}"}} {row[1]} {ts_ms}')
+
+            # Sessões RADIUS ativas
+            cur.execute("SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL")
+            lines.append(f'sgp_sessoes_ativas_total {cur.fetchone()[0]} {ts_ms}')
+
+            # Sessões iniciadas nas últimas 24h
+            cur.execute("SELECT COUNT(*) FROM radacct WHERE acctstarttime > NOW() - INTERVAL '24h'")
+            lines.append(f'sgp_sessoes_24h_total {cur.fetchone()[0]} {ts_ms}')
+
+            # CPEs online/offline
+            cur.execute("SELECT online, COUNT(*) FROM cpe_devices GROUP BY online")
+            online_counts = {str(r[0]): r[1] for r in cur.fetchall()}
+            lines.append(f'sgp_cpe_online_total {online_counts.get("True", online_counts.get("t", 0))} {ts_ms}')
+            lines.append(f'sgp_cpe_offline_total {online_counts.get("False", online_counts.get("f", 0))} {ts_ms}')
+
+            # Rx Power médio dos CPEs com sinal
+            cur.execute("SELECT AVG(rx_power) FROM cpe_devices WHERE rx_power IS NOT NULL")
+            rx_avg = cur.fetchone()[0]
+            if rx_avg is not None:
+                lines.append(f'sgp_cpe_rx_power_avg_dbm {float(rx_avg):.2f} {ts_ms}')
+
+            # CPEs com sinal crítico (< -27 dBm)
+            cur.execute("SELECT COUNT(*) FROM cpe_devices WHERE rx_power IS NOT NULL AND rx_power < -27")
+            lines.append(f'sgp_cpe_rx_critico_total {cur.fetchone()[0]} {ts_ms}')
+
+            # Chamados abertos
+            cur.execute("SELECT COUNT(*) FROM chamados WHERE status = 'aberto'")
+            lines.append(f'sgp_chamados_abertos_total {cur.fetchone()[0]} {ts_ms}')
+
+        conn.close()
+    except Exception as e:
+        log.warning("metrics error: %s", e)
+        lines.append(f'sgp_error{{msg="{e}"}} 1 {ts_ms}')
+
+    # GenieACS up/down
+    lines.append(f'sgp_genieacs_up {1 if _genieacs.ping() else 0} {ts_ms}')
+
+    body = "\n".join(lines) + "\n"
+    return Response(body, mimetype="text/plain; version=0.0.4")
+
+
+# ---------------------------------------------------------------------------
+# CoA — Change of Authorization RADIUS
+# ---------------------------------------------------------------------------
+
+def _radius_coa(nas_ip, nas_secret, username, action, rate=None):
+    """
+    Envia CoA via radclient.
+    action: 'disconnect' | 'rate_limit'
+    rate: '10M/5M' (down/up) para rate_limit
+    """
+    if action == "disconnect":
+        attrs = f'User-Name="{username}"'
+        cmd = ["radclient", "-x", f"{nas_ip}:3799", "disconnect", nas_secret]
+    else:
+        # CoA para alterar rate limit sem desconectar
+        rate_attr = f'Mikrotik-Rate-Limit="{rate}"' if rate else ""
+        attrs = f'User-Name="{username}"\n{rate_attr}'
+        cmd = ["radclient", "-x", f"{nas_ip}:3799", "coa", nas_secret]
+
+    try:
+        proc = subprocess.run(
+            cmd, input=attrs, capture_output=True, text=True, timeout=10
+        )
+        return proc.returncode == 0, proc.stdout + proc.stderr
+    except FileNotFoundError:
+        return False, "radclient não encontrado. Instale freeradius-utils."
+    except Exception as e:
+        return False, str(e)
+
+
+@app.route("/api/clientes/<int:cliente_id>/coa", methods=["POST"])
+@login_required
+def cliente_coa(cliente_id):
+    """CoA: bloquear, desbloquear ou alterar velocidade sem derrubar sessão."""
+    data = request.json or {}
+    action = data.get("action")  # block | unblock | set_rate
+    rate   = data.get("rate")    # ex: "10M/5M"
+
+    if action not in ("block", "unblock", "set_rate"):
+        return jsonify({"error": "action inválida"}), 400
+
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM clientes WHERE id = %s", (cliente_id,))
+        cliente = cur.fetchone()
+        # Busca sessão ativa para pegar o NAS IP
+        cur.execute("""
+            SELECT nasipaddress FROM radacct
+            WHERE username = %s AND acctstoptime IS NULL
+            ORDER BY acctstarttime DESC LIMIT 1
+        """, (cliente["pppoe_login"],))
+        sessao = cur.fetchone()
+        # Busca secret do NAS
+        nas_ip = sessao["nasipaddress"] if sessao else None
+        if nas_ip:
+            cur.execute("SELECT secret FROM nas WHERE nasname = %s", (nas_ip,))
+            nas_row = cur.fetchone()
+            nas_secret = nas_row["secret"] if nas_row else "testing123"
+        else:
+            nas_secret = "testing123"
+    conn.close()
+
+    if not cliente:
+        return jsonify({"error": "Cliente não encontrado"}), 404
+
+    login = cliente["pppoe_login"]
+
+    if action == "block":
+        # CoA disconnect — força reconexão que vai para IP bloqueado
+        ok, out = _radius_coa(nas_ip or "127.0.0.1", nas_secret, login, "disconnect")
+        # Atualiza radreply para suspender
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM radreply WHERE username=%s AND attribute='Mikrotik-Rate-Limit'", (login,))
+            cur.execute("INSERT INTO radreply (username,attribute,op,value) VALUES (%s,'Mikrotik-Rate-Limit',':=','128k/128k')", (login,))
+        conn.commit(); conn.close()
+        return jsonify({"ok": ok, "msg": "Bloqueado via CoA" if ok else "CoA falhou, radreply atualizado", "detail": out})
+
+    elif action == "unblock":
+        down = cliente["velocidade_down"]; up = cliente["velocidade_up"]
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM radreply WHERE username=%s AND attribute='Mikrotik-Rate-Limit'", (login,))
+            cur.execute("INSERT INTO radreply (username,attribute,op,value) VALUES (%s,'Mikrotik-Rate-Limit',':=',%s)", (login, f"{up}M/{down}M"))
+        conn.commit(); conn.close()
+        ok, out = _radius_coa(nas_ip or "127.0.0.1", nas_secret, login, "disconnect")
+        return jsonify({"ok": True, "msg": "Desbloqueado — velocidade restaurada", "detail": out})
+
+    elif action == "set_rate":
+        if not rate:
+            return jsonify({"error": "Informe rate ex: '20M/10M'"}), 400
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM radreply WHERE username=%s AND attribute='Mikrotik-Rate-Limit'", (login,))
+            cur.execute("INSERT INTO radreply (username,attribute,op,value) VALUES (%s,'Mikrotik-Rate-Limit',':=',%s)", (login, rate))
+        conn.commit(); conn.close()
+        ok, out = _radius_coa(nas_ip or "127.0.0.1", nas_secret, login, "rate_limit", rate)
+        return jsonify({"ok": True, "msg": f"Velocidade alterada para {rate}", "detail": out})
+
+
+# ---------------------------------------------------------------------------
+# Histórico de sessões por cliente
+# ---------------------------------------------------------------------------
+
+@app.route("/clientes/<int:cliente_id>/sessoes")
+@login_required
+def cliente_sessoes(cliente_id):
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM clientes WHERE id = %s", (cliente_id,))
+        cliente = cur.fetchone()
+        if not cliente:
+            conn.close()
+            flash("Cliente não encontrado.", "danger")
+            return redirect(url_for("listar_clientes"))
+
+        login = cliente["pppoe_login"]
+
+        # Sessões dos últimos 90 dias
+        cur.execute("""
+            SELECT
+                acctsessionid, nasipaddress, framedipaddress,
+                acctstarttime, acctstoptime, acctsessiontime,
+                acctinputoctets, acctoutputoctets,
+                acctterminatecause,
+                acctstoptime IS NULL AS ativa
+            FROM radacct
+            WHERE username = %s AND acctstarttime > NOW() - INTERVAL '90 days'
+            ORDER BY acctstarttime DESC
+            LIMIT 200
+        """, (login,))
+        sessoes = cur.fetchall()
+
+        # Resumo geral
+        cur.execute("""
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE acctstoptime IS NULL) AS ativas,
+                SUM(acctinputoctets + acctoutputoctets) AS total_bytes,
+                AVG(acctsessiontime) AS avg_secs,
+                MAX(acctstarttime) AS ultima_conexao
+            FROM radacct WHERE username = %s
+        """, (login,))
+        resumo = cur.fetchone()
+
+        # Gráfico: bytes por dia nos últimos 30 dias
+        cur.execute("""
+            SELECT
+                DATE(acctstarttime) AS dia,
+                SUM(acctinputoctets)  AS bytes_down,
+                SUM(acctoutputoctets) AS bytes_up
+            FROM radacct
+            WHERE username = %s AND acctstarttime > NOW() - INTERVAL '30 days'
+            GROUP BY dia ORDER BY dia
+        """, (login,))
+        grafico_dias = cur.fetchall()
+
+        # IPs usados
+        cur.execute("""
+            SELECT framedipaddress, COUNT(*) AS vezes, MAX(acctstarttime) AS ultima_vez
+            FROM radacct WHERE username = %s AND framedipaddress IS NOT NULL
+            GROUP BY framedipaddress ORDER BY ultima_vez DESC LIMIT 10
+        """, (login,))
+        ips_usados = cur.fetchall()
+
+    conn.close()
+
+    # Formata sessões
+    for s in sessoes:
+        total = (s["acctinputoctets"] or 0) + (s["acctoutputoctets"] or 0)
+        s["total_bytes_fmt"] = fmt_bytes(total)
+        s["down_fmt"] = fmt_bytes(s["acctinputoctets"] or 0)
+        s["up_fmt"]   = fmt_bytes(s["acctoutputoctets"] or 0)
+        secs = s["acctsessiontime"] or 0
+        h, m = divmod(int(secs) // 60, 60)
+        s["duracao_fmt"] = f"{h}h {m}m" if h else f"{m}m"
+
+    resumo["total_bytes_fmt"] = fmt_bytes(resumo["total_bytes"] or 0)
+    avg = int(resumo["avg_secs"] or 0)
+    h, m = divmod(avg // 60, 60)
+    resumo["avg_fmt"] = f"{h}h {m}m" if h else f"{m}m"
+
+    # Gráfico Chart.js
+    grafico_labels  = json.dumps([str(r["dia"]) for r in grafico_dias])
+    grafico_down    = json.dumps([int((r["bytes_down"] or 0) / 1024 / 1024) for r in grafico_dias])
+    grafico_up      = json.dumps([int((r["bytes_up"]   or 0) / 1024 / 1024) for r in grafico_dias])
+
+    return render_template("cliente_sessoes.html",
+        cliente=cliente,
+        sessoes=sessoes,
+        resumo=resumo,
+        ips_usados=ips_usados,
+        grafico_labels=grafico_labels,
+        grafico_down=grafico_down,
+        grafico_up=grafico_up,
+    )
+
+
+# ---------------------------------------------------------------------------
+# TR-069 Diagnóstico Remoto (ping / traceroute via GenieACS)
+# ---------------------------------------------------------------------------
+
+@app.route("/cpe/<int:cpe_id>/diagnostico")
+@login_required
+def cpe_diagnostico(cpe_id):
+    _cpe_ensure_table()
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        flash("CPE não encontrado.", "danger")
+        return redirect(url_for("cpe_lista"))
+    return render_template("cpe_diagnostico.html", cpe=cpe)
+
+
+@app.route("/api/cpe/<int:cpe_id>/diagnostico", methods=["POST"])
+@login_required
+def cpe_diagnostico_run(cpe_id):
+    """Executa ping ou traceroute via TR-069 GenieACS task."""
+    cpe = _get_cpe_or_404(cpe_id)
+    if not cpe:
+        return jsonify({"error": "CPE não encontrado"}), 404
+    if not _genieacs.ping():
+        return jsonify({"error": "GenieACS indisponível"}), 503
+
+    data   = request.json or {}
+    diag   = data.get("type", "ping")   # ping | traceroute
+    host   = data.get("host", "8.8.8.8").strip()
+    count  = min(int(data.get("count", 10)), 50)
+
+    import urllib.parse
+    encoded = urllib.parse.quote(cpe["genieacs_id"], safe="")
+
+    # TR-098 paths para Intelbras / genérico
+    if diag == "ping":
+        params = [
+            ["InternetGatewayDevice.IPPingDiagnostics.Host",            host,          "xsd:string"],
+            ["InternetGatewayDevice.IPPingDiagnostics.NumberOfRepetitions", str(count), "xsd:unsignedInt"],
+            ["InternetGatewayDevice.IPPingDiagnostics.DataBlockSize",   "64",          "xsd:unsignedInt"],
+            ["InternetGatewayDevice.IPPingDiagnostics.Timeout",         "1000",        "xsd:unsignedInt"],
+            ["InternetGatewayDevice.IPPingDiagnostics.DiagnosticsState","Requested",   "xsd:string"],
+        ]
+        result_path = "InternetGatewayDevice.IPPingDiagnostics"
+    else:
+        params = [
+            ["InternetGatewayDevice.TraceRouteDiagnostics.Host",             host,     "xsd:string"],
+            ["InternetGatewayDevice.TraceRouteDiagnostics.MaxHopCount",      "20",     "xsd:unsignedInt"],
+            ["InternetGatewayDevice.TraceRouteDiagnostics.DiagnosticsState", "Requested", "xsd:string"],
+        ]
+        result_path = "InternetGatewayDevice.TraceRouteDiagnostics"
+
+    try:
+        # Inicia diagnóstico
+        _genieacs.set_params(cpe["genieacs_id"], params)
+
+        # Aguarda resultado (polling por até 30s)
+        import time as _time
+        for _ in range(15):
+            _time.sleep(2)
+            raw = _genieacs.get_device(cpe["genieacs_id"])
+            if not raw:
+                break
+
+            def _gv(obj, path):
+                parts = path.split(".")
+                cur = obj
+                for p in parts:
+                    if not isinstance(cur, dict): return None
+                    cur = cur.get(p)
+                if isinstance(cur, dict): return cur.get("_value")
+                return cur
+
+            state = _gv(raw, result_path + ".DiagnosticsState")
+            if state and state not in ("Requested", "None", None, ""):
+                result = {}
+                if diag == "ping":
+                    result = {
+                        "state":          state,
+                        "success":        int(_gv(raw, result_path + ".SuccessCount") or 0),
+                        "failure":        int(_gv(raw, result_path + ".FailureCount") or 0),
+                        "avg_rtt":        _gv(raw, result_path + ".AverageResponseTime"),
+                        "min_rtt":        _gv(raw, result_path + ".MinimumResponseTime"),
+                        "max_rtt":        _gv(raw, result_path + ".MaximumResponseTime"),
+                    }
+                else:
+                    hops = []
+                    hops_node = (raw.get("InternetGatewayDevice", {})
+                                    .get("TraceRouteDiagnostics", {})
+                                    .get("RouteHops", {}))
+                    for k in sorted(hops_node.keys()):
+                        if k.isdigit():
+                            h = hops_node[k]
+                            def _hv(key):
+                                n = h.get(key, {}); return n.get("_value","") if isinstance(n,dict) else (n or "")
+                            hops.append({
+                                "hop":     int(k),
+                                "host":    _hv("Host") or _hv("HostAddress"),
+                                "rtt":     _hv("RTTimes"),
+                                "error":   _hv("ErrorCode"),
+                            })
+                    result = {"state": state, "hops": hops}
+                return jsonify({"ok": True, "type": diag, "host": host, "result": result})
+
+        return jsonify({"ok": False, "error": "Timeout aguardando resultado do CPE."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# TR-069 — Histórico de eventos do CPE
+# ---------------------------------------------------------------------------
+
+def _cpe_log_event(cpe_id, event_type, detail=None):
+    """Grava evento na tabela cpe_events."""
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cpe_events (
+                    id SERIAL PRIMARY KEY,
+                    cpe_id INTEGER REFERENCES cpe_devices(id) ON DELETE CASCADE,
+                    event_type VARCHAR(50) NOT NULL,
+                    detail JSONB DEFAULT '{}',
+                    criado_em TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cur.execute(
+                "INSERT INTO cpe_events (cpe_id, event_type, detail) VALUES (%s, %s, %s)",
+                (cpe_id, event_type, json.dumps(detail or {}))
+            )
+        conn.commit(); conn.close()
+    except Exception as e:
+        log.warning("cpe_log_event error: %s", e)
+
+
+@app.route("/api/cpe/<int:cpe_id>/events")
+@login_required
+def cpe_api_events(cpe_id):
+    """Retorna histórico de eventos do CPE."""
+    try:
+        conn = get_db()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, event_type, detail, criado_em
+                FROM cpe_events WHERE cpe_id = %s
+                ORDER BY criado_em DESC LIMIT 100
+            """, (cpe_id,))
+            events = cur.fetchall()
+        conn.close()
+        return jsonify([dict(e) for e in events])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Configuração de Alertas (Telegram, Rx Power, offline)
+# ---------------------------------------------------------------------------
+
+def _ensure_alertas_config(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS alertas_config (
+                id SERIAL PRIMARY KEY,
+                chave VARCHAR(100) NOT NULL UNIQUE,
+                valor VARCHAR(200) NOT NULL,
+                descricao TEXT,
+                atualizado_em TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        defaults = [
+            ("rx_power_min",        "-27",   "Limiar mínimo de Rx Power em dBm"),
+            ("cpe_offline_minutos", "15",    "Minutos offline para abrir chamado"),
+            ("telegram_enabled",    "false", "Ativar alertas Telegram"),
+            ("telegram_bot_token",  "",      "Token do bot Telegram"),
+            ("telegram_chat_id",    "",      "Chat ID do grupo/canal Telegram"),
+        ]
+        for chave, valor, descricao in defaults:
+            cur.execute("""
+                INSERT INTO alertas_config (chave, valor, descricao)
+                VALUES (%s, %s, %s) ON CONFLICT (chave) DO NOTHING
+            """, (chave, valor, descricao))
+    conn.commit()
+
+
+@app.route("/configuracoes/alertas", methods=["GET", "POST"])
+@login_required
+def config_alertas():
+    conn = get_db()
+    _ensure_alertas_config(conn)
+
+    if request.method == "POST":
+        fields = ["telegram_enabled", "telegram_bot_token", "telegram_chat_id",
+                  "rx_power_min", "cpe_offline_minutos"]
+        with conn.cursor() as cur:
+            for f in fields:
+                val = request.form.get(f, "").strip()
+                cur.execute("""
+                    INSERT INTO alertas_config (chave, valor, atualizado_em)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (chave) DO UPDATE SET valor=EXCLUDED.valor, atualizado_em=NOW()
+                """, (f, val))
+        conn.commit()
+        conn.close()
+        flash("Configurações salvas!", "success")
+        return redirect(url_for("config_alertas"))
+
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT chave, valor FROM alertas_config")
+        cfg = {r["chave"]: r["valor"] for r in cur.fetchall()}
+    conn.close()
+    return render_template("config_alertas.html", cfg=cfg)
+
+
+@app.route("/api/alertas/telegram/test", methods=["POST"])
+@login_required
+def test_telegram():
+    """Envia mensagem de teste ao Telegram."""
+    conn = get_db()
+    _ensure_alertas_config(conn)
+    with conn.cursor() as cur:
+        cur.execute("SELECT chave, valor FROM alertas_config")
+        cfg = {r[0]: r[1] for r in cur.fetchall()}
+    conn.close()
+    token   = cfg.get("telegram_bot_token", "")
+    chat_id = cfg.get("telegram_chat_id", "")
+    if not token or not chat_id:
+        return jsonify({"error": "Token ou Chat ID não configurados"}), 400
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        r = requests.post(url, json={"chat_id": chat_id,
+            "text": "✅ <b>SGP-LINKET</b>\nTelegram configurado com sucesso!",
+            "parse_mode": "HTML"}, timeout=8)
+        if r.ok:
+            return jsonify({"ok": True, "msg": "Mensagem enviada!"})
+        return jsonify({"error": r.text}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Chamados
+# ---------------------------------------------------------------------------
+
+@app.route("/chamados")
+@login_required
+def chamados_lista():
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT ch.*, c.nome AS cliente_nome, c.pppoe_login,
+                       cpe.modelo, cpe.fabricante, cpe.ip_wan
+                FROM chamados ch
+                LEFT JOIN clientes c ON c.id = ch.cliente_id
+                LEFT JOIN cpe_devices cpe ON cpe.id = ch.cpe_id
+                ORDER BY ch.criado_em DESC LIMIT 200
+            """)
+            chamados = cur.fetchall()
+    except Exception:
+        chamados = []
+    conn.close()
+    return render_template("chamados.html", chamados=chamados)
+
+
+@app.route("/api/chamados/<int:chamado_id>/resolver", methods=["POST"])
+@login_required
+def resolver_chamado(chamado_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE chamados SET status='resolvido', resolvido_em=NOW(), atualizado_em=NOW()
+            WHERE id=%s
+        """, (chamado_id,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

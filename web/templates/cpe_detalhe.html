@@ -379,6 +379,10 @@ body, .main-content { background: var(--ios-bg) !important; color: var(--text-pr
         <div class="ios-card">
             <div class="card-label">Controle</div>
             <div class="card-title"><i class="bi bi-terminal-fill" style="color:var(--ios-orange)"></i> Ações Remotas</div>
+            <a href="{{ url_for('cpe_diagnostico', cpe_id=cpe.id) }}"
+               class="action-btn btn-blue" style="text-decoration:none">
+                <i class="bi bi-reception-4"></i> Diagnóstico Remoto
+            </a>
             <button class="action-btn btn-blue" onclick="doAction('refresh')">
                 <i class="bi bi-arrow-repeat"></i> Atualizar Dados Agora
             </button>
@@ -395,6 +399,20 @@ body, .main-content { background: var(--ios-bg) !important; color: var(--text-pr
                         <i class="bi bi-trash"></i> Desvincular CPE
                     </button>
                 </form>
+            </div>
+        </div>
+
+        <!-- Card: Histórico de Eventos -->
+        <div class="ios-card span-2" id="eventsCard">
+            <div class="card-label">Auditoria</div>
+            <div class="card-title">
+                <i class="bi bi-clock-history" style="color:var(--ios-orange)"></i> Histórico de Eventos
+            </div>
+            <div id="eventsList">
+                <div style="text-align:center;padding:16px;color:var(--t3);font-size:.78rem">
+                    <i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite;display:block;font-size:1.2rem;margin-bottom:6px"></i>
+                    Carregando...
+                </div>
             </div>
         </div>
 
@@ -520,6 +538,47 @@ if (LIVE_OK && GEN_ID) {
     setInterval(pollStatus, 10000);
     loadHosts();
     setInterval(loadHosts, 30000);
+}
+loadEvents();
+
+async function loadEvents() {
+    const el = document.getElementById('eventsList');
+    try {
+        const r = await fetch(`/api/cpe/${CPE_ID}/events`);
+        const data = await r.json();
+        if (data.error) { el.innerHTML = `<div style="color:var(--ios-red);font-size:.78rem">${data.error}</div>`; return; }
+        if (!data.length) {
+            el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:.78rem">Nenhum evento registrado ainda.</div>';
+            return;
+        }
+        const icons = {
+            online:'bi-check-circle-fill', offline:'bi-x-circle-fill',
+            reboot:'bi-arrow-repeat', ip_change:'bi-globe2',
+            rx_alert:'bi-reception-1', firmware_update:'bi-cloud-download'
+        };
+        const colors = {
+            online:'var(--ios-green)', offline:'var(--ios-red)',
+            reboot:'var(--ios-orange)', ip_change:'var(--ios-teal)',
+            rx_alert:'var(--ios-purple)', firmware_update:'var(--ios-blue)'
+        };
+        el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px">` +
+            data.map(e => {
+                const icon  = icons[e.event_type]  || 'bi-info-circle';
+                const color = colors[e.event_type] || 'var(--t2)';
+                const detail = e.detail ? Object.entries(e.detail).map(([k,v])=>`${k}: ${v}`).join(' · ') : '';
+                const dt = new Date(e.criado_em).toLocaleString('pt-BR');
+                return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--ios-border)">
+                    <i class="bi ${icon}" style="color:${color};font-size:1rem;margin-top:1px;flex-shrink:0"></i>
+                    <div style="flex:1">
+                        <div style="font-size:.8rem;font-weight:700;text-transform:capitalize">${e.event_type.replace('_',' ')}</div>
+                        ${detail ? `<div style="font-size:.68rem;color:var(--t2);margin-top:2px">${detail}</div>` : ''}
+                    </div>
+                    <div style="font-size:.65rem;color:var(--t3);white-space:nowrap">${dt}</div>
+                </div>`;
+            }).join('') + `</div>`;
+    } catch(e) {
+        el.innerHTML = `<div style="color:var(--ios-red);font-size:.78rem">${e.message}</div>`;
+    }
 }
 
 async function loadHosts() {

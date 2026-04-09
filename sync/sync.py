@@ -492,17 +492,286 @@ def check_clientes_offline(conn):
         log.warning("Erro ao verificar clientes offline: %s", e)
 
 
+# =============================================================================
+# Telegram
+# =============================================================================
+
+GENIEACS_NBI_URL = os.environ.get("GENIEACS_NBI_URL", "http://genieacs-nbi:7557").rstrip("/")
+CPE_POLL_INTERVAL = int(os.environ.get("CPE_POLL_INTERVAL", "60"))  # segundos
+
+
+def _get_alerta_config(conn, chave, default=""):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT valor FROM alertas_config WHERE chave=%s", (chave,))
+            row = cur.fetchone()
+            return row[0] if row else default
+    except Exception:
+        return default
+
+
+def telegram_send(conn, msg):
+    """Envia mensagem ao Telegram se configurado."""
+    try:
+        enabled = _get_alerta_config(conn, "telegram_enabled", "false")
+        if enabled.lower() != "true":
+            return
+        token   = _get_alerta_config(conn, "telegram_bot_token", "")
+        chat_id = _get_alerta_config(conn, "telegram_chat_id", "")
+        if not token or not chat_id:
+            return
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        requests.post(url, json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=8)
+        log.info("Telegram: mensagem enviada")
+    except Exception as e:
+        log.warning("Telegram send error: %s", e)
+
+
+def _cpe_log_event(conn, cpe_id, event_type, detail=None):
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO cpe_events (cpe_id, event_type, detail) VALUES (%s, %s, %s)",
+                (cpe_id, event_type, json.dumps(detail or {}))
+            )
+        conn.commit()
+    except Exception as e:
+        log.warning("cpe_log_event error: %s", e)
+
+
+def _abrir_chamado(conn, cpe_id, cliente_id, tipo, descricao):
+    """Abre chamado se não houver um aberto do mesmo tipo para este CPE."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id FROM chamados
+                WHERE cpe_id=%s AND tipo=%s AND status='aberto'
+                LIMIT 1
+            """, (cpe_id, tipo))
+            if cur.fetchone():
+                return  # já existe chamado aberto
+            cur.execute("""
+                INSERT INTO chamados (cpe_id, cliente_id, tipo, descricao)
+                VALUES (%s, %s, %s, %s)
+            """, (cpe_id, cliente_id, tipo, descricao))
+        conn.commit()
+        log.info("Chamado aberto: cpe_id=%s tipo=%s", cpe_id, tipo)
+    except Exception as e:
+        log.warning("_abrir_chamado error: %s", e)
+
+
+def _fechar_chamados(conn, cpe_id, tipo):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE chamados SET status='resolvido', resolvido_em=NOW(), atualizado_em=NOW()
+                WHERE cpe_id=%s AND tipo=%s AND status='aberto'
+            """, (cpe_id, tipo))
+        conn.commit()
+    except Exception as e:
+        log.warning("_fechar_chamados error: %s", e)
+
+
+def _gv_raw(obj, path):
+    """Navega JSON GenieACS por path pontilhado."""
+    parts = path.split(".")
+    cur = obj
+    for p in parts:
+        if not isinstance(cur, dict): return None
+        cur = cur.get(p)
+    if isinstance(cur, dict): return cur.get("_value")
+    return cur
+
+
+def check_cpe_status(conn):
+    """Monitora CPEs via GenieACS: detecta online/offline, mudança de IP, Rx crítico."""
+    try:
+        r = requests.get(f"{GENIEACS_NBI_URL}/devices?limit=500", timeout=10)
+        r.raise_for_status()
+        devices = r.json()
+    except Exception as e:
+        log.warning("GenieACS poll error: %s", e)
+        return
+
+    try:
+        rx_min = float(_get_alerta_config(conn, "rx_power_min", "-27"))
+        offline_min = int(_get_alerta_config(conn, "cpe_offline_minutos", "15"))
+    except Exception:
+        rx_min = -27.0; offline_min = 15
+
+    # Mapa genieacs_id → dados locais
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT cpe.id, cpe.genieacs_id, cpe.online, cpe.ip_wan, cpe.rx_power,
+                   cpe.cliente_id, cpe.ultima_conexao, c.nome AS cliente_nome
+            FROM cpe_devices cpe
+            LEFT JOIN clientes c ON c.id = cpe.cliente_id
+            WHERE cpe.genieacs_id IS NOT NULL
+        """)
+        cpes_db = {row["genieacs_id"]: row for row in cur.fetchall()}
+
+    from datetime import timezone as tz
+    now = datetime.now(tz.utc)
+
+    for dev in devices:
+        genieacs_id = dev.get("_id", "")
+        if genieacs_id not in cpes_db:
+            continue
+
+        cpe = cpes_db[genieacs_id]
+        cpe_id     = cpe["id"]
+        cliente_id = cpe["cliente_id"]
+        nome       = cpe["cliente_nome"] or "?"
+
+        # Online = lastInform presente e recente (< offline_min minutos)
+        last_inform_str = dev.get("_lastInform")
+        now_online = False
+        if last_inform_str:
+            try:
+                li = datetime.fromisoformat(last_inform_str.replace("Z", "+00:00"))
+                diff_min = (now - li).total_seconds() / 60
+                now_online = diff_min < offline_min
+            except Exception:
+                now_online = True
+
+        was_online = bool(cpe["online"])
+
+        # IP WAN atual
+        ip_now = (
+            _gv_raw(dev, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress")
+            or _gv_raw(dev, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress")
+            or ""
+        )
+        ip_old = cpe["ip_wan"] or ""
+
+        # Rx Power
+        rx_now = _gv_raw(dev, "InternetGatewayDevice.WANDevice.1.X_PON_RxPower")
+        if rx_now is not None:
+            try: rx_now = float(rx_now)
+            except Exception: rx_now = None
+
+        # --- Detecta mudanças ---
+        updates = {"online": now_online, "atualizado_em": "NOW()"}
+        if now_online:
+            updates["ultima_conexao"] = now.isoformat()
+        if ip_now:
+            updates["ip_wan"] = ip_now
+        if rx_now is not None:
+            updates["rx_power"] = rx_now
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE cpe_devices SET online=%s, ip_wan=COALESCE(%s, ip_wan),
+                    rx_power=COALESCE(%s, rx_power),
+                    ultima_conexao=CASE WHEN %s THEN NOW() ELSE ultima_conexao END,
+                    atualizado_em=NOW()
+                WHERE id=%s
+            """, (now_online, ip_now or None, rx_now, now_online, cpe_id))
+        conn.commit()
+
+        # Evento: ficou online
+        if now_online and not was_online:
+            _cpe_log_event(conn, cpe_id, "online", {"ip": ip_now})
+            _fechar_chamados(conn, cpe_id, "cpe_offline")
+            telegram_send(conn,
+                f"✅ <b>CPE Online</b>\nCliente: {nome}\nIP WAN: {ip_now or '—'}")
+            log.info("CPE online: %s (%s)", nome, genieacs_id)
+
+        # Evento: ficou offline
+        elif not now_online and was_online:
+            _cpe_log_event(conn, cpe_id, "offline", {})
+            _abrir_chamado(conn, cpe_id, cliente_id, "cpe_offline",
+                f"CPE do cliente {nome} ficou offline.")
+            telegram_send(conn,
+                f"🔴 <b>CPE Offline</b>\nCliente: {nome}\nÚltima conexão: {cpe['ultima_conexao'] or '—'}")
+            log.info("CPE offline: %s (%s)", nome, genieacs_id)
+
+        # Evento: IP mudou
+        if now_online and ip_now and ip_old and ip_now != ip_old:
+            _cpe_log_event(conn, cpe_id, "ip_change", {"ip_anterior": ip_old, "ip_novo": ip_now})
+            log.info("CPE IP mudou: %s %s → %s", nome, ip_old, ip_now)
+
+        # Evento: Rx crítico
+        if rx_now is not None and rx_now < rx_min:
+            old_rx = cpe["rx_power"]
+            # Só alerta se piorou ou não havia alerta anterior
+            if old_rx is None or old_rx >= rx_min:
+                _cpe_log_event(conn, cpe_id, "rx_alert", {"rx_power": rx_now, "limiar": rx_min})
+                _abrir_chamado(conn, cpe_id, cliente_id, "rx_critico",
+                    f"Rx Power crítico: {rx_now:.1f} dBm (limiar {rx_min} dBm)")
+                telegram_send(conn,
+                    f"⚠️ <b>Sinal Óptico Crítico</b>\nCliente: {nome}\nRx Power: {rx_now:.1f} dBm (limiar: {rx_min} dBm)")
+                log.info("Rx crítico: %s %.1f dBm", nome, rx_now)
+        elif rx_now is not None and rx_now >= rx_min:
+            _fechar_chamados(conn, cpe_id, "rx_critico")
+
+
+def check_clientes_sem_conexao(conn):
+    """Detecta clientes ativos sem nenhuma sessão RADIUS e abre chamado."""
+    try:
+        offline_min = int(_get_alerta_config(conn, "cpe_offline_minutos", "15"))
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT c.id, c.nome, c.pppoe_login
+                FROM clientes c
+                WHERE c.status = 'ativo' AND c.pppoe_login IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM radacct ra
+                    WHERE ra.username = c.pppoe_login
+                      AND ra.acctstarttime > NOW() - (%s * INTERVAL '1 minute')
+                      AND ra.acctstoptime IS NULL
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM chamados ch
+                    WHERE ch.cliente_id = c.id AND ch.tipo='sem_conexao' AND ch.status='aberto'
+                    AND ch.criado_em > NOW() - INTERVAL '4 hours'
+                  )
+            """, (offline_min * 10,))  # sem sessão ativa por 10x o limiar
+            sem_sessao = cur.fetchall()
+
+        for c in sem_sessao:
+            # Verifica se realmente nunca teve sessão ou parou há muito
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT MAX(acctstarttime) FROM radacct WHERE username=%s
+                """, (c["pppoe_login"],))
+                ultima = cur.fetchone()[0]
+
+            if ultima is None:
+                continue  # nunca conectou — não é incidente
+
+            from datetime import timezone as tz
+            diff_h = (datetime.now(tz.utc) - ultima.replace(tzinfo=tz.utc)).total_seconds() / 3600
+            if diff_h < 1:
+                continue  # desconectou há menos de 1h — normal
+
+            _abrir_chamado(conn, None, c["id"], "sem_conexao",
+                f"Cliente {c['nome']} sem sessão RADIUS há {diff_h:.1f}h.")
+            telegram_send(conn,
+                f"📵 <b>Cliente Sem Conexão</b>\nCliente: {c['nome']}\nLogin: {c['pppoe_login']}\nSem sessão há {diff_h:.1f}h")
+    except Exception as e:
+        log.warning("check_clientes_sem_conexao error: %s", e)
+
+
 if __name__ == "__main__":
-    log.info("Serviço de sync iniciado. Intervalo: %ds", SYNC_INTERVAL)
-    if OFFLINE_ALERT_DAYS > 0:
-        log.info("Alertas offline ativados: clientes sem conexão há %d+ dias serão notificados.", OFFLINE_ALERT_DAYS)
+    log.info("Serviço de sync iniciado. Intervalo: %ds | CPE poll: %ds", SYNC_INTERVAL, CPE_POLL_INTERVAL)
     time.sleep(15)
+
+    cpe_last_poll = 0
+
     while True:
         sync_all()
         try:
             conn = get_db()
             check_alertas_consumo(conn)
             check_clientes_offline(conn)
+
+            # CPE monitoring no próprio loop (sem thread extra)
+            if time.time() - cpe_last_poll >= CPE_POLL_INTERVAL:
+                check_cpe_status(conn)
+                check_clientes_sem_conexao(conn)
+                cpe_last_poll = time.time()
+
             conn.close()
         except Exception as e:
             log.warning("Erro ao checar alertas: %s", e)

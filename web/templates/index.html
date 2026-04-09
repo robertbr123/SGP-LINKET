@@ -203,6 +203,10 @@
                                class="btn btn-outline-secondary" title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </a>
+                            <a href="{{ url_for('cliente_sessoes', cliente_id=c.id) }}"
+                               class="btn btn-outline-primary" title="Histórico de Sessões">
+                                <i class="bi bi-clock-history"></i>
+                            </a>
                             <button class="btn btn-outline-info btn-sync"
                                     data-id="{{ c.id }}" title="Sincronizar SGP">
                                 <i class="bi bi-arrow-repeat"></i>

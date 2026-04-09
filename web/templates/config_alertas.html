@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Alertas — Configurações{% endblock %}
+{% block page_title %}Configurações{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Alertas</li>{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3" style="max-width:700px">
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="alert alert-{{ 'success' if cat == 'success' else 'danger' }} alert-dismissible fade show">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}{% endwith %}
+
+    <form method="POST">
+
+        <!-- Telegram -->
+        <div class="card mb-4">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-telegram text-primary"></i>
+                <strong>Alertas Telegram</strong>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="tg_enabled"
+                               name="telegram_enabled" value="true"
+                               {{ 'checked' if cfg.get('telegram_enabled') == 'true' }}>
+                        <label class="form-check-label" for="tg_enabled">Ativar notificações Telegram</label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Bot Token</label>
+                    <input type="text" class="form-control font-monospace" name="telegram_bot_token"
+                           value="{{ cfg.get('telegram_bot_token','') }}"
+                           placeholder="123456789:ABCdefGhIJKlmNoPQRstuVWXyz">
+                    <div class="form-text">Crie em <strong>@BotFather</strong> no Telegram → /newbot</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Chat ID</label>
+                    <input type="text" class="form-control font-monospace" name="telegram_chat_id"
+                           value="{{ cfg.get('telegram_chat_id','') }}"
+                           placeholder="-1001234567890">
+                    <div class="form-text">ID do grupo ou canal. Use <strong>@userinfobot</strong> para descobrir.</div>
+                </div>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="testTelegram()">
+                    <i class="bi bi-send"></i> Enviar mensagem de teste
+                </button>
+                <span id="tgTestMsg" class="ms-2 small"></span>
+            </div>
+        </div>
+
+        <!-- Thresholds -->
+        <div class="card mb-4">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-bell text-warning"></i>
+                <strong>Limiares de Alertas</strong>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Rx Power mínimo (dBm)</label>
+                    <input type="number" class="form-control" name="rx_power_min"
+                           step="0.5" value="{{ cfg.get('rx_power_min','-27') }}"
+                           style="max-width:140px">
+                    <div class="form-text">Abaixo deste valor abre chamado e envia alerta. Recomendado: -27</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">CPE offline — minutos para alerta</label>
+                    <input type="number" class="form-control" name="cpe_offline_minutos"
+                           min="1" max="1440" value="{{ cfg.get('cpe_offline_minutos','15') }}"
+                           style="max-width:140px">
+                    <div class="form-text">Tempo sem resposta para considerar CPE offline e abrir chamado.</div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check2"></i> Salvar configurações
+        </button>
+        <a href="{{ url_for('chamados_lista') }}" class="btn btn-outline-secondary ms-2">
+            <i class="bi bi-ticket-detailed"></i> Ver Chamados
+        </a>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function testTelegram() {
+    const msg = document.getElementById('tgTestMsg');
+    msg.textContent = 'Enviando...'; msg.style.color = 'gray';
+    try {
+        const r = await fetch('/api/alertas/telegram/test', {method:'POST'});
+        const d = await r.json();
+        msg.textContent = d.msg || d.error;
+        msg.style.color = d.ok ? 'green' : 'red';
+    } catch(e) { msg.textContent = e.message; msg.style.color = 'red'; }
+}
+</script>
+{% endblock %}
