@@ -1,75 +1,126 @@
 {
-  "title": "SGP-LINKET Overview",
+  "title": "SGP-LINKET — Visão Geral",
   "uid": "sgp-overview",
   "schemaVersion": 38,
   "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "tags": ["sgp", "overview"],
+  "style": "dark",
   "panels": [
+
+    { "id":1, "type":"row", "title":"📡 Clientes & Sessões", "gridPos":{"x":0,"y":0,"w":24,"h":1}, "collapsed":false },
+
     {
-      "id": 1, "type": "stat", "title": "Clientes Ativos",
-      "gridPos": {"x":0,"y":0,"w":4,"h":4},
-      "targets": [{"expr":"sgp_clientes_total{status=\"ativo\"}","legendFormat":"Ativos"}],
-      "options": {"colorMode":"background","graphMode":"area"}
+      "id":2, "type":"stat", "title":"Clientes Ativos",
+      "gridPos":{"x":0,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_clientes_total{status=\"ativo\"}","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"green"},"unit":"short","thresholds":{"mode":"absolute","steps":[{"color":"green","value":0}]}}}
     },
     {
-      "id": 2, "type": "stat", "title": "Clientes Suspensos",
-      "gridPos": {"x":4,"y":0,"w":4,"h":4},
-      "targets": [{"expr":"sgp_clientes_total{status=\"suspenso\"}","legendFormat":"Suspensos"}],
-      "options": {"colorMode":"background","graphMode":"area"}
+      "id":3, "type":"stat", "title":"Suspensos",
+      "gridPos":{"x":4,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_clientes_total{status=\"suspenso\"}","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"orange"},"unit":"short"}}
     },
     {
-      "id": 3, "type": "stat", "title": "Sessões Ativas",
-      "gridPos": {"x":8,"y":0,"w":4,"h":4},
-      "targets": [{"expr":"sgp_sessoes_ativas_total","legendFormat":"Sessões"}],
-      "options": {"colorMode":"background","graphMode":"area"}
+      "id":4, "type":"stat", "title":"Sessões Ativas",
+      "gridPos":{"x":8,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_sessoes_ativas_total","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"short","thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"yellow","value":50},{"color":"red","value":200}]}}}
     },
     {
-      "id": 4, "type": "stat", "title": "CPEs Online",
-      "gridPos": {"x":12,"y":0,"w":4,"h":4},
-      "targets": [{"expr":"sgp_cpe_online_total","legendFormat":"Online"}],
-      "options": {"colorMode":"background","graphMode":"area","thresholds":{"steps":[{"color":"red","value":0},{"color":"green","value":1}]}}
+      "id":5, "type":"stat", "title":"Sessões (24h)",
+      "gridPos":{"x":12,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_sessoes_24h_total","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"blue"},"unit":"short"}}
     },
     {
-      "id": 5, "type": "stat", "title": "CPEs Offline",
-      "gridPos": {"x":16,"y":0,"w":4,"h":4},
-      "targets": [{"expr":"sgp_cpe_offline_total","legendFormat":"Offline"}],
-      "options": {"colorMode":"background","graphMode":"area","thresholds":{"steps":[{"color":"green","value":0},{"color":"red","value":1}]}}
+      "id":6, "type":"stat", "title":"Chamados Abertos",
+      "gridPos":{"x":16,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_chamados_abertos_total","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"short","thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"orange","value":1},{"color":"red","value":5}]}}}
     },
     {
-      "id": 6, "type": "stat", "title": "Chamados Abertos",
-      "gridPos": {"x":20,"y":0,"w":4,"h":4},
-      "targets": [{"expr":"sgp_chamados_abertos_total","legendFormat":"Chamados"}],
-      "options": {"colorMode":"background","graphMode":"area","thresholds":{"steps":[{"color":"green","value":0},{"color":"orange","value":1},{"color":"red","value":5}]}}
+      "id":7, "type":"stat", "title":"GenieACS",
+      "gridPos":{"x":20,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_genieacs_up","legendFormat":""}],
+      "options":{"colorMode":"background","textMode":"value_and_name","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"red","value":0},{"color":"green","value":1}]},"mappings":[{"type":"value","options":{"0":{"text":"OFF"},"1":{"text":"ON"}}}]}}
+    },
+
+    {
+      "id":8, "type":"timeseries", "title":"Sessões Ativas ao Longo do Tempo",
+      "gridPos":{"x":0,"y":5,"w":16,"h":8},
+      "targets":[{"expr":"sgp_sessoes_ativas_total","legendFormat":"Sessões Ativas"}],
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"#36A2EB"},"custom":{"fillOpacity":20,"lineWidth":2,"spanNulls":true},"unit":"short"}},
+      "options":{"tooltip":{"mode":"single"},"legend":{"displayMode":"list","placement":"bottom"}}
     },
     {
-      "id": 7, "type": "timeseries", "title": "Sessões Ativas (histórico)",
-      "gridPos": {"x":0,"y":4,"w":12,"h":8},
-      "targets": [{"expr":"sgp_sessoes_ativas_total","legendFormat":"Sessões Ativas"}]
+      "id":9, "type":"piechart", "title":"Clientes por Status",
+      "gridPos":{"x":16,"y":5,"w":8,"h":8},
+      "targets":[
+        {"expr":"sgp_clientes_total{status=\"ativo\"}","legendFormat":"Ativos"},
+        {"expr":"sgp_clientes_total{status=\"suspenso\"}","legendFormat":"Suspensos"},
+        {"expr":"sgp_clientes_total{status=\"pendente\"}","legendFormat":"Pendentes"}
+      ],
+      "options":{"pieType":"donut","displayLabels":["name","percent"]},
+      "fieldConfig":{"defaults":{"color":{"mode":"palette-classic"}}}
+    },
+
+    { "id":10, "type":"row", "title":"📦 CPE / TR-069", "gridPos":{"x":0,"y":13,"w":24,"h":1}, "collapsed":false },
+
+    {
+      "id":11, "type":"stat", "title":"CPEs Online",
+      "gridPos":{"x":0,"y":14,"w":4,"h":4},
+      "targets":[{"expr":"sgp_cpe_online_total","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"green"},"unit":"short"}}
     },
     {
-      "id": 8, "type": "timeseries", "title": "CPEs Online/Offline",
-      "gridPos": {"x":12,"y":4,"w":12,"h":8},
-      "targets": [
+      "id":12, "type":"stat", "title":"CPEs Offline",
+      "gridPos":{"x":4,"y":14,"w":4,"h":4},
+      "targets":[{"expr":"sgp_cpe_offline_total","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"short","thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"red","value":1}]}}}
+    },
+    {
+      "id":13, "type":"stat", "title":"Rx Power Médio",
+      "gridPos":{"x":8,"y":14,"w":4,"h":4},
+      "targets":[{"expr":"sgp_cpe_rx_power_avg_dbm","legendFormat":""}],
+      "options":{"colorMode":"background","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"dBm","decimals":1,"thresholds":{"mode":"absolute","steps":[{"color":"red","value":-50},{"color":"orange","value":-27},{"color":"green","value":-20}]}}}
+    },
+    {
+      "id":14, "type":"stat", "title":"CPEs Rx Crítico",
+      "gridPos":{"x":12,"y":14,"w":4,"h":4},
+      "targets":[{"expr":"sgp_cpe_rx_critico_total","legendFormat":""}],
+      "options":{"colorMode":"background","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"short","thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"red","value":1}]}}}
+    },
+    {
+      "id":15, "type":"timeseries", "title":"CPEs Online / Offline",
+      "gridPos":{"x":0,"y":18,"w":12,"h":7},
+      "targets":[
         {"expr":"sgp_cpe_online_total","legendFormat":"Online"},
         {"expr":"sgp_cpe_offline_total","legendFormat":"Offline"}
-      ]
+      ],
+      "fieldConfig":{"defaults":{"custom":{"fillOpacity":15,"lineWidth":2},"unit":"short"},"overrides":[
+        {"matcher":{"id":"byName","options":"Online"},"properties":[{"id":"color","value":{"mode":"fixed","fixedColor":"green"}}]},
+        {"matcher":{"id":"byName","options":"Offline"},"properties":[{"id":"color","value":{"mode":"fixed","fixedColor":"red"}}]}
+      ]},
+      "options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}
     },
     {
-      "id": 9, "type": "stat", "title": "Rx Power Médio (dBm)",
-      "gridPos": {"x":0,"y":12,"w":6,"h":4},
-      "targets": [{"expr":"sgp_cpe_rx_power_avg_dbm","legendFormat":"Rx Avg"}],
-      "options": {"colorMode":"background","thresholds":{"steps":[{"color":"red","value":-40},{"color":"orange","value":-27},{"color":"green","value":-20}]}}
-    },
-    {
-      "id": 10, "type": "stat", "title": "CPEs Rx Crítico",
-      "gridPos": {"x":6,"y":12,"w":6,"h":4},
-      "targets": [{"expr":"sgp_cpe_rx_critico_total","legendFormat":"Críticos"}],
-      "options": {"colorMode":"background","thresholds":{"steps":[{"color":"green","value":0},{"color":"red","value":1}]}}
-    },
-    {
-      "id": 11, "type": "stat", "title": "GenieACS",
-      "gridPos": {"x":12,"y":12,"w":6,"h":4},
-      "targets": [{"expr":"sgp_genieacs_up","legendFormat":"GenieACS"}],
-      "options": {"colorMode":"background","thresholds":{"steps":[{"color":"red","value":0},{"color":"green","value":1}]}}
+      "id":16, "type":"timeseries", "title":"Rx Power Médio (dBm)",
+      "gridPos":{"x":12,"y":18,"w":12,"h":7},
+      "targets":[{"expr":"sgp_cpe_rx_power_avg_dbm","legendFormat":"Rx Power Médio"}],
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"purple"},"custom":{"fillOpacity":15,"lineWidth":2},"unit":"dBm","decimals":1,"thresholds":{"mode":"absolute","steps":[{"color":"red","value":-50},{"color":"orange","value":-27},{"color":"green","value":-20}]}}},
+      "options":{"tooltip":{"mode":"single"},"legend":{"displayMode":"list","placement":"bottom"}}
     }
   ]
 }

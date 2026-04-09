@@ -3686,6 +3686,69 @@ def prometheus_metrics():
     # GenieACS up/down
     lines.append(f'sgp_genieacs_up {1 if _genieacs.ping() else 0} {ts_ms}')
 
+    # MikroTik NAS metrics — coleta de todos os NAS configurados
+    try:
+        conn = get_db()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM nas WHERE mikrotik_user IS NOT NULL AND mikrotik_user != ''")
+            nas_list = cur.fetchall()
+        conn.close()
+
+        for nas in nas_list:
+            nas_id  = nas["id"]
+            label   = (nas.get("shortname") or nas.get("nasname", str(nas_id))).replace('"', '')
+            try:
+                api, _ = _mt_connect(nas_id)
+                try:
+                    resource = list(api("/system/resource/print"))[0]
+                    ifaces   = list(api("/interface/print", **{"stats": ""}))
+                    ppp_act  = list(api("/ppp/active/print"))
+                    try:
+                        health = list(api("/system/health/print"))
+                    except Exception:
+                        health = []
+                finally:
+                    api.close()
+
+                cpu   = int(resource.get("cpu-load", 0))
+                total_mem = int(resource.get("total-memory", 0))
+                free_mem  = int(resource.get("free-memory", 0))
+                mem_pct   = round((total_mem - free_mem) / total_mem * 100, 1) if total_mem else 0
+
+                lines.append(f'sgp_nas_cpu_pct{{nas="{label}"}} {cpu} {ts_ms}')
+                lines.append(f'sgp_nas_mem_pct{{nas="{label}"}} {mem_pct} {ts_ms}')
+                lines.append(f'sgp_nas_ppp_active{{nas="{label}"}} {len(ppp_act)} {ts_ms}')
+
+                # Temperatura
+                for h in health:
+                    name = str(h.get("name", "")).lower()
+                    val  = h.get("value", "")
+                    try:
+                        if "temp" in name:
+                            metric_name = "cpu" if "cpu" in name else "board"
+                            lines.append(f'sgp_nas_temp_c{{nas="{label}",sensor="{metric_name}"}} {float(val)} {ts_ms}')
+                    except Exception:
+                        pass
+
+                # Interface SFP e todas as demais
+                for iface in ifaces:
+                    iname = str(iface.get("name", ""))
+                    ilabel = iname.replace('"', '')
+                    rx_byte = int(iface.get("rx-byte", 0))
+                    tx_byte = int(iface.get("tx-byte", 0))
+                    running = 1 if str(iface.get("running", "")).lower() in ("true","yes","1") else 0
+                    lines.append(f'sgp_nas_iface_rx_bytes{{nas="{label}",iface="{ilabel}"}} {rx_byte} {ts_ms}')
+                    lines.append(f'sgp_nas_iface_tx_bytes{{nas="{label}",iface="{ilabel}"}} {tx_byte} {ts_ms}')
+                    lines.append(f'sgp_nas_iface_up{{nas="{label}",iface="{ilabel}"}} {running} {ts_ms}')
+
+            except Exception as e:
+                lines.append(f'sgp_nas_up{{nas="{label}"}} 0 {ts_ms}')
+                log.warning("metrics nas_id=%s error: %s", nas_id, e)
+            else:
+                lines.append(f'sgp_nas_up{{nas="{label}"}} 1 {ts_ms}')
+    except Exception as e:
+        log.warning("metrics nas loop error: %s", e)
+
     body = "\n".join(lines) + "\n"
     return Response(body, mimetype="text/plain; version=0.0.4")
 

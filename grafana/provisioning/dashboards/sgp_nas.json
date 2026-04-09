@@ -1,0 +1,167 @@
+{
+  "title": "SGP-LINKET — NAS / MikroTik",
+  "uid": "sgp-nas",
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": {"from": "now-3h", "to": "now"},
+  "tags": ["sgp", "mikrotik", "nas"],
+  "style": "dark",
+  "templating": {
+    "list": [
+      {
+        "name": "nas",
+        "type": "query",
+        "label": "NAS",
+        "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+        "definition": "label_values(sgp_nas_up, nas)",
+        "query": {"query":"label_values(sgp_nas_up, nas)","refId":"A"},
+        "refresh": 2,
+        "multi": false,
+        "includeAll": false,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+
+    { "id":1, "type":"row", "title":"🖥️ Status do NAS", "gridPos":{"x":0,"y":0,"w":24,"h":1}, "collapsed":false },
+
+    {
+      "id":2, "type":"stat", "title":"NAS Online",
+      "gridPos":{"x":0,"y":1,"w":3,"h":4},
+      "targets":[{"expr":"sgp_nas_up{nas=\"$nas\"}","legendFormat":""}],
+      "options":{"colorMode":"background","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"red","value":0},{"color":"green","value":1}]},"mappings":[{"type":"value","options":{"0":{"text":"OFFLINE","color":"red"},"1":{"text":"ONLINE","color":"green"}}}]}}
+    },
+    {
+      "id":3, "type":"gauge", "title":"CPU %",
+      "gridPos":{"x":3,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_nas_cpu_pct{nas=\"$nas\"}","legendFormat":"CPU"}],
+      "options":{"reduceOptions":{"calcs":["lastNotNull"]},"orientation":"auto","showThresholdLabels":false,"showThresholdMarkers":true},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"percent","min":0,"max":100,"thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"yellow","value":70},{"color":"red","value":90}]}}}
+    },
+    {
+      "id":4, "type":"gauge", "title":"RAM %",
+      "gridPos":{"x":7,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_nas_mem_pct{nas=\"$nas\"}","legendFormat":"RAM"}],
+      "options":{"reduceOptions":{"calcs":["lastNotNull"]},"orientation":"auto","showThresholdLabels":false,"showThresholdMarkers":true},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"percent","min":0,"max":100,"thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"yellow","value":75},{"color":"red","value":90}]}}}
+    },
+    {
+      "id":5, "type":"stat", "title":"Temperatura CPU",
+      "gridPos":{"x":11,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_nas_temp_c{nas=\"$nas\",sensor=\"cpu\"}","legendFormat":"CPU"}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value_and_name","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"celsius","thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"orange","value":60},{"color":"red","value":75}]}}}
+    },
+    {
+      "id":6, "type":"stat", "title":"Temperatura Board",
+      "gridPos":{"x":15,"y":1,"w":4,"h":4},
+      "targets":[{"expr":"sgp_nas_temp_c{nas=\"$nas\",sensor=\"board\"}","legendFormat":"Board"}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value_and_name","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"celsius","thresholds":{"mode":"absolute","steps":[{"color":"green","value":0},{"color":"orange","value":55},{"color":"red","value":70}]}}}
+    },
+    {
+      "id":7, "type":"stat", "title":"PPP Ativos",
+      "gridPos":{"x":19,"y":1,"w":5,"h":4},
+      "targets":[{"expr":"sgp_nas_ppp_active{nas=\"$nas\"}","legendFormat":""}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"blue"},"unit":"short"}}
+    },
+
+    { "id":8, "type":"row", "title":"📶 Interface SFP / Uplink", "gridPos":{"x":0,"y":5,"w":24,"h":1}, "collapsed":false },
+
+    {
+      "id":9, "type":"stat", "title":"SFP Status",
+      "gridPos":{"x":0,"y":6,"w":3,"h":4},
+      "targets":[{"expr":"sgp_nas_iface_up{nas=\"$nas\",iface=\"sfp-sfpplus1\"}","legendFormat":""}],
+      "options":{"colorMode":"background","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"red","value":0},{"color":"green","value":1}]},"mappings":[{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}]}}
+    },
+    {
+      "id":10, "type":"stat", "title":"SFP ↓ Total RX",
+      "gridPos":{"x":3,"y":6,"w":5,"h":4},
+      "targets":[{"expr":"sgp_nas_iface_rx_bytes{nas=\"$nas\",iface=\"sfp-sfpplus1\"}","legendFormat":"RX"}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"green"},"unit":"bytes"}}
+    },
+    {
+      "id":11, "type":"stat", "title":"SFP ↑ Total TX",
+      "gridPos":{"x":8,"y":6,"w":5,"h":4},
+      "targets":[{"expr":"sgp_nas_iface_tx_bytes{nas=\"$nas\",iface=\"sfp-sfpplus1\"}","legendFormat":"TX"}],
+      "options":{"colorMode":"background","graphMode":"area","textMode":"value","reduceOptions":{"calcs":["lastNotNull"]}},
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"orange"},"unit":"bytes"}}
+    },
+
+    {
+      "id":12, "type":"timeseries", "title":"SFP — Velocidade RX / TX (bytes/s)",
+      "gridPos":{"x":0,"y":10,"w":24,"h":9},
+      "targets":[
+        {"expr":"rate(sgp_nas_iface_rx_bytes{nas=\"$nas\",iface=\"sfp-sfpplus1\"}[1m])","legendFormat":"↓ Download"},
+        {"expr":"rate(sgp_nas_iface_tx_bytes{nas=\"$nas\",iface=\"sfp-sfpplus1\"}[1m])","legendFormat":"↑ Upload"}
+      ],
+      "fieldConfig":{
+        "defaults":{"custom":{"fillOpacity":20,"lineWidth":2,"spanNulls":true},"unit":"Bps"},
+        "overrides":[
+          {"matcher":{"id":"byName","options":"↓ Download"},"properties":[{"id":"color","value":{"mode":"fixed","fixedColor":"#73BF69"}}]},
+          {"matcher":{"id":"byName","options":"↑ Upload"},"properties":[{"id":"color","value":{"mode":"fixed","fixedColor":"#FF9830"}}]}
+        ]
+      },
+      "options":{"tooltip":{"mode":"multi","sort":"desc"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max","lastNotNull"]}}
+    },
+
+    { "id":13, "type":"row", "title":"🔌 Todas as Interfaces", "gridPos":{"x":0,"y":19,"w":24,"h":1}, "collapsed":false },
+
+    {
+      "id":14, "type":"timeseries", "title":"RX por Interface (bytes/s)",
+      "gridPos":{"x":0,"y":20,"w":12,"h":8},
+      "targets":[
+        {"expr":"rate(sgp_nas_iface_rx_bytes{nas=\"$nas\"}[1m])","legendFormat":"↓ {{iface}}"}
+      ],
+      "fieldConfig":{"defaults":{"custom":{"fillOpacity":10,"lineWidth":1,"spanNulls":true},"unit":"Bps"}},
+      "options":{"tooltip":{"mode":"multi","sort":"desc"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}}
+    },
+    {
+      "id":15, "type":"timeseries", "title":"TX por Interface (bytes/s)",
+      "gridPos":{"x":12,"y":20,"w":12,"h":8},
+      "targets":[
+        {"expr":"rate(sgp_nas_iface_tx_bytes{nas=\"$nas\"}[1m])","legendFormat":"↑ {{iface}}"}
+      ],
+      "fieldConfig":{"defaults":{"custom":{"fillOpacity":10,"lineWidth":1,"spanNulls":true},"unit":"Bps"}},
+      "options":{"tooltip":{"mode":"multi","sort":"desc"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}}
+    },
+
+    { "id":16, "type":"row", "title":"📊 CPU & RAM Histórico", "gridPos":{"x":0,"y":28,"w":24,"h":1}, "collapsed":false },
+
+    {
+      "id":17, "type":"timeseries", "title":"CPU % ao Longo do Tempo",
+      "gridPos":{"x":0,"y":29,"w":12,"h":7},
+      "targets":[{"expr":"sgp_nas_cpu_pct{nas=\"$nas\"}","legendFormat":"CPU %"}],
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"#F2CC0C"},"custom":{"fillOpacity":20,"lineWidth":2,"spanNulls":true},"unit":"percent","min":0,"max":100}},
+      "options":{"tooltip":{"mode":"single"},"legend":{"displayMode":"list","placement":"bottom"}}
+    },
+    {
+      "id":18, "type":"timeseries", "title":"RAM % ao Longo do Tempo",
+      "gridPos":{"x":12,"y":29,"w":12,"h":7},
+      "targets":[{"expr":"sgp_nas_mem_pct{nas=\"$nas\"}","legendFormat":"RAM %"}],
+      "fieldConfig":{"defaults":{"color":{"mode":"fixed","fixedColor":"#8AB8FF"},"custom":{"fillOpacity":20,"lineWidth":2,"spanNulls":true},"unit":"percent","min":0,"max":100}},
+      "options":{"tooltip":{"mode":"single"},"legend":{"displayMode":"list","placement":"bottom"}}
+    },
+    {
+      "id":19, "type":"timeseries", "title":"Temperatura ao Longo do Tempo",
+      "gridPos":{"x":0,"y":36,"w":24,"h":7},
+      "targets":[
+        {"expr":"sgp_nas_temp_c{nas=\"$nas\",sensor=\"cpu\"}","legendFormat":"CPU °C"},
+        {"expr":"sgp_nas_temp_c{nas=\"$nas\",sensor=\"board\"}","legendFormat":"Board °C"}
+      ],
+      "fieldConfig":{
+        "defaults":{"custom":{"fillOpacity":10,"lineWidth":2,"spanNulls":true},"unit":"celsius"},
+        "overrides":[
+          {"matcher":{"id":"byName","options":"CPU °C"},"properties":[{"id":"color","value":{"mode":"fixed","fixedColor":"red"}}]},
+          {"matcher":{"id":"byName","options":"Board °C"},"properties":[{"id":"color","value":{"mode":"fixed","fixedColor":"orange"}}]}
+        ]
+      },
+      "options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}
+    }
+  ]
+}
