@@ -3707,6 +3707,10 @@ def prometheus_metrics():
                         health = list(api("/system/health/print"))
                     except Exception:
                         health = []
+                    try:
+                        dhcp_leases = list(api("/ip/dhcp-server/lease/print"))
+                    except Exception:
+                        dhcp_leases = []
                 finally:
                     api.close()
 
@@ -3718,6 +3722,13 @@ def prometheus_metrics():
                 lines.append(f'sgp_nas_cpu_pct{{nas="{label}"}} {cpu} {ts_ms}')
                 lines.append(f'sgp_nas_mem_pct{{nas="{label}"}} {mem_pct} {ts_ms}')
                 lines.append(f'sgp_nas_ppp_active{{nas="{label}"}} {len(ppp_act)} {ts_ms}')
+
+                # DHCP leases
+                dhcp_bound = sum(1 for l in dhcp_leases if str(l.get("status","")).lower() == "bound")
+                dhcp_waiting = sum(1 for l in dhcp_leases if str(l.get("status","")).lower() == "waiting")
+                lines.append(f'sgp_nas_dhcp_active{{nas="{label}"}} {dhcp_bound} {ts_ms}')
+                lines.append(f'sgp_nas_dhcp_waiting{{nas="{label}"}} {dhcp_waiting} {ts_ms}')
+                lines.append(f'sgp_nas_dhcp_total{{nas="{label}"}} {len(dhcp_leases)} {ts_ms}')
 
                 # Temperatura
                 for h in health:
