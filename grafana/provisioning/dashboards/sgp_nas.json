@@ -12,7 +12,7 @@
         "name": "nas",
         "type": "query",
         "label": "NAS",
-        "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+        "datasource": {"type":"prometheus","uid":"prometheus"},
         "definition": "label_values(sgp_nas_up, nas)",
         "query": {"query":"label_values(sgp_nas_up, nas)","refId":"A"},
         "refresh": 2,
