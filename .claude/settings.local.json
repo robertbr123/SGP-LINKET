@@ -5,7 +5,23 @@
       "Bash(grep -E \"\\\\.\\(md|txt|rst\\)$\")",
       "Bash(grep -n \"{% for\\\\|{% if\\\\|safe\" \"/c/Users/User/Documents/GitHub/SGP-LINKET/web/templates\"/*.html)",
       "Bash(rtk docker:*)",
-      "Bash(grep -n \"csrf\\\\|token\" /c/Users/User/Documents/GitHub/SGP-LINKET/web/templates/*.html)"
+      "Bash(grep -n \"csrf\\\\|token\" /c/Users/User/Documents/GitHub/SGP-LINKET/web/templates/*.html)",
+      "Read(//c/Users/User/.ssh/**)",
+      "Bash(ssh-copy-id -i ~/.ssh/id_ed25519.pub root@173.208.190.108)",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s '\\\\''http://localhost:7557/devices?query=%7B%22_id%22:%7B%22%24regex%22:%22AX1800%22%7D%7D'\\\\'' 2>/dev/null | python3 -c \":*)",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"curl -s --max-time 5 http://10.0.6.47/ | head -50 || echo 'HTTP_FALHOU'\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"nmap -p 22,23,80,443,161,8080,8443 10.0.6.47 2>/dev/null | grep open\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"nmap -sT -p 22,23,80,443,161,8080,8443,7547 10.0.6.47 --open 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp 'for p in 22 23 80 443 8080 8443 7547; do \\(echo >/dev/tcp/10.0.6.47/$p\\) 2>/dev/null && echo \"OPEN: $p\" || echo \"CLOSED: $p\"; done')",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"curl -sv --max-time 5 http://10.0.6.47:80/ 2>&1 | tail -20\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"curl -sv --max-time 5 http://192.168.1.1:80/ 2>&1 | tail -20\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"docker exec radius_freeradius snmpwalk -v2c -c public 10.0.6.47 1.3.6.1.2.1.1.1.0 2>&1 || docker ps --format '{{.Names}}' | grep -i snmp\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"apt-get install -y snmp 2>&1 | tail -5\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"snmpwalk -v2c -c public -t 3 10.0.6.47 1.3.6.1 2>&1 | head -40\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp \"snmpget -v2c -c public -t 3 -r 1 10.0.6.47 1.3.6.1.2.1.1.1.0 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s '\\\\''http://localhost:7557/devices/30E1F1-AX1800-ITBSF191EEB0'\\\\'' 2>/dev/null | python3 -c \":*)",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s -X POST '\\\\''http://localhost:7557/devices/30E1F1-AX1800-ITBSF191EEB0/tasks?connection_request'\\\\'' \\\\:*)",
+      "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s '\\\\''http://localhost:7557/devices?query=%7B%22_id%22:%2230E1F1-AX1800-ITBSF191EEB0%22%7D'\\\\'' 2>/dev/null | python3 -c \":*)"
     ]
   }
 }

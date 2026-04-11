@@ -645,7 +645,12 @@ def check_cpe_status(conn):
         ip_old = cpe["ip_wan"] or ""
 
         # Rx Power
-        rx_now = _gv_raw(dev, "InternetGatewayDevice.WANDevice.1.X_PON_RxPower")
+        rx_now = (
+            _gv_raw(dev, "InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RXPower")  # Intelbras AX1800
+            or _gv_raw(dev, "InternetGatewayDevice.WANDevice.1.X_FH_GponInterfaceConfig.RXPower")  # FiberHome
+            or _gv_raw(dev, "InternetGatewayDevice.WANDevice.1.X_PON_RxPower")  # genérico
+            or _gv_raw(dev, "Device.Optical.Interface.1.CurrentPower")  # TR-181
+        )
         if rx_now is not None:
             try: rx_now = float(rx_now)
             except Exception: rx_now = None

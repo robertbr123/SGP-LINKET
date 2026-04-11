@@ -337,10 +337,12 @@ class GenieACSClient:
         ssid_5g  = ssid_main
         ssid_24g = ssid_other
 
-        # Sinal óptico (ONUs GPON)
+        # Sinal óptico (ONUs GPON) — múltiplos namespaces suportados
         rx_power = (
-            gv(raw, "InternetGatewayDevice.WANDevice.1.X_PON_RxPower", default=None)
-            or gv(raw, "Device.Optical.Interface.1.CurrentPower", default=None)
+            gv(raw, "InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RXPower", default=None)  # Intelbras AX1800 (typo do fabricante)
+            or gv(raw, "InternetGatewayDevice.WANDevice.1.X_FH_GponInterfaceConfig.RXPower", default=None)  # FiberHome
+            or gv(raw, "InternetGatewayDevice.WANDevice.1.X_PON_RxPower", default=None)  # genérico
+            or gv(raw, "Device.Optical.Interface.1.CurrentPower", default=None)  # TR-181
         )
         if rx_power is not None:
             try:
