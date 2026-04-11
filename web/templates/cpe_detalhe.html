@@ -281,6 +281,14 @@ body, .main-content { background: var(--ios-bg) !important; color: var(--text-pr
                     <span class="id-val" id="liveIpWan" style="font-family:monospace">{{ (live.ip_wan if live) or cpe.ip_wan or '—' }}</span>
                 </div>
                 <div class="id-row">
+                    <span class="id-key">VLAN</span>
+                    <span class="id-val" id="liveVlan" style="font-family:monospace">
+                        {%- if live and live.vlan_id %}
+                            <span class="badge" style="background:var(--ios-teal);color:#fff;border-radius:6px;padding:2px 8px;font-size:.78rem">{{ live.vlan_id }}</span>
+                        {%- else %}—{%- endif %}
+                    </span>
+                </div>
+                <div class="id-row">
                     <span class="id-key">IP LAN</span>
                     <span class="id-val" id="liveIpLan" style="font-family:monospace">{{ (live.ip_lan if live) or cpe.ip_lan or '—' }}</span>
                 </div>
@@ -505,6 +513,10 @@ async function pollStatus() {
         const set = (id, val) => { const el=document.getElementById(id); if(el&&val) el.textContent=val; };
         set('liveIpWan',    d.ip_wan);
         set('liveIpLan',    d.ip_lan);
+        if (d.vlan_id) {
+            const vlanEl = document.getElementById('liveVlan');
+            if (vlanEl) vlanEl.innerHTML = `<span class="badge" style="background:var(--ios-teal);color:#fff;border-radius:6px;padding:2px 8px;font-size:.78rem">${d.vlan_id}</span>`;
+        }
         set('liveFirmware', d.firmware);
         set('liveSerial',   d.serial);
         set('liveModelo',   d.modelo);

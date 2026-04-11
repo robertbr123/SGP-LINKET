@@ -350,6 +350,13 @@ class GenieACSClient:
             except Exception:
                 rx_power = None
 
+        # VLAN ID — X_ITBS_VlanMuxID (Intelbras) ou X_FH_VlanMuxID (FiberHome)
+        vlan_id = (
+            gv(raw, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.X_ITBS_VlanMuxID", default=None)
+            or gv(raw, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.X_ITBS_VlanMuxID", default=None)
+            or gv(raw, "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.X_FH_VlanMuxID", default=None)
+        )
+
         # Todos os SSIDs para exibição expandida
         all_ssids_display = [{"idx": s[0], "ssid": s[1]} for s in all_ssids]
 
@@ -368,6 +375,7 @@ class GenieACSClient:
             "ssid_24g":     ssid_24g,
             "all_ssids":    all_ssids_display,
             "rx_power":     rx_power,
+            "vlan_id":      vlan_id,
             "uptime_sec":   uptime_sec,
             "online":       raw.get("_lastInform") is not None,
             "last_inform":  raw.get("_lastInform", ""),
