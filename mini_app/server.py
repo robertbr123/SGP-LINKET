@@ -1787,10 +1787,12 @@ def api_webhook_github():
     """
     sig = request.headers.get("X-Hub-Signature-256", "")
     if not _verify_github_signature(request.data, sig):
+        log.warning("webhook github: assinatura HMAC inválida")
         return jsonify({"error": "assinatura inválida"}), 401
 
     event = request.headers.get("X-GitHub-Event", "")
     if event != "push":
+        log.info("webhook github: evento ignorado (%s)", event)
         return jsonify({"ignored": True, "event": event})
 
     payload = request.get_json(silent=True) or {}
@@ -1799,21 +1801,37 @@ def api_webhook_github():
     branch = payload.get("ref", "").replace("refs/heads/", "")
     repo_name = payload.get("repository", {}).get("name", "?")
 
+    log.info("webhook github: push em %s/%s por %s, %d commits",
+             repo_name, branch, pusher, len(commits))
+
     # Ignora pushes pra branches que não main
     if branch not in ("main", "master"):
+        log.info("webhook github: branch %s ignorada", branch)
         return jsonify({"ignored": True, "branch": branch})
 
     # Filtra commits ignorando merges
     real_commits = [c for c in commits if not c.get("message", "").startswith("Merge")]
     if not real_commits:
+        log.info("webhook github: só merges, ignorando")
         return jsonify({"ignored": True, "reason": "só merges"})
+
+    # Lista resumida pra log + fallback
+    commit_list = "\n".join(
+        f"• {c.get('message', '').splitlines()[0][:80]}" for c in real_commits[:10]
+    )
 
     # Gera release note via IA
     notes = generate_release_notes(real_commits)
-    if not notes or not notes.strip():
-        return jsonify({"ok": True, "ignored": True, "reason": "IA não gerou conteúdo"})
+    log.info("webhook github: IA gerou %d chars", len(notes or ""))
 
-    # Posta no Telegram (sem cooldown — release é único)
+    # Fallback: se IA achou irrelevante, manda mensagem técnica mínima
+    if not notes or not notes.strip():
+        notes = (
+            f"<i>Sem mudanças de impacto direto pro cliente final.</i>\n\n"
+            f"<b>Commits:</b>\n{commit_list}"
+        )
+
+    # Posta no Telegram
     from notifier import TelegramNotifier
     notifier = TelegramNotifier(get_db)
     msg = (
@@ -1821,8 +1839,9 @@ def api_webhook_github():
         f"<i>{repo_name} · {pusher} · {len(real_commits)} commit(s)</i>\n\n"
         f"{notes}"
     )
-    notifier.send("release_note", msg, severity="info", cooldown=0, force=False)
-    return jsonify({"ok": True, "commits": len(real_commits)})
+    sent = notifier.send("release_note", msg, severity="info", cooldown=0, force=False)
+    log.info("webhook github: notifier.send retornou %s", sent)
+    return jsonify({"ok": True, "commits": len(real_commits), "sent": sent})
 
 
 if __name__ == "__main__":
