@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T13:18:33.038Z",
+  "timestamp": "2026-05-06T13:46:31.861Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -26,13 +26,25 @@
     },
     {
       "status": "M",
-      "path": "telegram_bot/commands.py"
+      "path": "docker-compose.yml"
     },
     {
       "status": "M",
-      "path": "telegram_bot/requirements.txt"
+      "path": "sql/init.sql"
+    },
+    {
+      "status": "M",
+      "path": "sql/migrate.sql"
+    },
+    {
+      "status": "M",
+      "path": "telegram_bot/commands.py"
+    },
+    {
+      "status": "??",
+      "path": "mini_app/"
     }
   ],
   "next_action": null,
-  "context_notes": "Recent commits:\na951287 update\n97f8f6b resumo diario fase 4\ne8bb949 update usuarios\nf77bb9c fase 2\nae39060 update rede NAS"
+  "context_notes": "Recent commits:\n29b97ba update nova atualizacao\na951287 update\n97f8f6b resumo diario fase 4\ne8bb949 update usuarios\nf77bb9c fase 2"
 }

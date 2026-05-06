@@ -34,7 +34,9 @@
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/app.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/audit.py)",
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/summaries.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/run_summary.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/sync.py)",
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/telegram_bot/bot.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/telegram_bot/commands.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/telegram_bot/notifier.py)",
-      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/telegram_bot/commands.py)"
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/telegram_bot/commands.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/auth.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/server.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/telegram_bot/commands.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/auth.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/server.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/mikrotik.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/audit.py)"
     ]
   }
 }

@@ -244,3 +244,13 @@ CREATE TABLE IF NOT EXISTS api_key_ips (
     UNIQUE (api_key_id, ip)
 );
 CREATE INDEX IF NOT EXISTS api_key_ips_lookup ON api_key_ips (api_key_id, ip);
+
+-- Whitelist de usuários do Telegram autorizados a usar o Mini App
+CREATE TABLE IF NOT EXISTS mini_app_users (
+    telegram_user_id BIGINT PRIMARY KEY,
+    nome VARCHAR(150),
+    role VARCHAR(20) DEFAULT 'admin',
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ultimo_acesso TIMESTAMP WITH TIME ZONE
+);

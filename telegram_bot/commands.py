@@ -40,23 +40,38 @@ GENIEACS_NBI_URL = os.environ.get("GENIEACS_NBI_URL", "http://genieacs-nbi:7557"
 # Telegram helpers
 # ---------------------------------------------------------------------------
 
-def send_message(token, chat_id, text):
-    """Envia mensagem (sempre HTML)."""
+def send_message(token, chat_id, text, reply_markup=None):
+    """Envia mensagem (sempre HTML). reply_markup opcional p/ botões."""
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-            },
+            json=payload,
             timeout=8,
         )
         return r.ok
     except Exception as e:
         log.warning("sendMessage error: %s", e)
         return False
+
+
+def _get_mini_app_url(get_db):
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT valor FROM alertas_config WHERE chave='mini_app_url'")
+            row = cur.fetchone()
+        conn.close()
+        return row[0].strip() if row and row[0] else ""
+    except Exception:
+        return ""
 
 
 def _audit(get_db, sender, action, target_type=None, target_id=None, detail=None):
@@ -95,6 +110,7 @@ def _fmt_bytes(b):
 
 HELP_TEXT = (
     "<b>🤖 Bot SGP-LINKET — comandos</b>\n\n"
+    "/menu — abre o painel (Mini App)\n"
     "/status — KPIs em tempo real\n"
     "/cliente <code>&lt;CPF ou login&gt;</code> — busca cliente\n"
     "/online — top 20 sessões PPPoE ativas\n"
@@ -107,6 +123,34 @@ HELP_TEXT = (
 
 def cmd_help(chat_id, args, ctx):
     send_message(ctx["token"], chat_id, HELP_TEXT)
+
+
+# ---------------------------------------------------------------------------
+# /menu — abre o Mini App
+# ---------------------------------------------------------------------------
+
+def cmd_menu(chat_id, args, ctx):
+    url = _get_mini_app_url(ctx["get_db"])
+    if not url or not url.startswith("https://"):
+        send_message(
+            ctx["token"], chat_id,
+            "⚠️ <b>Mini App não configurado</b>\n"
+            "Defina a URL HTTPS pública em <code>alertas_config.mini_app_url</code>.\n"
+            "Exemplo: <code>https://painel.seudominio.com.br</code>"
+        )
+        return
+
+    # Inline keyboard com botão WebApp — funciona em DM e em grupo
+    reply_markup = {
+        "inline_keyboard": [[
+            {"text": "🚀 Abrir Painel", "web_app": {"url": url}}
+        ]]
+    }
+    send_message(
+        ctx["token"], chat_id,
+        "<b>📱 Painel SGP-LINKET</b>\nToque para abrir o Mini App:",
+        reply_markup=reply_markup,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -565,6 +609,9 @@ def cmd_silenciar(chat_id, args, ctx):
 HANDLERS = {
     "help":          cmd_help,
     "start":         cmd_help,
+    "menu":          cmd_menu,
+    "painel":        cmd_menu,
+    "app":           cmd_menu,
     "status":        cmd_status,
     "cliente":       cmd_cliente,
     "online":        cmd_online,

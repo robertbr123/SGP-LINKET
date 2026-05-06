@@ -263,6 +263,35 @@ services:
       - wg_net
 
   # ---------------------------------------------------------------------------
+  # Mini App — Telegram WebApp (HTML+JS servido via HTTPS)
+  # Exposto via nginx-proxy-manager em domínio público com TLS.
+  # ---------------------------------------------------------------------------
+  mini-app:
+    build:
+      context: ./mini_app
+      dockerfile: Dockerfile
+    container_name: radius_mini_app
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wireguard:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_NAME: radius
+      DB_USER: radius
+      DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
+      GENIEACS_NBI_URL: ${GENIEACS_NBI_URL:-http://genieacs-nbi:7557}
+    ports:
+      - "5001:5001"
+    networks:
+      - radius_net
+      - wg_net
+
+  # ---------------------------------------------------------------------------
   # Bot Telegram interativo (long polling)
   # Recebe comandos /status /cliente /online /desconectar /reiniciar_cpe /silenciar
   # ---------------------------------------------------------------------------

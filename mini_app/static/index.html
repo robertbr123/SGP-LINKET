@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGP-LINKET</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style>
+  body {
+    background: var(--tg-theme-bg-color, #0f1419);
+    color:      var(--tg-theme-text-color, #f4f4f5);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    background: var(--tg-theme-secondary-bg-color, #1a1f2e);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .muted { color: var(--tg-theme-hint-color, #9ca3af); }
+  .accent { color: var(--tg-theme-link-color, #60a5fa); }
+  .btn {
+    background: var(--tg-theme-button-color, #2563eb);
+    color:      var(--tg-theme-button-text-color, white);
+    transition: opacity .2s, transform .1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.5; }
+  .btn-secondary {
+    background: rgba(255,255,255,0.08);
+    color: var(--tg-theme-text-color, #f4f4f5);
+  }
+  .btn-danger { background: #dc2626; color: white; }
+  .btn-success { background: #16a34a; color: white; }
+  .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+  }
+  .pulse-online  { background: #16a34a; box-shadow: 0 0 0 4px rgba(22,163,74,.2); }
+  .pulse-offline { background: #6b7280; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge-ativo    { background: rgba(22,163,74,.15); color: #4ade80; }
+  .badge-suspenso { background: rgba(220,38,38,.15); color: #f87171; }
+  .badge-pendente { background: rgba(234,179,8,.15);  color: #facc15; }
+  .toast {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    padding: 12px 20px; border-radius: 12px; max-width: 90%;
+    box-shadow: 0 10px 25px rgba(0,0,0,.4);
+    z-index: 50;
+  }
+  .toast-ok    { background: #16a34a; color: white; }
+  .toast-err   { background: #dc2626; color: white; }
+</style>
+</head>
+<body class="min-h-screen pb-24" x-data="miniApp()" x-init="boot()">
+
+<div class="max-w-md mx-auto p-4">
+
+  <!-- Loading global -->
+  <template x-if="state === 'loading'">
+    <div class="card rounded-xl p-6 text-center mt-8">
+      <p class="muted">Validando autenticação Telegram...</p>
+    </div>
+  </template>
+
+  <!-- Erro de auth -->
+  <template x-if="state === 'error'">
+    <div class="card rounded-xl p-6 border-red-500/30 bg-red-500/10 mt-8">
+      <p class="font-semibold text-red-400">❌ <span x-text="error.title"></span></p>
+      <p class="text-sm mt-2" x-text="error.message"></p>
+      <template x-if="error.hint">
+        <p class="text-xs mt-3 muted font-mono break-all" x-text="error.hint"></p>
+      </template>
+    </div>
+  </template>
+
+  <!-- App autorizado -->
+  <template x-if="state === 'ok'">
+    <div>
+
+      <!-- ================= DASHBOARD ================= -->
+      <template x-if="view === 'dashboard'">
+        <div>
+          <header class="mb-4">
+            <h1 class="text-2xl font-bold">📊 Painel</h1>
+            <p class="text-sm muted">Olá, <span x-text="user.first_name"></span>!</p>
+          </header>
+
+          <template x-if="!kpis">
+            <p class="muted text-center py-8">Carregando...</p>
+          </template>
+
+          <template x-if="kpis">
+            <div class="space-y-3">
+              <!-- Online em destaque -->
+              <div class="card rounded-xl p-4">
+                <p class="text-xs muted uppercase tracking-wide">Online agora</p>
+                <p class="text-4xl font-bold mt-1">
+                  <span x-text="kpis.online"></span>
+                  <span class="text-sm muted font-normal" x-text="'/ ' + kpis.total"></span>
+                </p>
+                <p class="text-xs muted mt-1" x-text="'fonte: ' + (kpis.online_source === 'mikrotik' ? 'MikroTik API' : 'radacct')"></p>
+              </div>
+
+              <!-- Grid 2x2 -->
+              <div class="grid grid-cols-2 gap-3">
+                <div class="card rounded-xl p-3">
+                  <p class="text-xs muted">Ativos</p>
+                  <p class="text-2xl font-bold text-green-400" x-text="kpis.ativos"></p>
+                </div>
+                <div class="card rounded-xl p-3">
+                  <p class="text-xs muted">Suspensos</p>
+                  <p class="text-2xl font-bold text-red-400" x-text="kpis.suspensos"></p>
+                </div>
+                <div class="card rounded-xl p-3">
+                  <p class="text-xs muted">CPEs offline</p>
+                  <p class="text-2xl font-bold" :class="kpis.cpes_offline > 0 ? 'text-orange-400' : ''" x-text="kpis.cpes_offline"></p>
+                </div>
+                <div class="card rounded-xl p-3">
+                  <p class="text-xs muted">Chamados</p>
+                  <p class="text-2xl font-bold" :class="kpis.chamados_abertos > 0 ? 'text-orange-400' : ''" x-text="kpis.chamados_abertos"></p>
+                </div>
+              </div>
+
+              <!-- Alertas firing -->
+              <div class="card rounded-xl p-3" :class="kpis.alertas_firing > 0 ? 'border-red-500/30 bg-red-500/5' : ''">
+                <p class="text-xs muted">Alertas firing</p>
+                <p class="text-2xl font-bold" :class="kpis.alertas_firing > 0 ? 'text-red-400' : ''" x-text="kpis.alertas_firing"></p>
+              </div>
+
+              <button @click="loadDashboard()" class="w-full py-3 rounded-xl btn-secondary font-semibold">
+                🔄 Atualizar
+              </button>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ================= BUSCA ================= -->
+      <template x-if="view === 'busca'">
+        <div>
+          <header class="mb-4">
+            <h1 class="text-2xl font-bold">🔍 Buscar Cliente</h1>
+            <p class="text-sm muted">Por CPF, nome ou login PPPoE</p>
+          </header>
+
+          <input type="text"
+                 x-model="busca.q"
+                 @input.debounce.500ms="buscar()"
+                 placeholder="ex: 123.456.789-00 ou João Silva"
+                 class="w-full p-3 rounded-xl bg-black/20 border border-white/10 mb-4 outline-none focus:border-blue-500" />
+
+          <template x-if="busca.loading">
+            <p class="muted text-center py-4">Buscando...</p>
+          </template>
+
+          <template x-if="!busca.loading && busca.resultados.length === 0 && busca.q.length >= 2">
+            <p class="muted text-center py-4">Nenhum resultado.</p>
+          </template>
+
+          <div class="space-y-2">
+            <template x-for="c in busca.resultados" :key="c.id">
+              <button @click="abrirCliente(c.id)"
+                      class="w-full text-left card rounded-xl p-3 active:opacity-70">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold truncate" x-text="c.nome"></p>
+                    <p class="text-sm muted truncate">
+                      <span x-text="c.pppoe_login || '—'"></span>
+                      · <span x-text="c.cpf"></span>
+                    </p>
+                  </div>
+                  <div class="flex flex-col items-end gap-1">
+                    <span class="badge" :class="'badge-' + c.status" x-text="c.status"></span>
+                    <span class="pulse-dot" :class="c.online ? 'pulse-online' : 'pulse-offline'"></span>
+                  </div>
+                </div>
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ================= DETALHE CLIENTE ================= -->
+      <template x-if="view === 'cliente'">
+        <div>
+          <template x-if="!cliente.data">
+            <p class="muted text-center py-8">Carregando...</p>
+          </template>
+
+          <template x-if="cliente.data">
+            <div class="space-y-3">
+              <div class="card rounded-xl p-4">
+                <div class="flex justify-between items-start mb-2">
+                  <h1 class="text-xl font-bold flex-1 pr-2" x-text="cliente.data.cliente.nome"></h1>
+                  <span class="badge" :class="'badge-' + cliente.data.cliente.status" x-text="cliente.data.cliente.status"></span>
+                </div>
+                <p class="text-sm muted">CPF: <span class="font-mono" x-text="cliente.data.cliente.cpf"></span></p>
+                <p class="text-sm muted">PPPoE: <span class="font-mono" x-text="cliente.data.cliente.pppoe_login || '—'"></span></p>
+                <p class="text-sm muted">
+                  Plano: <span x-text="cliente.data.cliente.plano_nome || cliente.data.cliente.plano"></span>
+                  (<span x-text="cliente.data.cliente.velocidade_down + '↓ / ' + cliente.data.cliente.velocidade_up + '↑ Mbps'"></span>)
+                </p>
+              </div>
+
+              <!-- Sessão atual -->
+              <template x-if="cliente.data.sessao">
+                <div class="card rounded-xl p-4">
+                  <p class="text-xs muted uppercase tracking-wide mb-2">🟢 Sessão ativa</p>
+                  <p class="text-sm">IP: <span class="font-mono" x-text="cliente.data.sessao.ip || '—'"></span></p>
+                  <p class="text-sm">NAS: <span class="font-mono" x-text="cliente.data.sessao.nas"></span></p>
+                  <p class="text-sm" x-text="'Início: ' + (cliente.data.sessao.acctstarttime || '—')"></p>
+                  <p class="text-sm" x-text="'Tráfego: ' + fmtBytes(cliente.data.sessao.traffic)"></p>
+                </div>
+              </template>
+
+              <template x-if="!cliente.data.sessao">
+                <div class="card rounded-xl p-4 text-center">
+                  <p class="muted">⚪ Sem sessão ativa</p>
+                </div>
+              </template>
+
+              <!-- CPE -->
+              <template x-if="cliente.data.cpe">
+                <div class="card rounded-xl p-4">
+                  <p class="text-xs muted uppercase tracking-wide mb-2">📡 CPE</p>
+                  <p class="text-sm">
+                    <span x-text="(cliente.data.cpe.fabricante || '') + ' ' + (cliente.data.cpe.modelo || '')"></span>
+                    <span class="ml-2 pulse-dot" :class="cliente.data.cpe.online ? 'pulse-online' : 'pulse-offline'"></span>
+                  </p>
+                  <template x-if="cliente.data.cpe.ip_wan">
+                    <p class="text-sm">IP WAN: <span class="font-mono" x-text="cliente.data.cpe.ip_wan"></span></p>
+                  </template>
+                  <template x-if="cliente.data.cpe.rx_power !== null">
+                    <p class="text-sm" x-text="'Rx Power: ' + cliente.data.cpe.rx_power + ' dBm'"
+                       :class="cliente.data.cpe.rx_power < -27 ? 'text-red-400' : (cliente.data.cpe.rx_power < -24 ? 'text-yellow-400' : 'text-green-400')">
+                    </p>
+                  </template>
+                  <button @click="acaoCpe('reboot')" class="mt-3 w-full py-2 rounded-lg btn-secondary text-sm">
+                    🔄 Reiniciar CPE
+                  </button>
+                </div>
+              </template>
+
+              <!-- Ações -->
+              <div class="card rounded-xl p-4">
+                <p class="text-xs muted uppercase tracking-wide mb-3">⚡ Ações</p>
+                <div class="grid grid-cols-2 gap-2">
+                  <button @click="acaoCliente('desconectar', 'Desconectar este cliente?')" class="py-3 rounded-lg btn-secondary text-sm font-semibold">
+                    ✂️ Desconectar
+                  </button>
+                  <button @click="acaoCliente('reaplicar', 'Reaplicar atributos RADIUS?')" class="py-3 rounded-lg btn-secondary text-sm font-semibold">
+                    🔄 Reaplicar
+                  </button>
+                  <button @click="acaoCliente('bloquear', '⚠️ Bloquear cliente (rate 128k + disconnect)?')" class="py-3 rounded-lg btn-danger text-sm font-semibold">
+                    🚫 Bloquear
+                  </button>
+                  <button @click="acaoCliente('desbloquear', 'Desbloquear cliente?')" class="py-3 rounded-lg btn-success text-sm font-semibold">
+                    ✅ Desbloquear
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Toast -->
+      <template x-if="toast.msg">
+        <div class="toast" :class="'toast-' + toast.type" x-text="toast.msg"></div>
+      </template>
+
+      <!-- Bottom nav -->
+      <nav class="fixed bottom-0 left-0 right-0 card border-t flex justify-around"
+           :style="'background: var(--tg-theme-secondary-bg-color, #1a1f2e); padding-bottom: env(safe-area-inset-bottom);'">
+        <button @click="setView('dashboard')" class="flex-1 py-3 text-center"
+                :class="view === 'dashboard' ? 'accent font-semibold' : 'muted'">
+          📊<br><span class="text-xs">Painel</span>
+        </button>
+        <button @click="setView('busca')" class="flex-1 py-3 text-center"
+                :class="view === 'busca' ? 'accent font-semibold' : 'muted'">
+          🔍<br><span class="text-xs">Buscar</span>
+        </button>
+      </nav>
+
+    </div>
+  </template>
+
+</div>
+
+<script>
+function miniApp() {
+  return {
+    state: 'loading',
+    user: {},
+    role: '',
+    error: { title: '', message: '', hint: '' },
+    view: 'dashboard',
+    kpis: null,
+    busca: { q: '', loading: false, resultados: [] },
+    cliente: { id: null, data: null },
+    toast: { msg: '', type: 'ok', timer: null },
+    tg: null,
+
+    async boot() {
+      this.tg = window.Telegram?.WebApp;
+      if (!this.tg) {
+        this.state = 'error';
+        this.error = { title: 'Não está dentro do Telegram', message: 'Abra esta página através do bot.' };
+        return;
+      }
+      this.tg.ready();
+      this.tg.expand();
+
+      // Hash routing simples
+      window.addEventListener('hashchange', () => this.applyHash());
+      this.applyHash();
+
+      const initData = this.tg.initData;
+      if (!initData) {
+        this.state = 'error';
+        this.error = { title: 'initData ausente', message: 'O Telegram não enviou dados de autenticação.' };
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/me', {
+          method: 'POST',
+          headers: { 'X-Telegram-Init-Data': initData },
+        });
+        const data = await res.json();
+        if (res.status === 403) {
+          this.state = 'error';
+          this.error = { title: 'Acesso não autorizado', message: data.error, hint: data.hint || '' };
+          return;
+        }
+        if (!res.ok) {
+          this.state = 'error';
+          this.error = { title: 'Erro do servidor', message: data.error || 'Falha ao validar.' };
+          return;
+        }
+        this.user = data.telegram;
+        this.role = data.role;
+        this.state = 'ok';
+
+        // Inicial
+        this.loadDashboard();
+      } catch (e) {
+        this.state = 'error';
+        this.error = { title: 'Erro de rede', message: e.message };
+      }
+    },
+
+    applyHash() {
+      const h = (window.location.hash || '#/dashboard').replace('#/', '');
+      if (h.startsWith('cliente/')) {
+        const id = parseInt(h.split('/')[1]);
+        this.cliente.id = id;
+        this.view = 'cliente';
+        this.loadCliente(id);
+      } else {
+        this.view = h || 'dashboard';
+      }
+      this.updateBackButton();
+    },
+
+    setView(v) {
+      window.location.hash = '#/' + v;
+    },
+
+    updateBackButton() {
+      if (!this.tg?.BackButton) return;
+      if (this.view === 'cliente') {
+        this.tg.BackButton.show();
+        this.tg.BackButton.onClick(() => this.setView('busca'));
+      } else {
+        this.tg.BackButton.hide();
+      }
+    },
+
+    abrirCliente(id) {
+      window.location.hash = '#/cliente/' + id;
+    },
+
+    async fetchAuth(url, opts = {}) {
+      const headers = { 'X-Telegram-Init-Data': this.tg.initData, ...(opts.headers || {}) };
+      const res = await fetch(url, { ...opts, headers });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    },
+
+    async loadDashboard() {
+      this.kpis = null;
+      const { ok, data } = await this.fetchAuth('/api/dashboard');
+      if (ok) this.kpis = data;
+      else this.showToast(data.error || 'Erro', 'err');
+    },
+
+    async buscar() {
+      const q = this.busca.q.trim();
+      if (q.length < 2) { this.busca.resultados = []; return; }
+      this.busca.loading = true;
+      const { ok, data } = await this.fetchAuth('/api/clientes/buscar?q=' + encodeURIComponent(q));
+      this.busca.loading = false;
+      this.busca.resultados = ok ? (data.clientes || []) : [];
+    },
+
+    async loadCliente(id) {
+      this.cliente.data = null;
+      const { ok, data } = await this.fetchAuth('/api/clientes/' + id);
+      if (ok) this.cliente.data = data;
+      else this.showToast(data.error || 'Erro', 'err');
+    },
+
+    async acaoCliente(acao, confirmMsg) {
+      if (!this.cliente.id) return;
+      const ok = await this.confirm(confirmMsg);
+      if (!ok) return;
+      this.tg.HapticFeedback?.impactOccurred('medium');
+      const r = await this.fetchAuth('/api/clientes/' + this.cliente.id + '/' + acao, { method: 'POST' });
+      if (r.ok && r.data.ok !== false) {
+        this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
+        await this.loadCliente(this.cliente.id);
+      } else {
+        this.showToast(r.data.msg || r.data.error || 'Falhou', 'err');
+      }
+    },
+
+    async acaoCpe(acao) {
+      const cpe = this.cliente.data?.cpe;
+      if (!cpe) return;
+      const ok = await this.confirm('Reiniciar o CPE deste cliente?');
+      if (!ok) return;
+      this.tg.HapticFeedback?.impactOccurred('medium');
+      const r = await this.fetchAuth('/api/cpe/' + cpe.id + '/' + acao, { method: 'POST' });
+      if (r.ok && r.data.ok !== false) {
+        this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
+      } else {
+        this.showToast(r.data.msg || 'Falhou', 'err');
+      }
+    },
+
+    confirm(msg) {
+      return new Promise(resolve => {
+        if (this.tg?.showConfirm) {
+          this.tg.showConfirm(msg, ok => resolve(!!ok));
+        } else {
+          resolve(window.confirm(msg));
+        }
+      });
+    },
+
+    showToast(msg, type = 'ok') {
+      this.toast = { msg, type };
+      if (this.toast.timer) clearTimeout(this.toast.timer);
+      this.toast.timer = setTimeout(() => { this.toast.msg = ''; }, 3000);
+    },
+
+    fmtBytes(b) {
+      b = Number(b) || 0;
+      if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+      if (b >= 1048576)    return (b / 1048576).toFixed(2) + ' MB';
+      if (b >= 1024)       return (b / 1024).toFixed(2) + ' KB';
+      return b + ' B';
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -252,3 +252,22 @@ ON CONFLICT (chave) DO NOTHING;
 INSERT INTO alertas_config (chave, valor, descricao) VALUES
     ('alertas_sync_travado_min',     '15',    'Minutos sem ciclo do sync para alerta')
 ON CONFLICT (chave) DO NOTHING;
+
+-- =============================================================================
+-- Mini App (Telegram WebApp)
+-- =============================================================================
+
+-- Whitelist de usuários do Telegram autorizados a usar o Mini App.
+-- Insira o telegram_user_id manualmente (descubra via @userinfobot).
+CREATE TABLE IF NOT EXISTS mini_app_users (
+    telegram_user_id BIGINT PRIMARY KEY,
+    nome VARCHAR(150),
+    role VARCHAR(20) DEFAULT 'admin',
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ultimo_acesso TIMESTAMP WITH TIME ZONE
+);
+
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('mini_app_url', '', 'URL pública HTTPS do Mini App (ex: https://painel.exemplo.com)')
+ON CONFLICT (chave) DO NOTHING;
