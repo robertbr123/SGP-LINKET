@@ -424,6 +424,14 @@ def get_redis():
         return None
 
 
+# ---------------------------------------------------------------------------
+# Telegram notifier (compartilhado por toda a app)
+# ---------------------------------------------------------------------------
+
+from notifier import TelegramNotifier
+notifier = TelegramNotifier(get_db, get_redis)
+
+
 def get_online_users() -> set:
     """Retorna set de pppoe_logins ativos.
     Fonte primária: API do MikroTik (todos os NAS com credenciais cadastradas).
@@ -4195,20 +4203,20 @@ def test_telegram():
         cur.execute("SELECT chave, valor FROM alertas_config")
         cfg = {r[0]: r[1] for r in cur.fetchall()}
     conn.close()
-    token   = cfg.get("telegram_bot_token", "")
-    chat_id = cfg.get("telegram_chat_id", "")
-    if not token or not chat_id:
+    if not cfg.get("telegram_bot_token") or not cfg.get("telegram_chat_id"):
         return jsonify({"error": "Token ou Chat ID não configurados"}), 400
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        r = requests.post(url, json={"chat_id": chat_id,
-            "text": "✅ <b>SGP-LINKET</b>\nTelegram configurado com sucesso!",
-            "parse_mode": "HTML"}, timeout=8)
-        if r.ok:
-            return jsonify({"ok": True, "msg": "Mensagem enviada!"})
-        return jsonify({"error": r.text}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+
+    # Bypass do _enabled() para o teste — temporariamente força true
+    ok = notifier.send(
+        "telegram_test",
+        "<b>SGP-LINKET</b>\nTelegram configurado com sucesso!",
+        severity="ok",
+        cooldown=0,
+        force=True,
+    )
+    if ok:
+        return jsonify({"ok": True, "msg": "Mensagem enviada!"})
+    return jsonify({"error": "Falha ao enviar (verifique token/chat_id e se o bot foi adicionado ao grupo)"}), 400
 
 
 # ---------------------------------------------------------------------------

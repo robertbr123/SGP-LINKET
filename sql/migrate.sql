@@ -163,3 +163,92 @@ ON CONFLICT (chave) DO NOTHING;
 INSERT INTO alertas_config (chave, valor, descricao) VALUES
     ('telegram_chat_id',   '', 'Chat ID do grupo/canal Telegram')
 ON CONFLICT (chave) DO NOTHING;
+
+-- =============================================================================
+-- Sistema de alertas Telegram — Fase 0 (fundação)
+-- =============================================================================
+
+-- Auditoria: tudo que importa rastrear (login, ações destrutivas, mudança de senha)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    ts TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    usuario_nome VARCHAR(80),
+    ip VARCHAR(45),
+    action VARCHAR(80) NOT NULL,
+    target_type VARCHAR(40),
+    target_id VARCHAR(80),
+    detail JSONB DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS audit_log_ts      ON audit_log (ts DESC);
+CREATE INDEX IF NOT EXISTS audit_log_action  ON audit_log (action);
+CREATE INDEX IF NOT EXISTS audit_log_usuario ON audit_log (usuario_id);
+
+-- Estado de alertas firing/resolved (anti-flood + "voltou ao normal")
+CREATE TABLE IF NOT EXISTS alert_state (
+    dedup_key VARCHAR(200) PRIMARY KEY,
+    event_type VARCHAR(80) NOT NULL,
+    severity VARCHAR(20) NOT NULL DEFAULT 'info',
+    firing BOOLEAN NOT NULL DEFAULT TRUE,
+    primeira_vez TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ultima_vez TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_sent_at TIMESTAMP WITH TIME ZONE,
+    last_msg TEXT,
+    count_total INTEGER DEFAULT 0,
+    detail JSONB DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS alert_state_firing ON alert_state (firing);
+CREATE INDEX IF NOT EXISTS alert_state_event  ON alert_state (event_type);
+
+-- Janelas de manutenção (silencia alertas)
+-- escopo = 'all' | 'event:cpe_offline' | 'nas:5' | 'cpe:12'
+CREATE TABLE IF NOT EXISTS maintenance_window (
+    id SERIAL PRIMARY KEY,
+    inicio TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    fim TIMESTAMP WITH TIME ZONE NOT NULL,
+    escopo VARCHAR(100) NOT NULL DEFAULT 'all',
+    motivo TEXT,
+    criado_por VARCHAR(80),
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS maintenance_window_fim ON maintenance_window (fim);
+
+-- IPs conhecidos por API key (alerta quando vê IP novo)
+CREATE TABLE IF NOT EXISTS api_key_ips (
+    id SERIAL PRIMARY KEY,
+    api_key_id INTEGER REFERENCES api_keys(id) ON DELETE CASCADE,
+    ip VARCHAR(45) NOT NULL,
+    primeira_vez TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ultima_vez TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE (api_key_id, ip)
+);
+CREATE INDEX IF NOT EXISTS api_key_ips_lookup ON api_key_ips (api_key_id, ip);
+
+-- Configurações novas (limiares e horários)
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_heartbeat_hora',       '09:00', 'Hora do heartbeat diário (HH:MM, vazio = desativado)')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_resumo_matinal_hora',  '08:00', 'Hora do resumo matinal (HH:MM, vazio = desativado)')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_resumo_turno_hora',    '18:00', 'Hora do resumo de fim de turno (HH:MM, vazio = desativado)')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_brute_force_max',      '3',     'Tentativas de login falhadas em 1 min do mesmo IP para alerta')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_nas_cpu_pct',          '85',    'CPU MikroTik (%) — alerta se ultrapassar')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_nas_mem_pct',          '85',    'Memória MikroTik (%) — alerta se ultrapassar')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_nas_temp_c',           '70',    'Temperatura MikroTik (°C) — alerta se ultrapassar')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_pppoe_zumbi_horas',    '12',    'Sessão PPPoE sem update há X horas = zumbi')
+ON CONFLICT (chave) DO NOTHING;
+INSERT INTO alertas_config (chave, valor, descricao) VALUES
+    ('alertas_sync_travado_min',     '15',    'Minutos sem ciclo do sync para alerta')
+ON CONFLICT (chave) DO NOTHING;

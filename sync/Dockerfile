@@ -8,5 +8,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY sync.py .
+COPY notifier.py .
 
 CMD ["python", "-u", "sync.py"]

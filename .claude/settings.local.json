@@ -21,7 +21,11 @@
       "Bash(ssh -o StrictHostKeyChecking=no sgp \"snmpget -v2c -c public -t 3 -r 1 10.0.6.47 1.3.6.1.2.1.1.1.0 2>&1\")",
       "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s '\\\\''http://localhost:7557/devices/30E1F1-AX1800-ITBSF191EEB0'\\\\'' 2>/dev/null | python3 -c \":*)",
       "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s -X POST '\\\\''http://localhost:7557/devices/30E1F1-AX1800-ITBSF191EEB0/tasks?connection_request'\\\\'' \\\\:*)",
-      "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s '\\\\''http://localhost:7557/devices?query=%7B%22_id%22:%2230E1F1-AX1800-ITBSF191EEB0%22%7D'\\\\'' 2>/dev/null | python3 -c \":*)"
+      "Bash(ssh -o StrictHostKeyChecking=no sgp 'curl -s '\\\\''http://localhost:7557/devices?query=%7B%22_id%22:%2230E1F1-AX1800-ITBSF191EEB0%22%7D'\\\\'' 2>/dev/null | python3 -c \":*)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/notifier.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/notifier.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/app.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/sync.py)"
     ]
   }
 }

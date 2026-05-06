@@ -510,21 +510,18 @@ def _get_alerta_config(conn, chave, default=""):
         return default
 
 
-def telegram_send(conn, msg):
-    """Envia mensagem ao Telegram se configurado."""
-    try:
-        enabled = _get_alerta_config(conn, "telegram_enabled", "false")
-        if enabled.lower() != "true":
-            return
-        token   = _get_alerta_config(conn, "telegram_bot_token", "")
-        chat_id = _get_alerta_config(conn, "telegram_chat_id", "")
-        if not token or not chat_id:
-            return
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        requests.post(url, json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=8)
-        log.info("Telegram: mensagem enviada")
-    except Exception as e:
-        log.warning("Telegram send error: %s", e)
+from notifier import TelegramNotifier
+notifier = TelegramNotifier(get_db, get_redis)
+
+
+def telegram_send(conn, msg, dedup_key=None, severity="warning", cooldown=300):
+    """
+    Wrapper compatível com callsites antigos.
+    Para alertas firing/resolved, prefira notifier.fire() / notifier.resolve().
+    """
+    event_type = (dedup_key or "legacy").split(":", 1)[0]
+    notifier.send(event_type, msg, dedup_key=dedup_key,
+                  severity=severity, cooldown=cooldown)
 
 
 def _cpe_log_event(conn, cpe_id, event_type, detail=None):
