@@ -781,6 +781,7 @@ if __name__ == "__main__":
     time.sleep(15)
 
     from health_checks import run_health_checks, heartbeat_sync_start
+    from summaries import maybe_send_summaries
 
     cpe_last_poll = 0
     last_cycle_started_at = None
@@ -804,6 +805,9 @@ if __name__ == "__main__":
 
             # Health checks de infra (NAS, serviços externos, FreeRADIUS, lag de sync)
             run_health_checks(conn, r_global, notifier, last_cycle_started_at)
+
+            # Resumos diários (matinal, fim de turno, heartbeat)
+            maybe_send_summaries(conn, r_global, notifier)
 
             conn.close()
         except Exception as e:

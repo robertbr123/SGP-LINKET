@@ -31,7 +31,8 @@
       "Bash(docker --version)",
       "Bash(docker compose *)",
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/sync.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/health_checks.py)",
-      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/app.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/audit.py)"
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/app.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/audit.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/summaries.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/run_summary.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/sync.py)"
     ]
   }
 }

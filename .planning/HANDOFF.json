@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T12:35:38.480Z",
+  "timestamp": "2026-05-06T12:46:05.836Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -17,26 +17,10 @@
   "decisions": [],
   "uncommitted_files": [
     {
-      "status": "M",
-      "path": ".claude/settings.local.json"
-    },
-    {
-      "status": "M",
-      "path": ".planning/HANDOFF.json"
-    },
-    {
-      "status": "M",
-      "path": "sync/health_checks.py"
-    },
-    {
-      "status": "M",
-      "path": "web/app.py"
-    },
-    {
       "status": "??",
-      "path": "web/audit.py"
+      "path": "sync/summaries.py"
     }
   ],
   "next_action": null,
-  "context_notes": "Recent commits:\nf77bb9c fase 2\nae39060 update rede NAS\n9705ca5 fase 1\nd1b4c5c update fase 1\n1cc318b update notificacoes telegram"
+  "context_notes": "Recent commits:\ne8bb949 update usuarios\nf77bb9c fase 2\nae39060 update rede NAS\n9705ca5 fase 1\nd1b4c5c update fase 1"
 }
