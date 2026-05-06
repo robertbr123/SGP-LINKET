@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T20:18:53.316Z",
+  "timestamp": "2026-05-06T20:49:16.103Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -18,65 +18,17 @@
   "uncommitted_files": [
     {
       "status": "M",
-      "path": ".claude/settings.local.json"
-    },
-    {
-      "status": "M",
-      "path": ".env.example"
-    },
-    {
-      "status": "M",
       "path": ".planning/HANDOFF.json"
     },
     {
-      "status": "M",
-      "path": "docker-compose.yml"
-    },
-    {
-      "status": "M",
-      "path": "sync/Dockerfile"
-    },
-    {
-      "status": "M",
-      "path": "sync/summaries.py"
-    },
-    {
-      "status": "M",
-      "path": "sync/sync.py"
-    },
-    {
-      "status": "M",
-      "path": "web/Dockerfile"
-    },
-    {
-      "status": "M",
-      "path": "web/entrypoint.sh"
-    },
-    {
-      "status": "M",
-      "path": "web/requirements.txt"
+      "status": "??",
+      "path": "docs/BACKUP-RESTORE.md"
     },
     {
       "status": "??",
-      "path": "backup/"
-    },
-    {
-      "status": "??",
-      "path": "sync/ai_summary.py"
-    },
-    {
-      "status": "??",
-      "path": "sync/predictions.py"
-    },
-    {
-      "status": "??",
-      "path": "web/alembic.ini"
-    },
-    {
-      "status": "??",
-      "path": "web/alembic/"
+      "path": "sync/run_ai_test.py"
     }
   ],
   "next_action": null,
-  "context_notes": "Recent commits:\n762c94b correcao de eirunepe mandado mensagem direto\n3dfd605 update novas fazes\n09599e4 update fase C\nd634919 UPDATE 2\nea2c9c6 git pull"
+  "context_notes": "Recent commits:\nc4cffd9 UPDATE NOVAS FEATURES\n762c94b correcao de eirunepe mandado mensagem direto\n3dfd605 update novas fazes\n09599e4 update fase C\nd634919 UPDATE 2"
 }

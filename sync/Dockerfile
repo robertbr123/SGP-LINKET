@@ -15,6 +15,7 @@ COPY summaries.py .
 COPY run_summary.py .
 COPY predictions.py .
 COPY ai_summary.py .
+COPY run_ai_test.py .
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
