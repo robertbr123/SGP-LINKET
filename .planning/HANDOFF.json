@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T13:46:31.861Z",
+  "timestamp": "2026-05-06T14:06:02.080Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -18,33 +18,9 @@
   "uncommitted_files": [
     {
       "status": "M",
-      "path": ".claude/settings.local.json"
-    },
-    {
-      "status": "M",
-      "path": ".planning/HANDOFF.json"
-    },
-    {
-      "status": "M",
-      "path": "docker-compose.yml"
-    },
-    {
-      "status": "M",
-      "path": "sql/init.sql"
-    },
-    {
-      "status": "M",
-      "path": "sql/migrate.sql"
-    },
-    {
-      "status": "M",
-      "path": "telegram_bot/commands.py"
-    },
-    {
-      "status": "??",
-      "path": "mini_app/"
+      "path": "mini_app/static/index.html"
     }
   ],
   "next_action": null,
-  "context_notes": "Recent commits:\n29b97ba update nova atualizacao\na951287 update\n97f8f6b resumo diario fase 4\ne8bb949 update usuarios\nf77bb9c fase 2"
+  "context_notes": "Recent commits:\n84d83b3 update fase A e B\n29b97ba update nova atualizacao\na951287 update\n97f8f6b resumo diario fase 4\ne8bb949 update usuarios"
 }

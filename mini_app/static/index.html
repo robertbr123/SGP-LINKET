@@ -59,10 +59,16 @@
 
 <div class="max-w-md mx-auto p-4">
 
-  <!-- Loading global -->
+  <!-- Loading global com progresso -->
   <template x-if="state === 'loading'">
-    <div class="card rounded-xl p-6 text-center mt-8">
-      <p class="muted">Validando autenticação Telegram...</p>
+    <div class="card rounded-xl p-6 mt-8">
+      <p class="text-center font-semibold">Conectando...</p>
+      <p class="text-center muted text-sm mt-2" x-text="loadingStep"></p>
+      <div class="mt-4 text-xs muted font-mono break-all space-y-1">
+        <p x-text="'• tg.WebApp:    ' + (debug.hasWebApp ? 'OK' : '...')"></p>
+        <p x-text="'• initData:     ' + (debug.initDataLen > 0 ? debug.initDataLen + ' chars' : '...')"></p>
+        <p x-text="'• /api/me:      ' + debug.fetchStatus"></p>
+      </div>
     </div>
   </template>
 
@@ -295,6 +301,8 @@
 function miniApp() {
   return {
     state: 'loading',
+    loadingStep: 'inicializando...',
+    debug: { hasWebApp: false, initDataLen: 0, fetchStatus: '...' },
     user: {},
     role: '',
     error: { title: '', message: '', hint: '' },
@@ -306,51 +314,113 @@ function miniApp() {
     tg: null,
 
     async boot() {
+      console.log('[boot] iniciando');
+      this.loadingStep = 'verificando Telegram WebApp...';
+
       this.tg = window.Telegram?.WebApp;
+      this.debug.hasWebApp = !!this.tg;
       if (!this.tg) {
+        console.error('[boot] Telegram.WebApp ausente');
         this.state = 'error';
-        this.error = { title: 'Não está dentro do Telegram', message: 'Abra esta página através do bot.' };
+        this.error = {
+          title: 'Não está dentro do Telegram',
+          message: 'Esta página foi aberta no navegador comum, não pelo bot. Abra via comando /menu no Telegram.'
+        };
         return;
       }
       this.tg.ready();
       this.tg.expand();
 
-      // Hash routing simples
       window.addEventListener('hashchange', () => this.applyHash());
       this.applyHash();
 
-      const initData = this.tg.initData;
+      const initData = this.tg.initData || '';
+      this.debug.initDataLen = initData.length;
+      console.log('[boot] initData length:', initData.length);
+
       if (!initData) {
         this.state = 'error';
-        this.error = { title: 'initData ausente', message: 'O Telegram não enviou dados de autenticação.' };
+        this.error = {
+          title: 'initData ausente',
+          message: 'O Telegram não enviou dados de autenticação. Causas possíveis:\n' +
+                   '1) Domínio não cadastrado em @BotFather\n' +
+                   '2) Mini App aberto fora do Telegram\n' +
+                   '3) URL HTTP em vez de HTTPS'
+        };
         return;
       }
 
+      this.loadingStep = 'autenticando no servidor...';
+      this.debug.fetchStatus = 'enviando...';
+
+      // Timeout de 15s pro fetch
+      const ctrl = new AbortController();
+      const timeoutId = setTimeout(() => ctrl.abort(), 15000);
+
       try {
+        console.log('[boot] POST /api/me...');
         const res = await fetch('/api/me', {
           method: 'POST',
           headers: { 'X-Telegram-Init-Data': initData },
+          signal: ctrl.signal,
         });
-        const data = await res.json();
+        clearTimeout(timeoutId);
+        this.debug.fetchStatus = 'HTTP ' + res.status;
+        console.log('[boot] /api/me status:', res.status);
+
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          this.state = 'error';
+          this.error = {
+            title: 'Resposta inválida',
+            message: 'Servidor retornou conteúdo não-JSON (status ' + res.status + ').',
+            hint: 'Verifique logs: docker compose logs mini-app'
+          };
+          return;
+        }
+
         if (res.status === 403) {
           this.state = 'error';
           this.error = { title: 'Acesso não autorizado', message: data.error, hint: data.hint || '' };
           return;
         }
+        if (res.status === 401) {
+          this.state = 'error';
+          this.error = {
+            title: 'initData inválido',
+            message: data.error || 'Assinatura HMAC não confere.',
+            hint: 'O bot token configurado no banco não bate com o bot que abriu este Mini App.'
+          };
+          return;
+        }
         if (!res.ok) {
           this.state = 'error';
-          this.error = { title: 'Erro do servidor', message: data.error || 'Falha ao validar.' };
+          this.error = {
+            title: 'Erro do servidor (' + res.status + ')',
+            message: data.error || 'Resposta inesperada.',
+            hint: data.hint || ''
+          };
           return;
         }
         this.user = data.telegram;
         this.role = data.role;
         this.state = 'ok';
-
-        // Inicial
+        console.log('[boot] OK, user:', this.user.username);
         this.loadDashboard();
       } catch (e) {
+        clearTimeout(timeoutId);
+        console.error('[boot] fetch error:', e);
         this.state = 'error';
-        this.error = { title: 'Erro de rede', message: e.message };
+        const isTimeout = e.name === 'AbortError';
+        this.error = {
+          title: isTimeout ? 'Timeout' : 'Erro de rede',
+          message: isTimeout
+            ? 'Servidor não respondeu em 15s. Verifique nginx-proxy-manager e mini-app container.'
+            : e.message,
+          hint: 'Console do navegador tem mais detalhes.'
+        };
       }
     },
 
