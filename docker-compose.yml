@@ -263,6 +263,37 @@ services:
       - wg_net
 
   # ---------------------------------------------------------------------------
+  # Bot Telegram interativo (long polling)
+  # Recebe comandos /status /cliente /online /desconectar /reiniciar_cpe /silenciar
+  # ---------------------------------------------------------------------------
+  telegram-bot:
+    build:
+      context: ./telegram_bot
+      dockerfile: Dockerfile
+    container_name: radius_telegram_bot
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      wireguard:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_NAME: radius
+      DB_USER: radius
+      DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      GENIEACS_NBI_URL: ${GENIEACS_NBI_URL:-http://genieacs-nbi:7557}
+    networks:
+      - radius_net
+      - wg_net
+
+  # ---------------------------------------------------------------------------
   # Prometheus — coleta métricas do /metrics do web
   # ---------------------------------------------------------------------------
   prometheus:
