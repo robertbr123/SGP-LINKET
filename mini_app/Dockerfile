@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY auth.py .
 COPY mikrotik.py .
 COPY audit.py .
+COPY notifier.py .
 COPY ai_llm.py .
 COPY ai_features.py .
 COPY server.py .

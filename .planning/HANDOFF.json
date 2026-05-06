@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T23:11:25.149Z",
+  "timestamp": "2026-05-06T23:18:13.441Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -15,12 +15,7 @@
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [],
-  "uncommitted_files": [
-    {
-      "status": "M",
-      "path": "mini_app/server.py"
-    }
-  ],
+  "uncommitted_files": [],
   "next_action": null,
-  "context_notes": "Recent commits:\nb821504 teste webhook\n5d60801 update IA para todo lugar\ne3b5a6b IA\n0b24f90 update teste e doc\nc4cffd9 UPDATE NOVAS FEATURES"
+  "context_notes": "Recent commits:\ne935ffd update novas brasil\n6d4d3f6 update novas features\nb821504 teste webhook\n5d60801 update IA para todo lugar\ne3b5a6b IA"
 }

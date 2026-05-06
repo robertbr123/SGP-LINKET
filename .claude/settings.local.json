@@ -46,7 +46,8 @@
       "Bash(bash -n /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/entrypoint.sh)",
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/ai_summary.py)",
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/run_summary.py)",
-      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/server.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/ai_features.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/ai_llm.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/notifier.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/summaries.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/app.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/ai_features.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/alembic/versions/0003_ai_features.py)"
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/server.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/ai_features.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/ai_llm.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/notifier.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/summaries.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/app.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/ai_features.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/alembic/versions/0003_ai_features.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/mini_app/notifier.py)"
     ]
   }
 }
