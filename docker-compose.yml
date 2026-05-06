@@ -230,10 +230,14 @@ services:
       dockerfile: Dockerfile
     container_name: radius_sync
     restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      wireguard:
         condition: service_started
     environment:
       DB_HOST: postgres
@@ -256,6 +260,7 @@ services:
       CPE_POLL_INTERVAL: ${CPE_POLL_INTERVAL:-60}
     networks:
       - radius_net
+      - wg_net
 
   # ---------------------------------------------------------------------------
   # Prometheus — coleta métricas do /metrics do web
