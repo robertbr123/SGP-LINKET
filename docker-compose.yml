@@ -258,9 +258,56 @@ services:
       SYNC_MAX_DURATION: ${SYNC_MAX_DURATION:-600}
       GENIEACS_NBI_URL: ${GENIEACS_NBI_URL:-http://genieacs-nbi:7557}
       CPE_POLL_INTERVAL: ${CPE_POLL_INTERVAL:-60}
+      # Análise IA (auto-detecta o provider baseado em qual var está setada)
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_MODEL: ${AI_MODEL:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_AI_TOKEN: ${CF_AI_TOKEN:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     networks:
       - radius_net
       - wg_net
+
+  # ---------------------------------------------------------------------------
+  # Backup automático (Postgres + Mongo) → Cloudflare R2
+  # Roda diariamente via cron interno; notifica Telegram em sucesso/falha.
+  # ---------------------------------------------------------------------------
+  backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    container_name: radius_backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_NAME: radius
+      DB_USER: radius
+      DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
+      MONGO_HOST: mongodb
+      # Cloudflare R2 (preencha no .env)
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-sgp-linket-backups}
+      # Subpasta dentro do bucket (útil pra reusar bucket compartilhado).
+      # Vazio = backup vai direto na raiz do bucket.
+      # Ex: R2_PREFIX=SGP-LINKET → dokploy/SGP-LINKET/2026/05/...
+      R2_PREFIX: ${R2_PREFIX:-}
+      # Schedule
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      BACKUP_MINUTE: ${BACKUP_MINUTE:-0}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      RUN_ON_START: ${BACKUP_RUN_ON_START:-false}
+    networks:
+      - radius_net
 
   # ---------------------------------------------------------------------------
   # Mini App — Telegram WebApp (HTML+JS servido via HTTPS)

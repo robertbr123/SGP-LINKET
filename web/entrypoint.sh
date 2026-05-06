@@ -10,6 +10,25 @@ else
     echo "[entrypoint] AVISO: nao foi possivel resolver 'wireguard' — rota nao adicionada"
 fi
 
+# Rodar migrations Alembic. Em DB existente (com schema já criado),
+# se a tabela alembic_version não existir, marca como aplicada (stamp).
+echo "[entrypoint] Verificando estado de migrations Alembic..."
+ALEMBIC_VERSION_EXISTS=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc \
+    "SELECT 1 FROM information_schema.tables WHERE table_name='alembic_version'" 2>/dev/null)
+
+if [ "$ALEMBIC_VERSION_EXISTS" != "1" ]; then
+    # Banco existente sem alembic_version — verifica se tem schema antigo
+    HAS_SCHEMA=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc \
+        "SELECT 1 FROM information_schema.tables WHERE table_name='clientes'" 2>/dev/null)
+    if [ "$HAS_SCHEMA" = "1" ]; then
+        echo "[entrypoint] Schema legado detectado — marcando baseline como aplicada (stamp)..."
+        alembic stamp 0001 || echo "[entrypoint] WARN: alembic stamp falhou"
+    fi
+fi
+
+echo "[entrypoint] Aplicando migrations pendentes..."
+alembic upgrade head || echo "[entrypoint] WARN: alembic upgrade head falhou (continuando)"
+
 exec gunicorn \
     --bind 0.0.0.0:5000 \
     --worker-class gevent \

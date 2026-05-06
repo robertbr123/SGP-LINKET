@@ -690,6 +690,15 @@ def check_cpe_status(conn):
                     atualizado_em=NOW()
                 WHERE id=%s
             """, (now_online, ip_now or None, rx_now, now_online, cpe_id))
+            # Histórico de Rx Power para predição de falhas (Fase J)
+            if rx_now is not None and now_online:
+                try:
+                    cur.execute(
+                        "INSERT INTO cpe_rx_history (cpe_id, rx_power) VALUES (%s, %s)",
+                        (cpe_id, rx_now),
+                    )
+                except Exception:
+                    pass  # tabela pode não existir em deploys antigos
         conn.commit()
 
         # Evento: ficou online

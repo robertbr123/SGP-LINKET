@@ -237,12 +237,29 @@ def _heartbeat_message(conn, redis_client):
 # Orquestrador (chamado a cada ciclo do sync)
 # ---------------------------------------------------------------------------
 
+# Análise IA opcional (só carrega se ANTHROPIC_API_KEY estiver setada)
+try:
+    from ai_summary import generate_morning_analysis, generate_shift_analysis
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    generate_morning_analysis = lambda c: None
+    generate_shift_analysis = lambda c: None
+
+
 JOBS = [
     # (chave_redis, chave_config, builder_fn, dedup_event, severity)
     ("morning",   "alertas_resumo_matinal_hora", _morning_summary,   "summary_morning",   "info"),
     ("shift",     "alertas_resumo_turno_hora",   _shift_summary,     "summary_shift",     "info"),
     ("heartbeat", "alertas_heartbeat_hora",      None,               "summary_heartbeat", "info"),
 ]
+
+# Predição de falhas em CPE roda junto com o matinal (1x/dia)
+try:
+    from predictions import check_cpe_predictions, cleanup_old_rx_history
+    PREDICTIONS_AVAILABLE = True
+except ImportError:
+    PREDICTIONS_AVAILABLE = False
 
 
 def maybe_send_summaries(conn, redis_client, notifier):
@@ -273,6 +290,21 @@ def maybe_send_summaries(conn, redis_client, notifier):
         try:
             if chave == "heartbeat":
                 msg = _heartbeat_message(conn, redis_client)
+            elif chave == "morning":
+                msg = builder(conn)
+                # Anexa análise IA + roda predições no mesmo slot diário
+                if PREDICTIONS_AVAILABLE:
+                    try:
+                        check_cpe_predictions(conn, redis_client, notifier)
+                        cleanup_old_rx_history(conn, days=30)
+                    except Exception as e:
+                        log.warning("predictions error: %s", e)
+                ai_text = generate_morning_analysis(conn) if AI_AVAILABLE else None
+                if ai_text: msg += ai_text
+            elif chave == "shift":
+                msg = builder(conn)
+                ai_text = generate_shift_analysis(conn) if AI_AVAILABLE else None
+                if ai_text: msg += ai_text
             else:
                 msg = builder(conn)
         except Exception as e:

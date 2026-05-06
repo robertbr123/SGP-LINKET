@@ -13,6 +13,8 @@ COPY health_checks.py .
 COPY run_health_check.py .
 COPY summaries.py .
 COPY run_summary.py .
+COPY predictions.py .
+COPY ai_summary.py .
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
