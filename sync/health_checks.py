@@ -254,7 +254,11 @@ def check_nas_health(conn, redis_client, notifier):
                 severity="warning",
             )
 
-        # 1.5) Interfaces caídas (apenas as que NÃO são disabled)
+        # 1.5) Interfaces físicas caídas
+        # Critério: só alerta interface que JÁ esteve up alguma vez (Redis,
+        # TTL 30 dias). Porta sem cabo nunca esteve up = não alerta.
+        # Combinado com _eval_check(threshold=2), evita falso-positivo de
+        # uplink que oscila brevemente.
         for iface in res["ifaces"]:
             iname = str(iface.get("name", ""))
             if not iname:
@@ -262,12 +266,35 @@ def check_nas_health(conn, redis_client, notifier):
             disabled = str(iface.get("disabled", "")).lower() in ("true", "yes", "1")
             if disabled:
                 continue
-            running = str(iface.get("running", "")).lower() in ("true", "yes", "1")
             itype = str(iface.get("type", "") or "")
-
-            # Apenas interfaces físicas reais. VLANs/bridges/wlan reportam
-            # running=false mesmo operacionais (flag lógica do RouterOS).
+            # Apenas interfaces físicas reais (ignora VLAN/bridge/wlan etc.)
             if itype not in ("ether", "sfp", "sfp-sfpplus"):
+                continue
+
+            running = str(iface.get("running", "")).lower() in ("true", "yes", "1")
+            rx_byte = int(iface.get("rx-byte", 0) or 0)
+            tx_byte = int(iface.get("tx-byte", 0) or 0)
+            has_traffic = (rx_byte + tx_byte) > 0
+            redis_key = f"iface_was_up:{nas_id}:{iname}"
+
+            # Marca a porta como "já esteve em uso" quando vê running=true
+            # OU quando há tráfego acumulado significativo (>1MB)
+            esteve_up = False
+            if redis_client:
+                try:
+                    if running or (rx_byte + tx_byte) > 1_000_000:
+                        redis_client.set(redis_key, "1", ex=30 * 86400)
+                        esteve_up = True
+                    else:
+                        esteve_up = bool(redis_client.get(redis_key))
+                except Exception:
+                    esteve_up = has_traffic
+            else:
+                # Sem Redis, fallback: usa tráfego como prova de uso
+                esteve_up = has_traffic
+
+            # Não alerta porta que nunca esteve em uso (cabo desconectado)
+            if not esteve_up:
                 continue
 
             _eval_check(
