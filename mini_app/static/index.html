@@ -6,60 +6,44 @@
 <title>SGP-LINKET</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
 <style>
-  body {
-    background: var(--tg-theme-bg-color, #0f1419);
-    color:      var(--tg-theme-text-color, #f4f4f5);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-  .card {
-    background: var(--tg-theme-secondary-bg-color, #1a1f2e);
-    border: 1px solid rgba(255,255,255,0.06);
-  }
+  body { background: var(--tg-theme-bg-color, #0f1419); color: var(--tg-theme-text-color, #f4f4f5);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .card { background: var(--tg-theme-secondary-bg-color, #1a1f2e); border: 1px solid rgba(255,255,255,0.06); }
   .card-clickable { cursor: pointer; transition: transform .1s, opacity .1s; }
   .card-clickable:active { transform: scale(0.98); opacity: 0.85; }
   .muted { color: var(--tg-theme-hint-color, #9ca3af); }
   .accent { color: var(--tg-theme-link-color, #60a5fa); }
-  .btn-primary {
-    background: var(--tg-theme-button-color, #2563eb);
-    color: var(--tg-theme-button-text-color, white);
-  }
+  .btn-primary { background: var(--tg-theme-button-color, #2563eb); color: var(--tg-theme-button-text-color, white); }
   .btn-secondary { background: rgba(255,255,255,0.08); }
   .btn-danger { background: #dc2626; color: white; }
   .btn-success { background: #16a34a; color: white; }
-  button:active { transform: scale(0.97); }
-  button:disabled { opacity: 0.5; }
+  button:active { transform: scale(0.97); } button:disabled { opacity: 0.5; }
   .pulse-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .pulse-online  { background: #16a34a; box-shadow: 0 0 0 4px rgba(22,163,74,.2); }
   .pulse-offline { background: #6b7280; }
   .pulse-warn    { background: #facc15; box-shadow: 0 0 0 4px rgba(250,204,21,.2); }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-  .badge-ativo    { background: rgba(22,163,74,.15); color: #4ade80; }
-  .badge-suspenso { background: rgba(220,38,38,.15); color: #f87171; }
-  .badge-pendente { background: rgba(234,179,8,.15);  color: #facc15; }
-  .badge-aberto      { background: rgba(220,38,38,.15); color: #f87171; }
-  .badge-resolvido   { background: rgba(22,163,74,.15); color: #4ade80; }
-  .badge-em_atendimento { background: rgba(234,179,8,.15);  color: #facc15; }
-  .toast {
-    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-    padding: 12px 20px; border-radius: 12px; max-width: 90%;
-    box-shadow: 0 10px 25px rgba(0,0,0,.4); z-index: 50;
-  }
-  .toast-ok  { background: #16a34a; color: white; }
-  .toast-err { background: #dc2626; color: white; }
-  .progress-bar {
-    background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; height: 6px;
-  }
+  .badge-ativo, .badge-resolvido      { background: rgba(22,163,74,.15); color: #4ade80; }
+  .badge-suspenso, .badge-aberto, .badge-critical { background: rgba(220,38,38,.15); color: #f87171; }
+  .badge-pendente, .badge-warning, .badge-em_atendimento { background: rgba(234,179,8,.15);  color: #facc15; }
+  .badge-info, .badge-audit, .badge-ok { background: rgba(59,130,246,.15); color: #60a5fa; }
+  .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    padding: 12px 20px; border-radius: 12px; max-width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,.4); z-index: 50; }
+  .toast-ok  { background: #16a34a; color: white; } .toast-err { background: #dc2626; color: white; }
+  .progress-bar { background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; height: 6px; }
   .progress-fill { height: 100%; transition: width .3s; }
-  .swipe-row { transition: transform .2s; }
+  .input { width: 100%; padding: 12px; border-radius: 10px;
+    background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: inherit; outline: none; }
+  .input:focus { border-color: #2563eb; }
 </style>
 </head>
 <body class="min-h-screen pb-24" x-data="miniApp()" x-init="boot()">
 
 <div class="max-w-md mx-auto p-4">
 
-  <!-- Loading global -->
   <template x-if="state === 'loading'">
     <div class="card rounded-xl p-6 mt-8">
       <p class="text-center font-semibold">Conectando...</p>
@@ -69,21 +53,16 @@
         <p x-text="'• ready/expand: ' + (debug.readyDone ? 'OK' : 'aguardando')"></p>
         <p x-text="'• initData:     ' + (debug.initDataChecked ? debug.initDataLen + ' chars' : 'aguardando')"></p>
         <p x-text="'• fetch:        ' + debug.fetchStatus"></p>
-        <template x-if="debug.lastError">
-          <p class="text-red-400 mt-2" x-text="'⚠ ' + debug.lastError"></p>
-        </template>
+        <template x-if="debug.lastError"><p class="text-red-400 mt-2" x-text="'⚠ ' + debug.lastError"></p></template>
       </div>
     </div>
   </template>
 
-  <!-- Erro -->
   <template x-if="state === 'error'">
     <div class="card rounded-xl p-6 border-red-500/30 bg-red-500/10 mt-8">
       <p class="font-semibold text-red-400">❌ <span x-text="error.title"></span></p>
       <p class="text-sm mt-2 whitespace-pre-line" x-text="error.message"></p>
-      <template x-if="error.hint">
-        <p class="text-xs mt-3 muted font-mono break-all" x-text="error.hint"></p>
-      </template>
+      <template x-if="error.hint"><p class="text-xs mt-3 muted font-mono break-all" x-text="error.hint"></p></template>
     </div>
   </template>
 
@@ -97,11 +76,7 @@
             <h1 class="text-2xl font-bold">SGP-LINKET</h1>
             <p class="text-sm muted" x-text="'Olá, ' + greetingName() + '!'"></p>
           </header>
-
-          <template x-if="!kpis">
-            <p class="muted text-center py-8">Carregando...</p>
-          </template>
-
+          <template x-if="!kpis"><p class="muted text-center py-8">Carregando...</p></template>
           <template x-if="kpis">
             <div class="space-y-3">
               <div class="card rounded-xl p-4">
@@ -112,7 +87,6 @@
                 </p>
                 <p class="text-xs muted mt-1" x-text="'fonte: ' + (kpis.online_source === 'mikrotik' ? 'MikroTik API' : 'radacct')"></p>
               </div>
-
               <div class="grid grid-cols-2 gap-3">
                 <div class="card rounded-xl p-3">
                   <p class="text-xs muted">Ativos</p>
@@ -131,23 +105,12 @@
                   <p class="text-2xl font-bold" :class="kpis.chamados_abertos > 0 ? 'text-orange-400' : ''" x-text="kpis.chamados_abertos"></p>
                 </button>
               </div>
-
-              <button @click="setView('nas')" class="card card-clickable rounded-xl p-3 text-left w-full">
-                <p class="text-xs muted">NAS / MikroTiks</p>
-                <p class="text-2xl font-bold" x-text="kpis.nas_total"></p>
-              </button>
-
-              <div class="card rounded-xl p-3" :class="kpis.alertas_firing > 0 ? 'border-red-500/30 bg-red-500/5' : ''">
+              <button @click="setView('alertas')" class="card card-clickable rounded-xl p-3 text-left w-full"
+                      :class="kpis.alertas_firing > 0 ? 'border-red-500/30 bg-red-500/5' : ''">
                 <p class="text-xs muted">Alertas firing</p>
                 <p class="text-2xl font-bold" :class="kpis.alertas_firing > 0 ? 'text-red-400' : ''" x-text="kpis.alertas_firing"></p>
-              </div>
-
-              <button @click="setView('manut')" class="w-full py-3 rounded-xl btn-secondary font-semibold">
-                🔕 Manutenções
               </button>
-              <button @click="loadDashboard()" class="w-full py-3 rounded-xl btn-secondary font-semibold">
-                🔄 Atualizar
-              </button>
+              <button @click="loadDashboard()" class="w-full py-3 rounded-xl btn-secondary font-semibold">🔄 Atualizar</button>
             </div>
           </template>
         </div>
@@ -156,31 +119,23 @@
       <!-- ============ BUSCA ============ -->
       <template x-if="view === 'busca'">
         <div>
-          <header class="mb-4">
-            <h1 class="text-2xl font-bold">🔍 Buscar Cliente</h1>
-            <p class="text-sm muted">Por CPF, nome ou login PPPoE</p>
+          <header class="mb-4 flex items-center justify-between">
+            <div><h1 class="text-2xl font-bold">🔍 Buscar Cliente</h1>
+              <p class="text-sm muted">Por CPF, nome ou login</p></div>
+            <button @click="setView('novo_cliente')" class="px-3 py-2 rounded-lg btn-primary text-sm font-semibold">+ Novo</button>
           </header>
-
-          <input type="text" x-model="busca.q" @input.debounce.500ms="buscar()"
-                 placeholder="ex: 123.456.789-00 ou João Silva"
-                 class="w-full p-3 rounded-xl bg-black/20 border border-white/10 mb-4 outline-none focus:border-blue-500">
-
-          <template x-if="busca.loading">
-            <p class="muted text-center py-4">Buscando...</p>
-          </template>
+          <input type="text" x-model="busca.q" @input.debounce.500ms="buscar()" placeholder="ex: 123.456.789-00" class="input mb-4">
+          <template x-if="busca.loading"><p class="muted text-center py-4">Buscando...</p></template>
           <template x-if="!busca.loading && busca.resultados.length === 0 && busca.q.length >= 2">
             <p class="muted text-center py-4">Nenhum resultado.</p>
           </template>
-
           <div class="space-y-2">
             <template x-for="c in busca.resultados" :key="c.id">
               <button @click="abrirCliente(c.id)" class="w-full text-left card card-clickable rounded-xl p-3">
                 <div class="flex justify-between items-start">
                   <div class="flex-1 min-w-0">
                     <p class="font-semibold truncate" x-text="c.nome"></p>
-                    <p class="text-sm muted truncate">
-                      <span x-text="c.pppoe_login || '—'"></span> · <span x-text="c.cpf"></span>
-                    </p>
+                    <p class="text-sm muted truncate"><span x-text="c.pppoe_login || '—'"></span> · <span x-text="c.cpf"></span></p>
                   </div>
                   <div class="flex flex-col items-end gap-1">
                     <span class="badge" :class="'badge-' + c.status" x-text="c.status"></span>
@@ -193,12 +148,52 @@
         </div>
       </template>
 
+      <!-- ============ NOVO CLIENTE ============ -->
+      <template x-if="view === 'novo_cliente'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">➕ Novo Cliente</h1>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs muted uppercase">CPF</label>
+              <div class="flex gap-2">
+                <input type="text" x-model="novoCli.cpf" @blur="lookupSGP()" placeholder="só números" class="input flex-1">
+                <button @click="lookupSGP()" class="px-3 rounded-lg btn-secondary text-sm" :disabled="novoCli.lookingUp">
+                  <span x-show="!novoCli.lookingUp">🔍 SGP</span>
+                  <span x-show="novoCli.lookingUp">...</span>
+                </button>
+              </div>
+              <template x-if="novoCli.sgpInfo"><p class="text-xs accent mt-1">✓ Encontrado no SGP: <span x-text="novoCli.sgpInfo"></span></p></template>
+            </div>
+            <div>
+              <label class="text-xs muted uppercase">Nome</label>
+              <input type="text" x-model="novoCli.nome" class="input">
+            </div>
+            <div>
+              <label class="text-xs muted uppercase">Login PPPoE</label>
+              <input type="text" x-model="novoCli.pppoe_login" class="input">
+            </div>
+            <div>
+              <label class="text-xs muted uppercase">IP fixo (opcional)</label>
+              <input type="text" x-model="novoCli.ip" placeholder="ex: 10.0.0.5" class="input">
+            </div>
+            <div>
+              <label class="text-xs muted uppercase">Plano</label>
+              <select x-model="novoCli.plano_id" class="input">
+                <option value="">selecione...</option>
+                <template x-for="p in (planosCache.data || [])" :key="p.id">
+                  <option :value="p.id" x-text="p.nome + ' (' + p.velocidade_down + '↓/' + p.velocidade_up + '↑)'"></option>
+                </template>
+              </select>
+            </div>
+            <button @click="criarCliente()" class="w-full py-3 rounded-xl btn-primary font-semibold">Salvar</button>
+          </div>
+        </div>
+      </template>
+
       <!-- ============ DETALHE CLIENTE ============ -->
       <template x-if="view === 'cliente'">
         <div>
-          <template x-if="!cliente.data">
-            <p class="muted text-center py-8">Carregando...</p>
-          </template>
+          <template x-if="!cliente.data"><p class="muted text-center py-8">Carregando...</p></template>
           <template x-if="cliente.data">
             <div class="space-y-3">
               <div class="card rounded-xl p-4">
@@ -208,10 +203,9 @@
                 </div>
                 <p class="text-sm muted">CPF: <span class="font-mono" x-text="cliente.data.cliente.cpf"></span></p>
                 <p class="text-sm muted">PPPoE: <span class="font-mono" x-text="cliente.data.cliente.pppoe_login || '—'"></span></p>
-                <p class="text-sm muted">
-                  Plano: <span x-text="cliente.data.cliente.plano_nome || cliente.data.cliente.plano"></span>
-                  (<span x-text="cliente.data.cliente.velocidade_down + '↓ / ' + cliente.data.cliente.velocidade_up + '↑ Mbps'"></span>)
-                </p>
+                <p class="text-sm muted">Plano: <span x-text="cliente.data.cliente.plano_nome || cliente.data.cliente.plano"></span>
+                  (<span x-text="cliente.data.cliente.velocidade_down + '↓ / ' + cliente.data.cliente.velocidade_up + '↑'"></span>)</p>
+                <button @click="setView('editar_cliente')" class="mt-3 w-full py-2 rounded-lg btn-secondary text-sm">✏️ Editar</button>
               </div>
 
               <template x-if="cliente.data.sessao">
@@ -224,9 +218,7 @@
                 </div>
               </template>
               <template x-if="!cliente.data.sessao">
-                <div class="card rounded-xl p-4 text-center">
-                  <p class="muted">⚪ Sem sessão ativa</p>
-                </div>
+                <div class="card rounded-xl p-4 text-center"><p class="muted">⚪ Sem sessão ativa</p></div>
               </template>
 
               <template x-if="cliente.data.cpe">
@@ -240,32 +232,57 @@
                     <p class="text-sm">IP WAN: <span class="font-mono" x-text="cliente.data.cpe.ip_wan"></span></p>
                   </template>
                   <template x-if="cliente.data.cpe.rx_power !== null">
-                    <p class="text-sm" x-text="'Rx Power: ' + cliente.data.cpe.rx_power + ' dBm'"
-                       :class="rxColor(cliente.data.cpe.rx_power)"></p>
+                    <p class="text-sm" x-text="'Rx Power: ' + cliente.data.cpe.rx_power + ' dBm'" :class="rxColor(cliente.data.cpe.rx_power)"></p>
                   </template>
-                  <button @click="acaoCpe('reboot', cliente.data.cpe.id)" class="mt-3 w-full py-2 rounded-lg btn-secondary text-sm">
-                    🔄 Reiniciar CPE
-                  </button>
+                  <div class="grid grid-cols-3 gap-2 mt-3">
+                    <button @click="acaoCpe('reboot', cliente.data.cpe.id)" class="py-2 rounded-lg btn-secondary text-xs">🔄 Reboot</button>
+                    <button @click="acaoCpe('refresh', cliente.data.cpe.id)" class="py-2 rounded-lg btn-secondary text-xs">🔍 Refresh</button>
+                    <button @click="abrirDiagCpe(cliente.data.cpe.id)" class="py-2 rounded-lg btn-secondary text-xs">🔬 Diag</button>
+                  </div>
+                  <button @click="abrirWifiCpe(cliente.data.cpe.id)" class="mt-2 w-full py-2 rounded-lg btn-secondary text-xs">📶 WiFi</button>
                 </div>
               </template>
 
               <div class="card rounded-xl p-4">
                 <p class="text-xs muted uppercase tracking-wide mb-3">⚡ Ações</p>
                 <div class="grid grid-cols-2 gap-2">
-                  <button @click="acaoCliente('desconectar', 'Desconectar este cliente?')" class="py-3 rounded-lg btn-secondary text-sm font-semibold">
-                    ✂️ Desconectar
-                  </button>
-                  <button @click="acaoCliente('reaplicar', 'Reaplicar atributos RADIUS?')" class="py-3 rounded-lg btn-secondary text-sm font-semibold">
-                    🔄 Reaplicar
-                  </button>
-                  <button @click="acaoCliente('bloquear', '⚠️ Bloquear cliente (rate 128k + disconnect)?')" class="py-3 rounded-lg btn-danger text-sm font-semibold">
-                    🚫 Bloquear
-                  </button>
-                  <button @click="acaoCliente('desbloquear', 'Desbloquear cliente?')" class="py-3 rounded-lg btn-success text-sm font-semibold">
-                    ✅ Desbloquear
-                  </button>
+                  <button @click="acaoCliente('desconectar', 'Desconectar?')" class="py-3 rounded-lg btn-secondary text-sm font-semibold">✂️ Desconectar</button>
+                  <button @click="acaoCliente('reaplicar', 'Reaplicar RADIUS?')" class="py-3 rounded-lg btn-secondary text-sm font-semibold">🔄 Reaplicar</button>
+                  <button @click="acaoCliente('bloquear', '⚠️ Bloquear?')" class="py-3 rounded-lg btn-danger text-sm font-semibold">🚫 Bloquear</button>
+                  <button @click="acaoCliente('desbloquear', 'Desbloquear?')" class="py-3 rounded-lg btn-success text-sm font-semibold">✅ Desbloquear</button>
                 </div>
               </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ============ EDITAR CLIENTE ============ -->
+      <template x-if="view === 'editar_cliente'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">✏️ Editar Cliente</h1>
+          <template x-if="cliente.data">
+            <div class="space-y-3">
+              <div><label class="text-xs muted uppercase">Nome</label><input x-model="editCli.nome" class="input"></div>
+              <div><label class="text-xs muted uppercase">Login PPPoE</label><input x-model="editCli.pppoe_login" class="input"></div>
+              <div><label class="text-xs muted uppercase">IP fixo</label><input x-model="editCli.ip" class="input"></div>
+              <div>
+                <label class="text-xs muted uppercase">Status</label>
+                <select x-model="editCli.status" class="input">
+                  <option value="ativo">ativo</option>
+                  <option value="suspenso">suspenso</option>
+                  <option value="pendente">pendente</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs muted uppercase">Plano</label>
+                <select x-model="editCli.plano_id" class="input">
+                  <template x-for="p in (planosCache.data || [])" :key="p.id">
+                    <option :value="p.id" x-text="p.nome + ' (' + p.velocidade_down + '↓/' + p.velocidade_up + '↑)'"></option>
+                  </template>
+                </select>
+              </div>
+              <button @click="salvarEditarCliente()" class="w-full py-3 rounded-xl btn-primary font-semibold">Salvar</button>
             </div>
           </template>
         </div>
@@ -278,11 +295,7 @@
             <h1 class="text-2xl font-bold">📡 NAS / MikroTiks</h1>
             <button @click="loadNas()" class="text-sm muted">🔄</button>
           </header>
-
-          <template x-if="!nas.data">
-            <p class="muted text-center py-8">Carregando...</p>
-          </template>
-
+          <template x-if="!nas.data"><p class="muted text-center py-8">Carregando...</p></template>
           <div class="space-y-3" x-show="nas.data">
             <template x-for="n in (nas.data || [])" :key="n.id">
               <div class="card rounded-xl p-4">
@@ -293,24 +306,15 @@
                   </div>
                   <span class="pulse-dot" :class="n.online === true ? 'pulse-online' : (n.online === false ? 'pulse-offline' : 'pulse-warn')"></span>
                 </div>
-
                 <template x-if="n.online === true">
                   <div class="mt-3 space-y-2">
                     <div>
-                      <div class="flex justify-between text-xs muted mb-1">
-                        <span>CPU</span><span x-text="n.cpu + '%'"></span>
-                      </div>
-                      <div class="progress-bar">
-                        <div class="progress-fill" :style="'width: ' + n.cpu + '%; background: ' + barColor(n.cpu)"></div>
-                      </div>
+                      <div class="flex justify-between text-xs muted mb-1"><span>CPU</span><span x-text="n.cpu + '%'"></span></div>
+                      <div class="progress-bar"><div class="progress-fill" :style="'width: ' + n.cpu + '%; background: ' + barColor(n.cpu)"></div></div>
                     </div>
                     <div>
-                      <div class="flex justify-between text-xs muted mb-1">
-                        <span>Memória</span><span x-text="n.mem_pct + '%'"></span>
-                      </div>
-                      <div class="progress-bar">
-                        <div class="progress-fill" :style="'width: ' + n.mem_pct + '%; background: ' + barColor(n.mem_pct)"></div>
-                      </div>
+                      <div class="flex justify-between text-xs muted mb-1"><span>Memória</span><span x-text="n.mem_pct + '%'"></span></div>
+                      <div class="progress-bar"><div class="progress-fill" :style="'width: ' + n.mem_pct + '%; background: ' + barColor(n.mem_pct)"></div></div>
                     </div>
                     <div class="flex justify-between text-xs muted pt-1">
                       <span x-text="'Sessões: ' + (n.sessions ?? '?')"></span>
@@ -318,19 +322,38 @@
                         <span x-text="'Temp: ' + n.temp_max + '°C'" :class="n.temp_max > 70 ? 'text-orange-400' : ''"></span>
                       </template>
                     </div>
-                    <p class="text-xs muted" x-text="'Uptime: ' + (n.uptime || '—') + ' · ' + (n.board || '')"></p>
+                    <button @click="abrirToolsNas(n.id, n.shortname)" class="w-full mt-2 py-2 rounded-lg btn-secondary text-xs">🛠️ Tools (ping/trace/dns)</button>
                   </div>
                 </template>
-
-                <template x-if="n.online === false">
-                  <p class="mt-2 text-sm text-red-400" x-text="'⚠ ' + (n.error || 'inacessível')"></p>
-                </template>
-                <template x-if="n.online === null">
-                  <p class="mt-2 text-sm muted">sem credenciais MikroTik configuradas</p>
-                </template>
+                <template x-if="n.online === false"><p class="mt-2 text-sm text-red-400" x-text="'⚠ ' + (n.error || 'inacessível')"></p></template>
+                <template x-if="n.online === null"><p class="mt-2 text-sm muted">sem credenciais MikroTik</p></template>
               </div>
             </template>
           </div>
+        </div>
+      </template>
+
+      <!-- ============ TOOLS NAS ============ -->
+      <template x-if="view === 'tools_nas'">
+        <div>
+          <h1 class="text-2xl font-bold mb-1">🛠️ Tools MikroTik</h1>
+          <p class="text-sm muted mb-4" x-text="tools.nasLabel"></p>
+          <div class="card rounded-xl p-4 space-y-3">
+            <div class="flex gap-2">
+              <input x-model="tools.host" placeholder="IP ou domínio" class="input flex-1">
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <button @click="execTool('ping')" class="py-2 rounded-lg btn-primary text-sm">Ping</button>
+              <button @click="execTool('traceroute')" class="py-2 rounded-lg btn-primary text-sm">Trace</button>
+              <button @click="execTool('dns')" class="py-2 rounded-lg btn-primary text-sm">DNS</button>
+            </div>
+          </div>
+          <template x-if="tools.loading"><p class="text-center muted py-4">executando...</p></template>
+          <template x-if="tools.result">
+            <div class="card rounded-xl p-4 mt-3">
+              <pre class="text-xs whitespace-pre-wrap break-all" x-text="JSON.stringify(tools.result, null, 2)"></pre>
+            </div>
+          </template>
         </div>
       </template>
 
@@ -341,23 +364,14 @@
             <h1 class="text-2xl font-bold">📶 CPEs</h1>
             <button @click="loadCpes()" class="text-sm muted">🔄</button>
           </header>
-
           <div class="flex gap-2 mb-3">
             <template x-for="f in ['todos', 'offline', 'critico']">
-              <button @click="cpes.filtro = f; loadCpes()"
-                      class="flex-1 py-2 rounded-lg text-sm"
-                      :class="cpes.filtro === f ? 'btn-primary' : 'btn-secondary'"
-                      x-text="f"></button>
+              <button @click="cpes.filtro = f; loadCpes()" class="flex-1 py-2 rounded-lg text-sm"
+                      :class="cpes.filtro === f ? 'btn-primary' : 'btn-secondary'" x-text="f"></button>
             </template>
           </div>
-
-          <template x-if="!cpes.data">
-            <p class="muted text-center py-8">Carregando...</p>
-          </template>
-          <template x-if="cpes.data && cpes.data.length === 0">
-            <p class="muted text-center py-8">Nenhum CPE neste filtro.</p>
-          </template>
-
+          <template x-if="!cpes.data"><p class="muted text-center py-8">Carregando...</p></template>
+          <template x-if="cpes.data && cpes.data.length === 0"><p class="muted text-center py-8">Nenhum CPE.</p></template>
           <div class="space-y-2" x-show="cpes.data">
             <template x-for="c in (cpes.data || [])" :key="c.id">
               <div class="card rounded-xl p-3">
@@ -369,23 +383,60 @@
                   <span class="pulse-dot" :class="c.online ? 'pulse-online' : 'pulse-offline'"></span>
                 </div>
                 <div class="flex justify-between items-center mt-2 text-sm">
-                  <template x-if="c.rx_power !== null">
-                    <span :class="rxColor(c.rx_power)" x-text="c.rx_power + ' dBm'"></span>
-                  </template>
-                  <template x-if="c.rx_power === null">
-                    <span class="muted">sem sinal</span>
-                  </template>
+                  <template x-if="c.rx_power !== null"><span :class="rxColor(c.rx_power)" x-text="c.rx_power + ' dBm'"></span></template>
+                  <template x-if="c.rx_power === null"><span class="muted">sem sinal</span></template>
                   <span class="muted text-xs font-mono" x-text="c.ip_wan || '—'"></span>
                 </div>
-                <div class="flex gap-2 mt-2">
-                  <button @click="acaoCpe('reboot', c.id)" class="flex-1 py-2 rounded-lg btn-secondary text-xs">🔄 Reboot</button>
-                  <button @click="acaoCpe('refresh', c.id)" class="flex-1 py-2 rounded-lg btn-secondary text-xs">🔍 Refresh</button>
-                  <template x-if="c.cliente_id">
-                    <button @click="abrirCliente(c.cliente_id)" class="flex-1 py-2 rounded-lg btn-secondary text-xs">👤 Cliente</button>
-                  </template>
+                <div class="grid grid-cols-4 gap-1 mt-2">
+                  <button @click="acaoCpe('reboot', c.id)" class="py-2 rounded-lg btn-secondary text-xs">🔄</button>
+                  <button @click="acaoCpe('refresh', c.id)" class="py-2 rounded-lg btn-secondary text-xs">🔍</button>
+                  <button @click="abrirDiagCpe(c.id)" class="py-2 rounded-lg btn-secondary text-xs">🔬</button>
+                  <button @click="abrirWifiCpe(c.id)" class="py-2 rounded-lg btn-secondary text-xs">📶</button>
                 </div>
               </div>
             </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ DIAG CPE ============ -->
+      <template x-if="view === 'diag_cpe'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">🔬 Diagnóstico CPE</h1>
+          <button @click="loadHosts()" class="w-full py-2 rounded-lg btn-primary text-sm mb-3">↻ Carregar hosts LAN</button>
+          <template x-if="diagCpe.loading"><p class="muted text-center py-4">Buscando hosts...</p></template>
+          <template x-if="diagCpe.hosts">
+            <div class="card rounded-xl p-3">
+              <p class="text-xs muted uppercase mb-2" x-text="diagCpe.hosts.length + ' dispositivo(s) na LAN'"></p>
+              <div class="space-y-1">
+                <template x-for="h in diagCpe.hosts" :key="h.mac + h.ip">
+                  <div class="text-sm border-b border-white/5 pb-1">
+                    <p><span x-text="h.hostname || '*'"></span>
+                      <span class="muted text-xs ml-2" x-text="h.active ? '🟢' : '⚪'"></span>
+                    </p>
+                    <p class="text-xs muted font-mono" x-text="h.ip + ' · ' + h.mac"></p>
+                  </div>
+                </template>
+                <template x-if="diagCpe.hosts.length === 0">
+                  <p class="muted text-sm">Nenhum host detectado (CPE pode não suportar TR-098 hosts)</p>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ============ WIFI CPE ============ -->
+      <template x-if="view === 'wifi_cpe'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">📶 WiFi do CPE</h1>
+          <p class="text-sm muted mb-4">Deixe vazio o que não quiser alterar.</p>
+          <div class="space-y-3">
+            <div><label class="text-xs muted uppercase">SSID 2.4GHz</label><input x-model="wifi.ssid_24g" class="input" :placeholder="wifi.atual_24g || 'novo SSID'"></div>
+            <div><label class="text-xs muted uppercase">Senha 2.4GHz</label><input x-model="wifi.senha_24g" type="text" placeholder="(deixe vazio para manter)" class="input"></div>
+            <div><label class="text-xs muted uppercase">SSID 5GHz</label><input x-model="wifi.ssid_5g" class="input" :placeholder="wifi.atual_5g || 'novo SSID'"></div>
+            <div><label class="text-xs muted uppercase">Senha 5GHz</label><input x-model="wifi.senha_5g" type="text" placeholder="(deixe vazio para manter)" class="input"></div>
+            <button @click="salvarWifi()" class="w-full py-3 rounded-xl btn-primary font-semibold">Aplicar</button>
           </div>
         </div>
       </template>
@@ -397,23 +448,14 @@
             <h1 class="text-2xl font-bold">🎫 Chamados</h1>
             <button @click="loadChamados()" class="text-sm muted">🔄</button>
           </header>
-
           <div class="flex gap-2 mb-3">
             <template x-for="s in ['aberto', 'resolvido', 'todos']">
-              <button @click="chamados.filtro = s; loadChamados()"
-                      class="flex-1 py-2 rounded-lg text-sm"
-                      :class="chamados.filtro === s ? 'btn-primary' : 'btn-secondary'"
-                      x-text="s"></button>
+              <button @click="chamados.filtro = s; loadChamados()" class="flex-1 py-2 rounded-lg text-sm"
+                      :class="chamados.filtro === s ? 'btn-primary' : 'btn-secondary'" x-text="s"></button>
             </template>
           </div>
-
-          <template x-if="!chamados.data">
-            <p class="muted text-center py-8">Carregando...</p>
-          </template>
-          <template x-if="chamados.data && chamados.data.length === 0">
-            <p class="muted text-center py-8">Nenhum chamado neste filtro.</p>
-          </template>
-
+          <template x-if="!chamados.data"><p class="muted text-center py-8">Carregando...</p></template>
+          <template x-if="chamados.data && chamados.data.length === 0"><p class="muted text-center py-8">Nenhum chamado.</p></template>
           <div class="space-y-2" x-show="chamados.data">
             <template x-for="ch in (chamados.data || [])" :key="ch.id">
               <div class="card rounded-xl p-3">
@@ -427,9 +469,7 @@
                 <p class="text-sm mt-2" x-text="ch.descricao"></p>
                 <p class="text-xs muted mt-1" x-text="'Aberto: ' + ch.criado_em"></p>
                 <template x-if="ch.status === 'aberto'">
-                  <button @click="resolverChamado(ch.id)" class="mt-2 w-full py-2 rounded-lg btn-success text-xs font-semibold">
-                    ✅ Marcar como resolvido
-                  </button>
+                  <button @click="resolverChamado(ch.id)" class="mt-2 w-full py-2 rounded-lg btn-success text-xs font-semibold">✅ Marcar como resolvido</button>
                 </template>
               </div>
             </template>
@@ -437,16 +477,110 @@
         </div>
       </template>
 
+      <!-- ============ ALERTAS FIRING ============ -->
+      <template x-if="view === 'alertas'">
+        <div>
+          <header class="mb-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">🚨 Alertas</h1>
+            <button @click="loadAlertas()" class="text-sm muted">🔄</button>
+          </header>
+          <template x-if="!alertas.data"><p class="muted text-center py-8">Carregando...</p></template>
+          <template x-if="alertas.data && alertas.data.length === 0"><p class="muted text-center py-8">Nenhum alerta nas últimas 6h ✨</p></template>
+          <div class="space-y-2" x-show="alertas.data">
+            <template x-for="a in (alertas.data || [])" :key="a.dedup_key">
+              <div class="card rounded-xl p-3" :class="a.firing ? 'border-red-500/30' : 'opacity-70'">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-sm break-all" x-text="a.dedup_key"></p>
+                    <p class="text-xs muted" x-text="(a.firing ? '🔴 firing' : '✅ resolvido') + ' · count: ' + a.count_total"></p>
+                  </div>
+                  <span class="badge" :class="'badge-' + a.severity" x-text="a.severity"></span>
+                </div>
+                <template x-if="a.last_msg">
+                  <p class="text-xs mt-2 muted" x-html="a.last_msg.substring(0, 200)"></p>
+                </template>
+                <p class="text-xs muted mt-1" x-text="'Último: ' + a.last_sent_at"></p>
+                <template x-if="a.firing">
+                  <button @click="resolverAlerta(a.dedup_key)" class="mt-2 w-full py-2 rounded-lg btn-success text-xs font-semibold">✅ Marcar resolvido</button>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ AUDIT LOG ============ -->
+      <template x-if="view === 'audit'">
+        <div>
+          <header class="mb-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">📋 Audit Log</h1>
+            <button @click="loadAudit()" class="text-sm muted">🔄</button>
+          </header>
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <input x-model="audit.action" @input.debounce.500ms="loadAudit()" placeholder="filtrar action" class="input text-sm">
+            <input x-model="audit.user" @input.debounce.500ms="loadAudit()" placeholder="filtrar usuário" class="input text-sm">
+          </div>
+          <template x-if="!audit.data"><p class="muted text-center py-8">Carregando...</p></template>
+          <div class="space-y-1" x-show="audit.data">
+            <template x-for="e in (audit.data || [])" :key="e.id">
+              <div class="card rounded-lg p-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="font-mono text-xs" x-text="e.ts.substring(11, 19)"></span>
+                  <span class="badge badge-info" x-text="e.action"></span>
+                </div>
+                <p class="text-xs mt-1">
+                  <span class="muted">Por:</span> <span x-text="e.usuario_nome || '?'"></span>
+                  <span class="muted ml-2">IP:</span> <span class="font-mono" x-text="e.ip || '—'"></span>
+                </p>
+                <template x-if="e.target_type">
+                  <p class="text-xs muted" x-text="e.target_type + ' #' + (e.target_id || '?')"></p>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ RELATÓRIOS ============ -->
+      <template x-if="view === 'relatorios'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">📊 Relatórios</h1>
+          <div class="card rounded-xl p-3 mb-3">
+            <p class="text-xs muted uppercase mb-2">Sessões por hora (24h)</p>
+            <canvas id="chart-sessoes" height="150"></canvas>
+          </div>
+          <div class="card rounded-xl p-3 mb-3">
+            <p class="text-xs muted uppercase mb-2">Top 10 consumidores 24h</p>
+            <canvas id="chart-consumo" height="200"></canvas>
+          </div>
+          <div class="card rounded-xl p-3">
+            <p class="text-xs muted uppercase mb-2">MTTR diário (7d)</p>
+            <canvas id="chart-mttr" height="150"></canvas>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ MAIS (hub) ============ -->
+      <template x-if="view === 'mais'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">⚙️ Mais</h1>
+          <div class="grid grid-cols-2 gap-3">
+            <button @click="setView('nas')" class="card card-clickable rounded-xl p-4 text-center">📡<br><span class="text-sm">NAS</span></button>
+            <button @click="setView('alertas')" class="card card-clickable rounded-xl p-4 text-center">🚨<br><span class="text-sm">Alertas</span></button>
+            <button @click="setView('audit')" class="card card-clickable rounded-xl p-4 text-center">📋<br><span class="text-sm">Audit</span></button>
+            <button @click="setView('relatorios')" class="card card-clickable rounded-xl p-4 text-center">📊<br><span class="text-sm">Relatórios</span></button>
+            <button @click="setView('manut')" class="card card-clickable rounded-xl p-4 text-center">🔕<br><span class="text-sm">Manutenções</span></button>
+            <button @click="setView('admin')" class="card card-clickable rounded-xl p-4 text-center">🔧<br><span class="text-sm">Admin</span></button>
+          </div>
+        </div>
+      </template>
+
       <!-- ============ MANUTENÇÕES ============ -->
       <template x-if="view === 'manut'">
         <div>
-          <header class="mb-4 flex items-center justify-between">
-            <h1 class="text-2xl font-bold">🔕 Manutenções</h1>
-            <button @click="loadManutencoes()" class="text-sm muted">🔄</button>
-          </header>
-
+          <h1 class="text-2xl font-bold mb-4">🔕 Manutenções</h1>
           <div class="card rounded-xl p-4 mb-4">
-            <p class="text-xs muted uppercase tracking-wide mb-2">Silenciar todos os alertas por...</p>
+            <p class="text-xs muted uppercase mb-2">Silenciar todos os alertas por...</p>
             <div class="grid grid-cols-4 gap-2">
               <template x-for="m in [30, 60, 120, 240]">
                 <button @click="silenciar(m)" class="py-3 rounded-lg btn-primary text-sm font-semibold">
@@ -455,11 +589,7 @@
               </template>
             </div>
           </div>
-
-          <template x-if="!manut.data">
-            <p class="muted text-center py-4">Carregando...</p>
-          </template>
-
+          <template x-if="!manut.data"><p class="muted text-center py-4">Carregando...</p></template>
           <div class="space-y-2" x-show="manut.data">
             <template x-for="m in (manut.data || [])" :key="m.id">
               <div class="card rounded-xl p-3" :class="m.ativa ? 'border-green-500/30 bg-green-500/5' : ''">
@@ -470,11 +600,169 @@
                     <p class="text-xs muted" x-text="m.inicio + ' → ' + m.fim"></p>
                   </div>
                   <template x-if="m.ativa">
-                    <button @click="encerrarManutencao(m.id)" class="ml-2 px-3 py-1 rounded-lg btn-danger text-xs">
-                      Encerrar
-                    </button>
+                    <button @click="encerrarManutencao(m.id)" class="ml-2 px-3 py-1 rounded-lg btn-danger text-xs">Encerrar</button>
                   </template>
                 </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ ADMIN HUB ============ -->
+      <template x-if="view === 'admin'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">🔧 Administração</h1>
+          <div class="space-y-2">
+            <button @click="setView('admin_planos')" class="w-full card card-clickable rounded-xl p-3 text-left">💰 Planos</button>
+            <button @click="setView('admin_pools')" class="w-full card card-clickable rounded-xl p-3 text-left">📦 Pools de IP</button>
+            <button @click="setView('admin_nas')" class="w-full card card-clickable rounded-xl p-3 text-left">🌐 NAS / MikroTiks</button>
+            <button @click="setView('admin_usuarios')" class="w-full card card-clickable rounded-xl p-3 text-left">👥 Usuários do painel</button>
+            <button @click="setView('admin_apikeys')" class="w-full card card-clickable rounded-xl p-3 text-left">🔑 API Keys</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ ADMIN: PLANOS ============ -->
+      <template x-if="view === 'admin_planos'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">💰 Planos</h1>
+          <div class="card rounded-xl p-3 mb-3 space-y-2">
+            <p class="text-xs muted uppercase">Novo plano</p>
+            <input x-model="newPlano.nome" placeholder="nome" class="input">
+            <div class="grid grid-cols-2 gap-2">
+              <input x-model.number="newPlano.velocidade_down" type="number" placeholder="down (Mbps)" class="input">
+              <input x-model.number="newPlano.velocidade_up" type="number" placeholder="up (Mbps)" class="input">
+            </div>
+            <button @click="criarPlano()" class="w-full py-2 rounded-lg btn-primary text-sm font-semibold">Criar</button>
+          </div>
+          <div class="space-y-2">
+            <template x-for="p in (admin.planos || [])" :key="p.id">
+              <div class="card rounded-lg p-3 flex justify-between items-center">
+                <div>
+                  <p class="font-semibold" x-text="p.nome"></p>
+                  <p class="text-xs muted" x-text="p.velocidade_down + '↓ / ' + p.velocidade_up + '↑ Mbps'"></p>
+                </div>
+                <button @click="deletarPlano(p.id)" class="px-3 py-1 rounded-lg btn-danger text-xs">🗑️</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ ADMIN: POOLS ============ -->
+      <template x-if="view === 'admin_pools'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">📦 Pools</h1>
+          <div class="card rounded-xl p-3 mb-3 space-y-2">
+            <p class="text-xs muted uppercase">Novo pool</p>
+            <input x-model="newPool.nome" placeholder="nome" class="input">
+            <div class="grid grid-cols-2 gap-2">
+              <input x-model="newPool.range_inicio" placeholder="IP inicial" class="input">
+              <input x-model="newPool.range_fim" placeholder="IP final" class="input">
+            </div>
+            <input x-model="newPool.descricao" placeholder="descrição" class="input">
+            <button @click="criarPool()" class="w-full py-2 rounded-lg btn-primary text-sm font-semibold">Criar</button>
+          </div>
+          <div class="space-y-2">
+            <template x-for="p in (admin.pools || [])" :key="p.id">
+              <div class="card rounded-lg p-3 flex justify-between items-center">
+                <div>
+                  <p class="font-semibold" x-text="p.nome"></p>
+                  <p class="text-xs muted font-mono" x-text="p.range_inicio + ' → ' + p.range_fim"></p>
+                </div>
+                <button @click="deletarPool(p.id)" class="px-3 py-1 rounded-lg btn-danger text-xs">🗑️</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ ADMIN: NAS ============ -->
+      <template x-if="view === 'admin_nas'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">🌐 NAS</h1>
+          <div class="card rounded-xl p-3 mb-3 space-y-2">
+            <p class="text-xs muted uppercase">Novo NAS</p>
+            <input x-model="newNas.nasname" placeholder="IP do MikroTik" class="input">
+            <input x-model="newNas.shortname" placeholder="apelido" class="input">
+            <input x-model="newNas.secret" placeholder="RADIUS secret" class="input">
+            <div class="grid grid-cols-2 gap-2">
+              <input x-model="newNas.mikrotik_user" placeholder="API user" class="input">
+              <input x-model="newNas.mikrotik_pass" type="password" placeholder="API pass" class="input">
+            </div>
+            <button @click="criarNas()" class="w-full py-2 rounded-lg btn-primary text-sm font-semibold">Criar</button>
+          </div>
+          <div class="space-y-2">
+            <template x-for="n in (admin.nas || [])" :key="n.id">
+              <div class="card rounded-lg p-3 flex justify-between items-center">
+                <div class="flex-1 min-w-0">
+                  <p class="font-semibold truncate" x-text="n.shortname || n.nasname"></p>
+                  <p class="text-xs muted font-mono truncate" x-text="n.nasname"></p>
+                </div>
+                <button @click="deletarNas(n.id)" class="px-3 py-1 rounded-lg btn-danger text-xs ml-2">🗑️</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ ADMIN: USUÁRIOS ============ -->
+      <template x-if="view === 'admin_usuarios'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">👥 Usuários do Painel</h1>
+          <div class="card rounded-xl p-3 mb-3 space-y-2">
+            <p class="text-xs muted uppercase">Novo usuário</p>
+            <input x-model="newUser.username" placeholder="username" class="input">
+            <input x-model="newUser.senha" type="password" placeholder="senha (≥6 chars)" class="input">
+            <select x-model="newUser.role" class="input">
+              <option value="admin">admin</option>
+              <option value="operador">operador</option>
+              <option value="leitura">leitura</option>
+            </select>
+            <button @click="criarUsuario()" class="w-full py-2 rounded-lg btn-primary text-sm font-semibold">Criar</button>
+          </div>
+          <div class="space-y-2">
+            <template x-for="u in (admin.usuarios || [])" :key="u.id">
+              <div class="card rounded-lg p-3">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <p class="font-semibold" x-text="u.username"></p>
+                    <p class="text-xs muted" x-text="u.role + ' · último acesso: ' + (u.ultimo_acesso || '—')"></p>
+                  </div>
+                  <button @click="deletarUsuario(u.id)" class="px-3 py-1 rounded-lg btn-danger text-xs">🗑️</button>
+                </div>
+                <button @click="trocarSenha(u.id)" class="mt-2 w-full py-1 rounded-lg btn-secondary text-xs">🔑 Trocar senha</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ ADMIN: API KEYS ============ -->
+      <template x-if="view === 'admin_apikeys'">
+        <div>
+          <h1 class="text-2xl font-bold mb-4">🔑 API Keys</h1>
+          <div class="card rounded-xl p-3 mb-3 space-y-2">
+            <p class="text-xs muted uppercase">Nova API Key</p>
+            <input x-model="newApiKey.nome" placeholder="nome (ex: integração SGP)" class="input">
+            <button @click="criarApiKey()" class="w-full py-2 rounded-lg btn-primary text-sm font-semibold">Gerar</button>
+          </div>
+          <template x-if="newApiKey.created">
+            <div class="card rounded-xl p-3 mb-3 bg-yellow-500/10 border-yellow-500/30">
+              <p class="text-sm font-semibold text-yellow-400">⚠️ Guarde esta key — só aparece UMA vez:</p>
+              <p class="text-xs font-mono break-all mt-2" x-text="newApiKey.created"></p>
+              <button @click="newApiKey.created = ''" class="mt-2 w-full py-2 rounded-lg btn-secondary text-xs">Entendi</button>
+            </div>
+          </template>
+          <div class="space-y-2">
+            <template x-for="k in (admin.apikeys || [])" :key="k.id">
+              <div class="card rounded-lg p-3 flex justify-between items-center">
+                <div class="flex-1 min-w-0">
+                  <p class="font-semibold truncate" x-text="k.nome"></p>
+                  <p class="text-xs muted" x-text="(k.ips_distintos || 0) + ' IP(s) · último uso: ' + (k.ultimo_uso || 'nunca')"></p>
+                </div>
+                <button @click="deletarApiKey(k.id)" class="px-3 py-1 rounded-lg btn-danger text-xs">🗑️</button>
               </div>
             </template>
           </div>
@@ -486,30 +774,23 @@
         <div class="toast" :class="'toast-' + toast.type" x-text="toast.msg"></div>
       </template>
 
-      <!-- Bottom nav 4 abas -->
+      <!-- Bottom nav -->
       <nav class="fixed bottom-0 left-0 right-0 card border-t flex justify-around"
            :style="'background: var(--tg-theme-secondary-bg-color, #1a1f2e); padding-bottom: env(safe-area-inset-bottom);'">
-        <button @click="setView('dashboard')" class="flex-1 py-3 text-center"
-                :class="view === 'dashboard' ? 'accent font-semibold' : 'muted'">
-          📊<br><span class="text-xs">Painel</span>
-        </button>
-        <button @click="setView('busca')" class="flex-1 py-3 text-center"
-                :class="view === 'busca' ? 'accent font-semibold' : 'muted'">
-          🔍<br><span class="text-xs">Buscar</span>
-        </button>
-        <button @click="setView('cpes')" class="flex-1 py-3 text-center"
-                :class="['cpes','nas'].includes(view) ? 'accent font-semibold' : 'muted'">
-          📡<br><span class="text-xs">Equip.</span>
-        </button>
-        <button @click="setView('chamados')" class="flex-1 py-3 text-center"
-                :class="view === 'chamados' ? 'accent font-semibold' : 'muted'">
-          🎫<br><span class="text-xs">Chamados</span>
-        </button>
+        <button @click="setView('dashboard')" class="flex-1 py-3 text-center" :class="view === 'dashboard' ? 'accent font-semibold' : 'muted'">
+          📊<br><span class="text-xs">Painel</span></button>
+        <button @click="setView('busca')" class="flex-1 py-3 text-center" :class="['busca','novo_cliente','cliente','editar_cliente'].includes(view) ? 'accent font-semibold' : 'muted'">
+          🔍<br><span class="text-xs">Clientes</span></button>
+        <button @click="setView('cpes')" class="flex-1 py-3 text-center" :class="['cpes','diag_cpe','wifi_cpe','tools_nas'].includes(view) ? 'accent font-semibold' : 'muted'">
+          📡<br><span class="text-xs">Equip.</span></button>
+        <button @click="setView('chamados')" class="flex-1 py-3 text-center" :class="view === 'chamados' ? 'accent font-semibold' : 'muted'">
+          🎫<br><span class="text-xs">Chamados</span></button>
+        <button @click="setView('mais')" class="flex-1 py-3 text-center" :class="['mais','alertas','audit','relatorios','manut','admin','admin_planos','admin_pools','admin_nas','admin_usuarios','admin_apikeys'].includes(view) ? 'accent font-semibold' : 'muted'">
+          ⚙️<br><span class="text-xs">Mais</span></button>
       </nav>
 
     </div>
   </template>
-
 </div>
 
 <script>
@@ -517,12 +798,9 @@ function tg() { return window.Telegram && window.Telegram.WebApp; }
 
 function miniApp() {
   return {
-    state: 'loading',
-    loadingStep: 'inicializando...',
+    state: 'loading', loadingStep: 'inicializando...',
     debug: { hasWebApp: false, readyDone: false, initDataChecked: false, initDataLen: 0, fetchStatus: 'aguardando', lastError: '' },
-    user: {},
-    role: '',
-    error: { title: '', message: '', hint: '' },
+    user: {}, role: '', error: { title: '', message: '', hint: '' },
     view: 'dashboard',
     kpis: null,
     busca: { q: '', loading: false, resultados: [] },
@@ -531,6 +809,20 @@ function miniApp() {
     cpes: { data: null, filtro: 'todos' },
     chamados: { data: null, filtro: 'aberto' },
     manut: { data: null },
+    alertas: { data: null },
+    audit: { data: null, action: '', user: '' },
+    diagCpe: { id: null, hosts: null, loading: false },
+    wifi: { id: null, ssid_24g: '', senha_24g: '', ssid_5g: '', senha_5g: '', atual_24g: '', atual_5g: '' },
+    tools: { nasId: null, nasLabel: '', host: '8.8.8.8', loading: false, result: null },
+    novoCli: { cpf: '', nome: '', pppoe_login: '', ip: '', plano_id: '', sgpInfo: '', lookingUp: false },
+    editCli: { nome: '', pppoe_login: '', ip: '', status: '', plano_id: '' },
+    planosCache: { data: null },
+    admin: { planos: null, pools: null, nas: null, usuarios: null, apikeys: null },
+    newPlano: { nome: '', velocidade_down: 10, velocidade_up: 5 },
+    newPool: { nome: '', range_inicio: '', range_fim: '', descricao: '' },
+    newNas: { nasname: '', shortname: '', secret: '', mikrotik_user: 'admin', mikrotik_pass: '' },
+    newUser: { username: '', senha: '', role: 'admin' },
+    newApiKey: { nome: '', created: '' },
     toast: { msg: '', type: 'ok', timer: null },
 
     async boot() {
@@ -551,7 +843,7 @@ function miniApp() {
         this.debug.initDataChecked = true;
         if (!initData) {
           this.state = 'error';
-          this.error = { title: 'initData ausente', message: 'O Telegram não enviou autenticação.', hint: 'Domínio em @BotFather?' };
+          this.error = { title: 'initData ausente', message: 'O Telegram não enviou autenticação.' };
           return;
         }
 
@@ -559,43 +851,25 @@ function miniApp() {
         this.debug.fetchStatus = 'enviando...';
         const ctrl = new AbortController();
         const tmId = setTimeout(() => ctrl.abort(), 15000);
-        const res = await fetch('/api/me', {
-          method: 'POST',
-          headers: { 'X-Telegram-Init-Data': initData },
-          signal: ctrl.signal,
-        });
+        const res = await fetch('/api/me', { method: 'POST', headers: { 'X-Telegram-Init-Data': initData }, signal: ctrl.signal });
         clearTimeout(tmId);
         this.debug.fetchStatus = 'HTTP ' + res.status;
-        let data = {};
-        try { data = await res.json(); } catch (_) {}
+        let data = {}; try { data = await res.json(); } catch (_) {}
 
-        if (res.status === 403) {
-          this.state = 'error';
-          this.error = { title: 'Acesso não autorizado', message: data.error, hint: data.hint || '' };
-          return;
-        }
-        if (!res.ok) {
-          this.state = 'error';
-          this.error = { title: 'Erro do servidor (' + res.status + ')', message: data.error || 'Resposta inesperada.', hint: data.hint || '' };
-          return;
-        }
-        this.user = data.telegram || {};
-        this.role = data.role;
-        this.state = 'ok';
+        if (res.status === 403) { this.state = 'error'; this.error = { title: 'Acesso não autorizado', message: data.error, hint: data.hint || '' }; return; }
+        if (!res.ok) { this.state = 'error'; this.error = { title: 'Erro do servidor (' + res.status + ')', message: data.error || 'Resposta inesperada.' }; return; }
 
+        this.user = data.telegram || {}; this.role = data.role; this.state = 'ok';
         window.addEventListener('hashchange', () => this.applyHash());
         this.applyHash();
         this.loadDashboard();
-
+        this.loadPlanosCache();
       } catch (e) {
         this.debug.lastError = (e && e.message) || String(e);
         this.state = 'error';
         const isTimeout = e && e.name === 'AbortError';
-        this.error = {
-          title: isTimeout ? 'Timeout' : 'Exceção JavaScript',
-          message: (e && e.message) || 'Erro inesperado',
-          hint: e && e.stack ? e.stack.split('\n')[0] : ''
-        };
+        this.error = { title: isTimeout ? 'Timeout' : 'Exceção JavaScript', message: (e && e.message) || 'Erro inesperado',
+          hint: e && e.stack ? e.stack.split('\n')[0] : '' };
       }
     },
 
@@ -603,13 +877,9 @@ function miniApp() {
       const h = (window.location.hash || '#/dashboard').replace('#/', '');
       if (h.startsWith('cliente/')) {
         const id = parseInt(h.split('/')[1]);
-        this.cliente.id = id;
-        this.view = 'cliente';
-        this.loadCliente(id);
+        this.cliente.id = id; this.view = 'cliente'; this.loadCliente(id);
       } else if (h.startsWith('cpes/')) {
-        this.cpes.filtro = h.split('/')[1] || 'todos';
-        this.view = 'cpes';
-        this.loadCpes();
+        this.cpes.filtro = h.split('/')[1] || 'todos'; this.view = 'cpes'; this.loadCpes();
       } else {
         this.view = h || 'dashboard';
         this.lazyLoadView(this.view);
@@ -618,12 +888,8 @@ function miniApp() {
     },
 
     setView(v, arg) {
-      if (v === 'cpes' && arg) {
-        this.cpes.filtro = arg;
-        window.location.hash = '#/cpes/' + arg;
-      } else {
-        window.location.hash = '#/' + v;
-      }
+      if (v === 'cpes' && arg) { this.cpes.filtro = arg; window.location.hash = '#/cpes/' + arg; }
+      else { window.location.hash = '#/' + v; }
     },
 
     lazyLoadView(v) {
@@ -631,21 +897,33 @@ function miniApp() {
       if (v === 'cpes' && !this.cpes.data) this.loadCpes();
       if (v === 'chamados' && !this.chamados.data) this.loadChamados();
       if (v === 'manut' && !this.manut.data) this.loadManutencoes();
+      if (v === 'alertas' && !this.alertas.data) this.loadAlertas();
+      if (v === 'audit' && !this.audit.data) this.loadAudit();
+      if (v === 'relatorios') setTimeout(() => this.renderCharts(), 100);
+      if (v === 'admin_planos' && !this.admin.planos) this.loadAdminPlanos();
+      if (v === 'admin_pools' && !this.admin.pools) this.loadAdminPools();
+      if (v === 'admin_nas' && !this.admin.nas) this.loadAdminNas();
+      if (v === 'admin_usuarios' && !this.admin.usuarios) this.loadAdminUsuarios();
+      if (v === 'admin_apikeys' && !this.admin.apikeys) this.loadAdminApiKeys();
+      if (v === 'editar_cliente' && this.cliente.data) {
+        const c = this.cliente.data.cliente;
+        this.editCli = { nome: c.nome, pppoe_login: c.pppoe_login || '', ip: c.ip || '', status: c.status, plano_id: c.plano_id || '' };
+      }
     },
 
     updateBackButton() {
       const bb = tg() && tg().BackButton;
       if (!bb) return;
-      const inDetail = this.view === 'cliente';
-      if (inDetail) {
-        bb.show();
-        bb.onClick(() => window.history.back());
-      } else {
-        bb.hide();
-      }
+      const showBack = ['cliente','editar_cliente','novo_cliente','diag_cpe','wifi_cpe','tools_nas',
+                        'admin_planos','admin_pools','admin_nas','admin_usuarios','admin_apikeys'].includes(this.view);
+      if (showBack) { bb.show(); bb.onClick(() => window.history.back()); }
+      else { bb.hide(); }
     },
 
     abrirCliente(id) { window.location.hash = '#/cliente/' + id; },
+    abrirDiagCpe(id) { this.diagCpe = { id, hosts: null, loading: false }; this.setView('diag_cpe'); },
+    abrirWifiCpe(id) { this.wifi = { id, ssid_24g: '', senha_24g: '', ssid_5g: '', senha_5g: '', atual_24g: '', atual_5g: '' }; this.loadWifiInfo(); this.setView('wifi_cpe'); },
+    abrirToolsNas(id, label) { this.tools = { nasId: id, nasLabel: label, host: '8.8.8.8', loading: false, result: null }; this.setView('tools_nas'); },
 
     async fetchAuth(url, opts = {}) {
       const initData = (tg() && tg().initData) || '';
@@ -656,150 +934,203 @@ function miniApp() {
     },
 
     // -------- Loaders --------
-    async loadDashboard() {
-      this.kpis = null;
-      const { ok, data } = await this.fetchAuth('/api/dashboard');
-      if (ok) this.kpis = data;
-      else this.showToast(data.error || 'Erro', 'err');
-    },
+    async loadDashboard() { const r = await this.fetchAuth('/api/dashboard'); if (r.ok) this.kpis = r.data; },
     async buscar() {
       const q = this.busca.q.trim();
       if (q.length < 2) { this.busca.resultados = []; return; }
       this.busca.loading = true;
-      const { ok, data } = await this.fetchAuth('/api/clientes/buscar?q=' + encodeURIComponent(q));
+      const r = await this.fetchAuth('/api/clientes/buscar?q=' + encodeURIComponent(q));
       this.busca.loading = false;
-      this.busca.resultados = ok ? (data.clientes || []) : [];
+      this.busca.resultados = r.ok ? (r.data.clientes || []) : [];
     },
-    async loadCliente(id) {
-      this.cliente.data = null;
-      const { ok, data } = await this.fetchAuth('/api/clientes/' + id);
-      if (ok) this.cliente.data = data;
-      else this.showToast(data.error || 'Erro', 'err');
+    async loadCliente(id) { this.cliente.data = null; const r = await this.fetchAuth('/api/clientes/' + id); if (r.ok) this.cliente.data = r.data; },
+    async loadNas() { this.nas.data = null; const r = await this.fetchAuth('/api/nas'); if (r.ok) this.nas.data = r.data.nas || []; },
+    async loadCpes() { this.cpes.data = null; const r = await this.fetchAuth('/api/cpes?filtro=' + this.cpes.filtro); if (r.ok) this.cpes.data = r.data.cpes || []; },
+    async loadChamados() { this.chamados.data = null; const r = await this.fetchAuth('/api/chamados?status=' + this.chamados.filtro); if (r.ok) this.chamados.data = r.data.chamados || []; },
+    async loadManutencoes() { this.manut.data = null; const r = await this.fetchAuth('/api/manutencoes'); if (r.ok) this.manut.data = r.data.manutencoes || []; },
+    async loadAlertas() { this.alertas.data = null; const r = await this.fetchAuth('/api/alertas'); if (r.ok) this.alertas.data = r.data.alertas || []; },
+    async loadAudit() {
+      this.audit.data = null;
+      const params = new URLSearchParams({ days: '7' });
+      if (this.audit.action) params.set('action', this.audit.action);
+      if (this.audit.user) params.set('user', this.audit.user);
+      const r = await this.fetchAuth('/api/audit?' + params.toString());
+      if (r.ok) this.audit.data = r.data.audit || [];
     },
-    async loadNas() {
-      this.nas.data = null;
-      const { ok, data } = await this.fetchAuth('/api/nas');
-      if (ok) this.nas.data = data.nas || [];
-      else this.showToast(data.error || 'Erro', 'err');
+    async loadHosts() {
+      this.diagCpe.loading = true;
+      const r = await this.fetchAuth('/api/cpe/' + this.diagCpe.id + '/hosts');
+      this.diagCpe.loading = false;
+      if (r.ok) this.diagCpe.hosts = r.data.hosts || [];
+      else this.showToast(r.data.error || 'Falhou', 'err');
     },
-    async loadCpes() {
-      this.cpes.data = null;
-      const { ok, data } = await this.fetchAuth('/api/cpes?filtro=' + this.cpes.filtro);
-      if (ok) this.cpes.data = data.cpes || [];
-      else this.showToast(data.error || 'Erro', 'err');
+    async loadWifiInfo() {
+      const r = await this.fetchAuth('/api/cpe/' + this.wifi.id + '/wifi');
+      if (r.ok) { this.wifi.atual_24g = r.data.ssid_24g || r.data.ssid || ''; this.wifi.atual_5g = r.data.ssid_5g || ''; }
     },
-    async loadChamados() {
-      this.chamados.data = null;
-      const { ok, data } = await this.fetchAuth('/api/chamados?status=' + this.chamados.filtro);
-      if (ok) this.chamados.data = data.chamados || [];
-      else this.showToast(data.error || 'Erro', 'err');
-    },
-    async loadManutencoes() {
-      this.manut.data = null;
-      const { ok, data } = await this.fetchAuth('/api/manutencoes');
-      if (ok) this.manut.data = data.manutencoes || [];
-      else this.showToast(data.error || 'Erro', 'err');
-    },
+    async loadPlanosCache() { const r = await this.fetchAuth('/api/admin/planos'); if (r.ok) this.planosCache.data = r.data.planos || []; },
+    async loadAdminPlanos() { const r = await this.fetchAuth('/api/admin/planos'); if (r.ok) this.admin.planos = r.data.planos || []; },
+    async loadAdminPools() { const r = await this.fetchAuth('/api/admin/pools'); if (r.ok) this.admin.pools = r.data.pools || []; },
+    async loadAdminNas() { const r = await this.fetchAuth('/api/admin/nas'); if (r.ok) this.admin.nas = r.data.nas || []; },
+    async loadAdminUsuarios() { const r = await this.fetchAuth('/api/admin/usuarios'); if (r.ok) this.admin.usuarios = r.data.usuarios || []; },
+    async loadAdminApiKeys() { const r = await this.fetchAuth('/api/admin/apikeys'); if (r.ok) this.admin.apikeys = r.data.apikeys || []; },
 
     // -------- Ações --------
-    async acaoCliente(acao, confirmMsg) {
-      if (!this.cliente.id) return;
-      const ok = await this.confirm(confirmMsg);
-      if (!ok) return;
+    async acaoCliente(acao, msg) {
+      if (!this.cliente.id || !await this.confirm(msg)) return;
       try { tg() && tg().HapticFeedback && tg().HapticFeedback.impactOccurred('medium'); } catch (_) {}
       const r = await this.fetchAuth('/api/clientes/' + this.cliente.id + '/' + acao, { method: 'POST' });
-      if (r.ok && r.data.ok !== false) {
-        this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
-        await this.loadCliente(this.cliente.id);
-      } else {
-        this.showToast(r.data.msg || r.data.error || 'Falhou', 'err');
-      }
+      if (r.ok && r.data.ok !== false) { this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok'); this.loadCliente(this.cliente.id); }
+      else this.showToast(r.data.msg || r.data.error || 'Falhou', 'err');
     },
     async acaoCpe(acao, cpeId) {
       const id = cpeId || (this.cliente.data?.cpe?.id);
-      if (!id) return;
-      const ok = await this.confirm(acao === 'reboot' ? 'Reiniciar este CPE?' : 'Forçar refresh do CPE?');
-      if (!ok) return;
-      try { tg() && tg().HapticFeedback && tg().HapticFeedback.impactOccurred('medium'); } catch (_) {}
+      if (!id || !await this.confirm(acao === 'reboot' ? 'Reiniciar este CPE?' : 'Forçar refresh?')) return;
       const r = await this.fetchAuth('/api/cpe/' + id + '/' + acao, { method: 'POST' });
-      if (r.ok && r.data.ok !== false) this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
-      else this.showToast(r.data.msg || 'Falhou', 'err');
+      this.showToast(r.ok && r.data.ok !== false ? '✓ ' + (r.data.msg || 'OK') : (r.data.msg || 'Falhou'), r.ok ? 'ok' : 'err');
     },
     async resolverChamado(id) {
-      const ok = await this.confirm('Marcar chamado #' + id + ' como resolvido?');
-      if (!ok) return;
+      if (!await this.confirm('Marcar #' + id + ' como resolvido?')) return;
       const r = await this.fetchAuth('/api/chamados/' + id + '/resolver', { method: 'POST' });
-      if (r.ok && r.data.ok !== false) {
-        this.showToast('✓ resolvido', 'ok');
-        this.loadChamados();
-      } else {
-        this.showToast(r.data.msg || 'Falhou', 'err');
-      }
+      if (r.ok) { this.showToast('✓ resolvido', 'ok'); this.loadChamados(); } else this.showToast(r.data.msg || 'Falhou', 'err');
+    },
+    async resolverAlerta(key) {
+      if (!await this.confirm('Marcar alerta como resolvido?')) return;
+      const r = await this.fetchAuth('/api/alertas/' + encodeURIComponent(key) + '/resolver', { method: 'POST' });
+      if (r.ok) { this.showToast('✓ resolvido', 'ok'); this.loadAlertas(); } else this.showToast(r.data.msg || 'Falhou', 'err');
     },
     async silenciar(minutos) {
-      const ok = await this.confirm('Silenciar todos os alertas por ' + minutos + ' min?');
-      if (!ok) return;
-      const r = await this.fetchAuth('/api/manutencoes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ minutos, motivo: 'via Mini App' }),
-      });
-      if (r.ok && r.data.ok !== false) {
-        this.showToast('✓ silenciado por ' + minutos + 'min', 'ok');
-        this.loadManutencoes();
-      } else {
-        this.showToast(r.data.error || 'Falhou', 'err');
-      }
+      if (!await this.confirm('Silenciar tudo por ' + minutos + 'min?')) return;
+      const r = await this.fetchAuth('/api/manutencoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ minutos, motivo: 'via Mini App' }) });
+      if (r.ok) { this.showToast('✓ silenciado', 'ok'); this.loadManutencoes(); } else this.showToast(r.data.error || 'Falhou', 'err');
     },
     async encerrarManutencao(id) {
-      const ok = await this.confirm('Encerrar janela #' + id + ' agora?');
-      if (!ok) return;
+      if (!await this.confirm('Encerrar #' + id + '?')) return;
       const r = await this.fetchAuth('/api/manutencoes/' + id + '/encerrar', { method: 'POST' });
-      if (r.ok && r.data.ok !== false) {
-        this.showToast('✓ encerrada', 'ok');
-        this.loadManutencoes();
-      } else {
-        this.showToast(r.data.msg || 'Falhou', 'err');
+      if (r.ok) { this.showToast('✓ encerrada', 'ok'); this.loadManutencoes(); } else this.showToast(r.data.msg || 'Falhou', 'err');
+    },
+    async lookupSGP() {
+      const cpf = (this.novoCli.cpf || '').replace(/\D/g, '');
+      if (cpf.length !== 11) return;
+      this.novoCli.lookingUp = true;
+      const r = await this.fetchAuth('/api/sgp/consultar/' + cpf);
+      this.novoCli.lookingUp = false;
+      if (r.ok && r.data.found) {
+        this.novoCli.nome = r.data.nome || this.novoCli.nome;
+        this.novoCli.pppoe_login = r.data.pppoe_login || this.novoCli.pppoe_login;
+        this.novoCli.ip = r.data.ip || this.novoCli.ip;
+        this.novoCli.sgpInfo = (r.data.nome || '?') + ' · ' + (r.data.status_display || '?');
+      } else { this.novoCli.sgpInfo = ''; this.showToast('CPF não encontrado no SGP', 'err'); }
+    },
+    async criarCliente() {
+      const r = await this.fetchAuth('/api/clientes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.novoCli) });
+      if (r.ok && r.data.ok) { this.showToast('✓ criado #' + r.data.id, 'ok'); this.abrirCliente(r.data.id); }
+      else this.showToast(r.data.error || 'Falhou', 'err');
+    },
+    async salvarEditarCliente() {
+      const r = await this.fetchAuth('/api/clientes/' + this.cliente.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.editCli) });
+      if (r.ok) { this.showToast('✓ atualizado', 'ok'); this.loadCliente(this.cliente.id); window.history.back(); }
+      else this.showToast(r.data.error || 'Falhou', 'err');
+    },
+    async salvarWifi() {
+      if (!await this.confirm('Aplicar configuração WiFi?')) return;
+      const r = await this.fetchAuth('/api/cpe/' + this.wifi.id + '/wifi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.wifi) });
+      this.showToast(r.ok ? '✓ ' + r.data.msg : (r.data.msg || r.data.error || 'Falhou'), r.ok ? 'ok' : 'err');
+    },
+    async execTool(t) {
+      this.tools.loading = true; this.tools.result = null;
+      const url = t === 'dns' ? '/api/nas/' + this.tools.nasId + '/dns?nome=' + encodeURIComponent(this.tools.host)
+                              : '/api/nas/' + this.tools.nasId + '/' + t + '?host=' + encodeURIComponent(this.tools.host);
+      const r = await this.fetchAuth(url);
+      this.tools.loading = false;
+      this.tools.result = r.ok ? r.data : { error: r.data.error || 'falhou' };
+    },
+
+    // Admin actions
+    async criarPlano() { const r = await this.fetchAuth('/api/admin/planos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.newPlano) });
+      if (r.ok) { this.showToast('✓ criado', 'ok'); this.newPlano = { nome: '', velocidade_down: 10, velocidade_up: 5 }; this.loadAdminPlanos(); this.loadPlanosCache(); }
+      else this.showToast(r.data.error || 'Falhou', 'err'); },
+    async deletarPlano(id) { if (!await this.confirm('Excluir plano?')) return;
+      const r = await this.fetchAuth('/api/admin/planos/' + id, { method: 'DELETE' });
+      if (r.ok) { this.showToast('✓ excluído', 'ok'); this.loadAdminPlanos(); this.loadPlanosCache(); } else this.showToast(r.data.error, 'err'); },
+    async criarPool() { const r = await this.fetchAuth('/api/admin/pools', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.newPool) });
+      if (r.ok) { this.showToast('✓ criado', 'ok'); this.newPool = { nome: '', range_inicio: '', range_fim: '', descricao: '' }; this.loadAdminPools(); }
+      else this.showToast(r.data.error || 'Falhou', 'err'); },
+    async deletarPool(id) { if (!await this.confirm('Excluir pool?')) return;
+      const r = await this.fetchAuth('/api/admin/pools/' + id, { method: 'DELETE' });
+      if (r.ok) { this.showToast('✓ excluído', 'ok'); this.loadAdminPools(); } else this.showToast(r.data.error, 'err'); },
+    async criarNas() { const r = await this.fetchAuth('/api/admin/nas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.newNas) });
+      if (r.ok) { this.showToast('✓ criado', 'ok'); this.newNas = { nasname: '', shortname: '', secret: '', mikrotik_user: 'admin', mikrotik_pass: '' }; this.loadAdminNas(); }
+      else this.showToast(r.data.error || 'Falhou', 'err'); },
+    async deletarNas(id) { if (!await this.confirm('Excluir NAS?')) return;
+      const r = await this.fetchAuth('/api/admin/nas/' + id, { method: 'DELETE' });
+      if (r.ok) { this.showToast('✓ excluído', 'ok'); this.loadAdminNas(); } else this.showToast(r.data.error, 'err'); },
+    async criarUsuario() { const r = await this.fetchAuth('/api/admin/usuarios', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.newUser) });
+      if (r.ok) { this.showToast('✓ criado', 'ok'); this.newUser = { username: '', senha: '', role: 'admin' }; this.loadAdminUsuarios(); }
+      else this.showToast(r.data.error || 'Falhou', 'err'); },
+    async deletarUsuario(id) { if (!await this.confirm('Excluir usuário?')) return;
+      const r = await this.fetchAuth('/api/admin/usuarios/' + id, { method: 'DELETE' });
+      if (r.ok) { this.showToast('✓ excluído', 'ok'); this.loadAdminUsuarios(); } else this.showToast(r.data.error, 'err'); },
+    async trocarSenha(id) {
+      const senha = window.prompt('Nova senha (≥6 chars):');
+      if (!senha) return;
+      const r = await this.fetchAuth('/api/admin/usuarios/' + id + '/senha', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ senha }) });
+      this.showToast(r.ok ? '✓ trocada' : (r.data.error || 'Falhou'), r.ok ? 'ok' : 'err');
+    },
+    async criarApiKey() { const r = await this.fetchAuth('/api/admin/apikeys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.newApiKey) });
+      if (r.ok) { this.newApiKey.created = r.data.key; this.newApiKey.nome = ''; this.loadAdminApiKeys(); }
+      else this.showToast(r.data.error || 'Falhou', 'err'); },
+    async deletarApiKey(id) { if (!await this.confirm('Revogar API key?')) return;
+      const r = await this.fetchAuth('/api/admin/apikeys/' + id, { method: 'DELETE' });
+      if (r.ok) { this.showToast('✓ revogada', 'ok'); this.loadAdminApiKeys(); } else this.showToast(r.data.error, 'err'); },
+
+    // Charts
+    async renderCharts() {
+      if (!window.Chart) return;
+      const [s, c, m] = await Promise.all([
+        this.fetchAuth('/api/relatorios/sessoes_hora'),
+        this.fetchAuth('/api/relatorios/top_consumo'),
+        this.fetchAuth('/api/relatorios/mttr'),
+      ]);
+      ['chart-sessoes', 'chart-consumo', 'chart-mttr'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el._chart) el._chart.destroy();
+      });
+      if (s.ok) {
+        const el = document.getElementById('chart-sessoes');
+        if (el) el._chart = new Chart(el, {
+          type: 'line',
+          data: { labels: s.data.data.map(x => x.hora.substring(11, 16)),
+                  datasets: [{ label: 'Sessões', data: s.data.data.map(x => x.sessoes), borderColor: '#60a5fa', tension: 0.3 }] },
+          options: { plugins: { legend: { display: false } } }
+        });
+      }
+      if (c.ok) {
+        const el = document.getElementById('chart-consumo');
+        if (el) el._chart = new Chart(el, {
+          type: 'bar',
+          data: { labels: c.data.top.map(x => (x.nome || '?').substring(0, 15)),
+                  datasets: [{ label: 'GB', data: c.data.top.map(x => (x.bytes/1073741824).toFixed(1)), backgroundColor: '#60a5fa' }] },
+          options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+        });
+      }
+      if (m.ok) {
+        const el = document.getElementById('chart-mttr');
+        if (el) el._chart = new Chart(el, {
+          type: 'bar',
+          data: { labels: m.data.data.map(x => x.dia.substring(5)),
+                  datasets: [{ label: 'MTTR (min)', data: m.data.data.map(x => x.mttr_min.toFixed(0)), backgroundColor: '#facc15' }] },
+          options: { plugins: { legend: { display: false } } }
+        });
       }
     },
 
-    confirm(msg) {
-      return new Promise(resolve => {
-        const t = tg();
-        if (t && typeof t.showConfirm === 'function') t.showConfirm(msg, ok => resolve(!!ok));
-        else resolve(window.confirm(msg));
-      });
-    },
-    showToast(msg, type = 'ok') {
-      this.toast = { msg, type };
-      if (this.toast.timer) clearTimeout(this.toast.timer);
-      this.toast.timer = setTimeout(() => { this.toast.msg = ''; }, 3000);
-    },
-
-    // -------- Helpers --------
-    fmtBytes(b) {
-      b = Number(b) || 0;
-      if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
-      if (b >= 1048576)    return (b / 1048576).toFixed(2) + ' MB';
-      if (b >= 1024)       return (b / 1024).toFixed(2) + ' KB';
-      return b + ' B';
-    },
-    rxColor(rx) {
-      if (rx === null || rx === undefined) return 'muted';
-      if (rx < -27) return 'text-red-400';
-      if (rx < -24) return 'text-yellow-400';
-      return 'text-green-400';
-    },
-    barColor(pct) {
-      if (pct >= 85) return '#dc2626';
-      if (pct >= 70) return '#f59e0b';
-      return '#16a34a';
-    },
-    greetingName() {
-      return this.user.first_name
-          || this.user.username
-          || (this.role ? this.role : 'admin');
-    },
+    confirm(msg) { return new Promise(r => { const t = tg(); if (t && typeof t.showConfirm === 'function') t.showConfirm(msg, ok => r(!!ok)); else r(window.confirm(msg)); }); },
+    showToast(msg, type = 'ok') { this.toast = { msg, type }; clearTimeout(this.toast.timer); this.toast.timer = setTimeout(() => this.toast.msg = '', 3000); },
+    fmtBytes(b) { b = Number(b)||0; if(b>=1073741824) return (b/1073741824).toFixed(2)+' GB'; if(b>=1048576) return (b/1048576).toFixed(2)+' MB'; if(b>=1024) return (b/1024).toFixed(2)+' KB'; return b+' B'; },
+    rxColor(rx) { if (rx === null || rx === undefined) return 'muted'; if (rx < -27) return 'text-red-400'; if (rx < -24) return 'text-yellow-400'; return 'text-green-400'; },
+    barColor(p) { if (p >= 85) return '#dc2626'; if (p >= 70) return '#f59e0b'; return '#16a34a'; },
+    greetingName() { return this.user.first_name || this.user.username || (this.role || 'admin'); },
   };
 }
 </script>

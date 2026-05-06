@@ -22,6 +22,16 @@ import psycopg2.extras
 
 from auth import validate_init_data, get_authorized_user
 from mikrotik import online_via_mikrotik, online_logins_set, probe_all_nas
+import time
+import hashlib
+import secrets
+
+try:
+    import librouteros
+    MIKROTIK_AVAILABLE = True
+except ImportError:
+    MIKROTIK_AVAILABLE = False
+from werkzeug.security import generate_password_hash
 from audit import log_audit
 
 GENIEACS_NBI_URL = os.environ.get("GENIEACS_NBI_URL", "http://genieacs-nbi:7557").rstrip("/")
@@ -747,6 +757,944 @@ def api_manutencoes_encerrar(mid):
     log_audit(get_db, g.app_user, "miniapp:silenciar_encerrar",
               target_type="maintenance", target_id=mid)
     return jsonify({"ok": True})
+
+
+# ===========================================================================
+# FASE D — Diagnóstico de CPE e MikroTik
+# ===========================================================================
+
+def _mt_connect(nas_id):
+    """Conecta no MikroTik pelo id. Retorna (api, secret)."""
+    if not MIKROTIK_AVAILABLE:
+        raise RuntimeError("librouteros indisponível")
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM nas WHERE id=%s", (nas_id,))
+            nas = cur.fetchone()
+    finally:
+        conn.close()
+    if not nas:
+        raise RuntimeError("NAS não encontrado")
+    if not nas.get("mikrotik_user") or not nas.get("mikrotik_pass"):
+        raise RuntimeError("NAS sem credenciais")
+    api = librouteros.connect(
+        host=nas["nasname"],
+        username=nas["mikrotik_user"],
+        password=nas["mikrotik_pass"],
+        port=int(nas.get("mikrotik_port") or 8728),
+        timeout=10,
+    )
+    return api, nas["secret"]
+
+
+@app.route("/api/nas/<int:nas_id>/ping")
+@require_telegram_auth
+def api_nas_ping(nas_id):
+    host = (request.args.get("host") or "8.8.8.8").strip()
+    count = min(int(request.args.get("count") or 4), 10)
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            r = list(api("/ping", **{"address": host, "count": str(count)}))
+        finally:
+            try: api.close()
+            except Exception: pass
+        return jsonify({"ok": True, "host": host, "result": r})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/nas/<int:nas_id>/traceroute")
+@require_telegram_auth
+def api_nas_traceroute(nas_id):
+    host = (request.args.get("host") or "8.8.8.8").strip()
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            r = list(api("/tool/traceroute", **{"address": host, "count": "1"}))
+        finally:
+            try: api.close()
+            except Exception: pass
+        return jsonify({"ok": True, "host": host, "hops": r[:30]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/nas/<int:nas_id>/dns")
+@require_telegram_auth
+def api_nas_dns(nas_id):
+    nome = (request.args.get("nome") or "google.com").strip()
+    try:
+        api, _ = _mt_connect(nas_id)
+        try:
+            r = list(api("/ip/dns/cache/print"))
+        finally:
+            try: api.close()
+            except Exception: pass
+        matches = [x for x in r if nome.lower() in (x.get("name") or "").lower()][:20]
+        return jsonify({"ok": True, "nome": nome, "registros": matches})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ---------- CPE diagnóstico (via GenieACS) ----------
+
+def _gv(raw, path):
+    parts = path.split(".")
+    cur = raw
+    for p in parts:
+        if not isinstance(cur, dict): return None
+        cur = cur.get(p)
+    if isinstance(cur, dict): return cur.get("_value")
+    return cur
+
+
+@app.route("/api/cpe/<int:cpe_id>/hosts")
+@require_telegram_auth
+def api_cpe_hosts(cpe_id):
+    """Lista hosts conectados na LAN do CPE (via TR-098 e TR-181)."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT genieacs_id FROM cpe_devices WHERE id=%s", (cpe_id,))
+            cpe = cur.fetchone()
+    finally:
+        conn.close()
+    if not cpe or not cpe.get("genieacs_id"):
+        return jsonify({"error": "CPE sem genieacs_id"}), 404
+
+    try:
+        r = requests.get(
+            f"{GENIEACS_NBI_URL}/devices",
+            params={"query": json.dumps({"_id": cpe["genieacs_id"]})},
+            timeout=8,
+        )
+        if not r.ok:
+            return jsonify({"error": "GenieACS retornou " + str(r.status_code)}), 502
+        devs = r.json()
+        if not devs:
+            return jsonify({"hosts": []})
+        raw = devs[0]
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    hosts = []
+    # TR-098
+    try:
+        host_root = (raw.get("InternetGatewayDevice", {})
+                       .get("LANDevice", {}).get("1", {})
+                       .get("Hosts", {}).get("Host", {}))
+        for idx, h in host_root.items():
+            if not idx.isdigit() or not isinstance(h, dict): continue
+            ip  = (h.get("IPAddress")  or {}).get("_value") if isinstance(h.get("IPAddress"),  dict) else (h.get("IPAddress")  or "")
+            mac = (h.get("MACAddress") or {}).get("_value") if isinstance(h.get("MACAddress"), dict) else (h.get("MACAddress") or "")
+            if not ip and not mac: continue
+            name = (h.get("HostName") or {}).get("_value") if isinstance(h.get("HostName"), dict) else (h.get("HostName") or "*")
+            active = (h.get("Active") or {}).get("_value") if isinstance(h.get("Active"), dict) else h.get("Active")
+            hosts.append({"hostname": name, "ip": ip, "mac": (mac or "").upper(), "active": bool(active)})
+    except Exception:
+        pass
+    # TR-181 fallback
+    if not hosts:
+        try:
+            host_root = raw.get("Device", {}).get("Hosts", {}).get("Host", {})
+            for idx, h in host_root.items():
+                if not idx.isdigit() or not isinstance(h, dict): continue
+                ip  = (h.get("IPAddress") or {}).get("_value") if isinstance(h.get("IPAddress"), dict) else (h.get("IPAddress") or "")
+                mac = (h.get("PhysAddress") or {}).get("_value") if isinstance(h.get("PhysAddress"), dict) else (h.get("PhysAddress") or "")
+                if not ip and not mac: continue
+                name = (h.get("HostName") or {}).get("_value") if isinstance(h.get("HostName"), dict) else (h.get("HostName") or "*")
+                active = (h.get("Active") or {}).get("_value") if isinstance(h.get("Active"), dict) else h.get("Active")
+                hosts.append({"hostname": name, "ip": ip, "mac": (mac or "").upper(), "active": bool(active)})
+        except Exception:
+            pass
+    return jsonify({"hosts": hosts, "total": len(hosts)})
+
+
+@app.route("/api/cpe/<int:cpe_id>/wifi", methods=["GET", "POST"])
+@require_telegram_auth
+def api_cpe_wifi(cpe_id):
+    """GET: lê SSID/senha atuais (do banco). POST: atualiza via GenieACS."""
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT genieacs_id, ssid, ssid_5g, ssid_24g FROM cpe_devices WHERE id=%s", (cpe_id,))
+            cpe = cur.fetchone()
+    finally:
+        conn.close()
+    if not cpe or not cpe.get("genieacs_id"):
+        return jsonify({"error": "CPE sem genieacs_id"}), 404
+
+    if request.method == "GET":
+        return jsonify({"ssid": cpe.get("ssid"), "ssid_24g": cpe.get("ssid_24g"), "ssid_5g": cpe.get("ssid_5g")})
+
+    body = request.get_json(silent=True) or {}
+    ssid_24g = (body.get("ssid_24g") or "").strip()
+    ssid_5g  = (body.get("ssid_5g") or "").strip()
+    senha_24g = (body.get("senha_24g") or "").strip()
+    senha_5g  = (body.get("senha_5g") or "").strip()
+
+    log_audit(get_db, g.app_user, "miniapp:cpe_wifi",
+              target_type="cpe", target_id=cpe_id,
+              detail={"ssid_24g": ssid_24g, "ssid_5g": ssid_5g, "trocou_senha_24g": bool(senha_24g), "trocou_senha_5g": bool(senha_5g)})
+
+    # Tenta TR-098 (mais comum em ONUs brasileiras)
+    pvs = []
+    if ssid_24g: pvs.append(["InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID", ssid_24g, "xsd:string"])
+    if senha_24g: pvs.append(["InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase", senha_24g, "xsd:string"])
+    if ssid_5g:  pvs.append(["InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID", ssid_5g, "xsd:string"])
+    if senha_5g: pvs.append(["InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.KeyPassphrase", senha_5g, "xsd:string"])
+
+    if not pvs:
+        return jsonify({"error": "informe ao menos um campo"}), 400
+
+    encoded = urllib.parse.quote(cpe["genieacs_id"], safe="")
+    try:
+        r = requests.post(
+            f"{GENIEACS_NBI_URL}/devices/{encoded}/tasks?timeout=15000&connection_request",
+            json={"name": "setParameterValues", "parameterValues": pvs},
+            timeout=20,
+        )
+        if r.ok:
+            return jsonify({"ok": True, "msg": "WiFi atualizado", "params_set": len(pvs)})
+        return jsonify({"ok": False, "msg": f"GenieACS {r.status_code}", "detail": r.text[:300]}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 502
+
+
+# ---------- Live events (audit + alertas) ----------
+
+@app.route("/api/live/events")
+@require_telegram_auth
+def api_live_events():
+    """Últimos N eventos do audit_log + alertas firing recentes."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 'audit' AS source, ts, action AS event,
+                       usuario_nome AS who, ip,
+                       target_type, target_id, detail
+                  FROM audit_log
+                 WHERE ts > NOW() - INTERVAL '1 hour'
+              ORDER BY ts DESC
+                 LIMIT 50
+            """)
+            audits = [dict(r) for r in cur.fetchall()]
+            cur.execute("""
+                SELECT 'alert' AS source, last_sent_at AS ts,
+                       event_type AS event, dedup_key AS who,
+                       severity, firing, last_msg
+                  FROM alert_state
+                 WHERE last_sent_at > NOW() - INTERVAL '1 hour'
+              ORDER BY last_sent_at DESC
+                 LIMIT 50
+            """)
+            alerts = [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+    events = []
+    for a in audits + alerts:
+        for k in ("ts",):
+            if a.get(k):
+                a[k] = str(a[k])
+        events.append(a)
+    events.sort(key=lambda x: x.get("ts", ""), reverse=True)
+    return jsonify({"events": events[:80]})
+
+
+# ===========================================================================
+# FASE E — Alertas, Auditoria, Relatórios
+# ===========================================================================
+
+@app.route("/api/alertas")
+@require_telegram_auth
+def api_alertas():
+    """Lista alertas firing + recentemente resolvidos."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT dedup_key, event_type, severity, firing,
+                       primeira_vez, ultima_vez, last_sent_at,
+                       last_msg, count_total
+                  FROM alert_state
+                 WHERE firing = TRUE
+                    OR ultima_vez > NOW() - INTERVAL '6 hours'
+              ORDER BY firing DESC,
+                       CASE severity
+                         WHEN 'critical' THEN 1
+                         WHEN 'warning'  THEN 2
+                         ELSE 3
+                       END,
+                       last_sent_at DESC
+                 LIMIT 100
+            """)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        for k in ("primeira_vez", "ultima_vez", "last_sent_at"):
+            if d.get(k):
+                d[k] = str(d[k])
+        out.append(d)
+    return jsonify({"alertas": out})
+
+
+@app.route("/api/alertas/<path:dedup_key>/resolver", methods=["POST"])
+@require_telegram_auth
+def api_alerta_resolver(dedup_key):
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE alert_state SET firing = FALSE, ultima_vez = NOW()
+                 WHERE dedup_key = %s AND firing = TRUE
+            """, (dedup_key,))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if affected == 0:
+        return jsonify({"ok": False, "msg": "alerta não encontrado ou já resolvido"}), 404
+    log_audit(get_db, g.app_user, "miniapp:alerta_resolver",
+              target_type="alert", target_id=dedup_key)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/audit")
+@require_telegram_auth
+def api_audit():
+    action = (request.args.get("action") or "").strip()
+    user   = (request.args.get("user") or "").strip()
+    days   = max(int(request.args.get("days") or 7), 1)
+
+    where = ["ts > NOW() - (%s * INTERVAL '1 day')"]
+    params = [days]
+    if action:
+        where.append("action ILIKE %s"); params.append(f"%{action}%")
+    if user:
+        where.append("usuario_nome ILIKE %s"); params.append(f"%{user}%")
+
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"""
+                SELECT id, ts, usuario_nome, ip, action,
+                       target_type, target_id, detail
+                  FROM audit_log
+                 WHERE {' AND '.join(where)}
+              ORDER BY ts DESC
+                 LIMIT 200
+            """, params)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("ts"): d["ts"] = str(d["ts"])
+        out.append(d)
+    return jsonify({"audit": out, "total": len(out)})
+
+
+@app.route("/api/relatorios/top_consumo")
+@require_telegram_auth
+def api_rel_top_consumo():
+    horas = min(int(request.args.get("horas") or 24), 168)
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT COALESCE(c.nome, ra.username) AS nome, ra.username,
+                       SUM(COALESCE(ra.acctinputoctets,0) + COALESCE(ra.acctoutputoctets,0))::bigint AS bytes,
+                       COUNT(DISTINCT ra.acctsessionid) AS sessoes
+                  FROM radacct ra
+                  LEFT JOIN clientes c ON c.pppoe_login = ra.username
+                 WHERE COALESCE(ra.acctupdatetime, ra.acctstarttime) > NOW() - (%s * INTERVAL '1 hour')
+              GROUP BY c.nome, ra.username
+              ORDER BY bytes DESC
+                 LIMIT 10
+            """, (horas,))
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    return jsonify({"top": [dict(r) for r in rows], "horas": horas})
+
+
+@app.route("/api/relatorios/sessoes_hora")
+@require_telegram_auth
+def api_rel_sessoes_hora():
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT date_trunc('hour', acctstarttime) AS hora,
+                       COUNT(DISTINCT acctsessionid) AS sessoes,
+                       COUNT(DISTINCT username) AS usuarios
+                  FROM radacct
+                 WHERE acctstarttime > NOW() - INTERVAL '24 hours'
+              GROUP BY hora
+              ORDER BY hora
+            """)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    return jsonify({"data": [{"hora": str(r["hora"]), "sessoes": int(r["sessoes"]), "usuarios": int(r["usuarios"])} for r in rows]})
+
+
+@app.route("/api/relatorios/mttr")
+@require_telegram_auth
+def api_rel_mttr():
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                  date_trunc('day', resolvido_em)::date AS dia,
+                  COUNT(*) AS resolvidos,
+                  EXTRACT(EPOCH FROM AVG(resolvido_em - criado_em))/60 AS mttr_min
+                FROM chamados
+                WHERE status='resolvido'
+                  AND resolvido_em > NOW() - INTERVAL '7 days'
+                GROUP BY dia
+                ORDER BY dia
+            """)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    return jsonify({"data": [{"dia": str(r["dia"]), "resolvidos": int(r["resolvidos"]), "mttr_min": float(r["mttr_min"] or 0)} for r in rows]})
+
+
+# ===========================================================================
+# FASE F — CRUD de Cliente + Importação SGP
+# ===========================================================================
+
+SGP_URL = os.environ.get("SGP_URL", "https://linknetam.sgp.net.br/api/ura/consultacliente/")
+SGP_TOKEN = os.environ.get("SGP_TOKEN", "")
+SGP_APP = os.environ.get("SGP_APP", "APP")
+
+
+def _consultar_sgp(cpf: str):
+    if not SGP_TOKEN:
+        return None
+    try:
+        r = requests.post(
+            SGP_URL,
+            data={"token": SGP_TOKEN, "app": SGP_APP, "cpfcnpj": cpf},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        contratos = data.get("contratos", [])
+        return contratos[0] if contratos else None
+    except Exception:
+        return None
+
+
+@app.route("/api/sgp/consultar/<cpf>")
+@require_telegram_auth
+def api_sgp_consultar(cpf):
+    cpf_limpo = re.sub(r"\D", "", cpf)
+    if len(cpf_limpo) != 11:
+        return jsonify({"error": "CPF deve ter 11 dígitos"}), 400
+    contrato = _consultar_sgp(cpf_limpo)
+    if not contrato:
+        return jsonify({"found": False})
+    return jsonify({
+        "found": True,
+        "nome":            contrato.get("contratoNome"),
+        "pppoe_login":     contrato.get("contratoCentralLogin"),
+        "status_display":  contrato.get("contratoStatusDisplay"),
+        "ip":              contrato.get("servico_ip"),
+        "plano":           contrato.get("contratoPlanoInternet"),
+    })
+
+
+@app.route("/api/clientes", methods=["POST"])
+@require_telegram_auth
+def api_cliente_criar():
+    from flask import g
+    body = request.get_json(silent=True) or {}
+    nome = (body.get("nome") or "").strip()
+    cpf  = re.sub(r"\D", "", body.get("cpf") or "")
+    plano_id = body.get("plano_id")
+    pppoe_login = (body.get("pppoe_login") or "").strip() or None
+    ip = (body.get("ip") or "").strip() or None
+
+    if not nome or len(cpf) != 11 or not plano_id:
+        return jsonify({"error": "nome, cpf (11 dígitos) e plano_id obrigatórios"}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM planos WHERE id=%s", (plano_id,))
+            plano = cur.fetchone()
+            if not plano:
+                return jsonify({"error": "plano_id inválido"}), 400
+            try:
+                cur.execute("""
+                    INSERT INTO clientes (nome, cpf, ip, plano, velocidade_down, velocidade_up,
+                                          plano_id, pppoe_login, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pendente')
+                    RETURNING id
+                """, (nome, cpf, ip, plano["nome"], plano["velocidade_down"], plano["velocidade_up"],
+                      plano_id, pppoe_login))
+                new_id = cur.fetchone()["id"]
+            except psycopg2.errors.UniqueViolation:
+                conn.rollback()
+                return jsonify({"error": "CPF já cadastrado"}), 409
+            conn.commit()
+    finally:
+        conn.close()
+
+    log_audit(get_db, g.app_user, "miniapp:cliente_criar",
+              target_type="cliente", target_id=new_id,
+              detail={"nome": nome, "cpf": cpf, "pppoe_login": pppoe_login})
+    return jsonify({"ok": True, "id": new_id})
+
+
+@app.route("/api/clientes/<int:cliente_id>", methods=["PUT"])
+@require_telegram_auth
+def api_cliente_editar(cliente_id):
+    from flask import g
+    body = request.get_json(silent=True) or {}
+    fields = []
+    params = []
+    for k in ("nome", "ip", "pppoe_login", "status"):
+        if k in body:
+            fields.append(f"{k} = %s")
+            params.append((body[k] or "").strip() or None)
+    if "plano_id" in body and body["plano_id"]:
+        plano_id = int(body["plano_id"])
+        conn = get_db()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM planos WHERE id=%s", (plano_id,))
+                plano = cur.fetchone()
+        finally:
+            conn.close()
+        if not plano:
+            return jsonify({"error": "plano_id inválido"}), 400
+        fields += ["plano_id=%s", "plano=%s", "velocidade_down=%s", "velocidade_up=%s"]
+        params += [plano_id, plano["nome"], plano["velocidade_down"], plano["velocidade_up"]]
+
+    if not fields:
+        return jsonify({"error": "nada a alterar"}), 400
+
+    fields.append("atualizado_em = NOW()")
+    params.append(cliente_id)
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"UPDATE clientes SET {', '.join(fields)} WHERE id=%s", params)
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    if affected == 0:
+        return jsonify({"error": "cliente não encontrado"}), 404
+    log_audit(get_db, g.app_user, "miniapp:cliente_editar",
+              target_type="cliente", target_id=cliente_id, detail=body)
+    return jsonify({"ok": True})
+
+
+# ===========================================================================
+# FASE G — Gestão de infraestrutura (NAS, Pools, Planos, Usuários, API Keys)
+# ===========================================================================
+
+# ---------- Planos ----------
+
+@app.route("/api/admin/planos", methods=["GET", "POST"])
+@require_telegram_auth
+def api_admin_planos():
+    from flask import g
+    if request.method == "GET":
+        conn = get_db()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM planos ORDER BY nome")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        return jsonify({"planos": [dict(r) for r in rows]})
+
+    body = request.get_json(silent=True) or {}
+    nome = (body.get("nome") or "").strip()
+    down = int(body.get("velocidade_down") or 0)
+    up   = int(body.get("velocidade_up") or 0)
+    if not nome or down < 1 or up < 1:
+        return jsonify({"error": "nome + velocidades obrigatórios"}), 400
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO planos (nome, velocidade_down, velocidade_up) VALUES (%s,%s,%s) RETURNING id",
+                        (nome, down, up))
+            new_id = cur.fetchone()[0]
+        conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback(); conn.close()
+        return jsonify({"error": "plano com este nome já existe"}), 409
+    finally:
+        try: conn.close()
+        except Exception: pass
+    log_audit(get_db, g.app_user, "miniapp:plano_criar",
+              target_type="plano", target_id=new_id, detail={"nome": nome})
+    return jsonify({"ok": True, "id": new_id})
+
+
+@app.route("/api/admin/planos/<int:plano_id>", methods=["DELETE"])
+@require_telegram_auth
+def api_admin_plano_del(plano_id):
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM planos WHERE id=%s", (plano_id,))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if affected == 0:
+        return jsonify({"error": "não encontrado"}), 404
+    log_audit(get_db, g.app_user, "miniapp:plano_delete",
+              target_type="plano", target_id=plano_id)
+    return jsonify({"ok": True})
+
+
+# ---------- Pools ----------
+
+@app.route("/api/admin/pools", methods=["GET", "POST"])
+@require_telegram_auth
+def api_admin_pools():
+    from flask import g
+    if request.method == "GET":
+        conn = get_db()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM pools ORDER BY nome")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        return jsonify({"pools": [dict(r) for r in rows]})
+
+    body = request.get_json(silent=True) or {}
+    nome = (body.get("nome") or "").strip()
+    ini  = (body.get("range_inicio") or "").strip()
+    fim  = (body.get("range_fim") or "").strip()
+    desc = (body.get("descricao") or "").strip()
+    if not nome or not ini or not fim:
+        return jsonify({"error": "nome + range obrigatórios"}), 400
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO pools (nome, range_inicio, range_fim, descricao) VALUES (%s,%s,%s,%s) RETURNING id",
+                        (nome, ini, fim, desc))
+            new_id = cur.fetchone()[0]
+        conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback(); conn.close()
+        return jsonify({"error": "pool com este nome já existe"}), 409
+    finally:
+        try: conn.close()
+        except Exception: pass
+    log_audit(get_db, g.app_user, "miniapp:pool_criar",
+              target_type="pool", target_id=new_id, detail={"nome": nome})
+    return jsonify({"ok": True, "id": new_id})
+
+
+@app.route("/api/admin/pools/<int:pool_id>", methods=["DELETE"])
+@require_telegram_auth
+def api_admin_pool_del(pool_id):
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM pools WHERE id=%s", (pool_id,))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if affected == 0:
+        return jsonify({"error": "não encontrado"}), 404
+    log_audit(get_db, g.app_user, "miniapp:pool_delete",
+              target_type="pool", target_id=pool_id)
+    return jsonify({"ok": True})
+
+
+# ---------- NAS admin ----------
+
+@app.route("/api/admin/nas", methods=["GET", "POST"])
+@require_telegram_auth
+def api_admin_nas():
+    from flask import g
+    if request.method == "GET":
+        conn = get_db()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT id, nasname, shortname, secret, description, mikrotik_user, mikrotik_port FROM nas ORDER BY id")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        return jsonify({"nas": [dict(r) for r in rows]})
+
+    body = request.get_json(silent=True) or {}
+    nasname   = (body.get("nasname") or "").strip()
+    shortname = (body.get("shortname") or "").strip()
+    secret    = (body.get("secret") or "").strip()
+    desc      = (body.get("description") or "MikroTik").strip()
+    mt_user   = (body.get("mikrotik_user") or "admin").strip()
+    mt_pass   = (body.get("mikrotik_pass") or "").strip()
+    mt_port   = int(body.get("mikrotik_port") or 8728)
+
+    if not nasname or not secret:
+        return jsonify({"error": "nasname + secret obrigatórios"}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO nas (nasname, shortname, secret, description, mikrotik_user, mikrotik_pass, mikrotik_port)
+                VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id
+            """, (nasname, shortname, secret, desc, mt_user, mt_pass, mt_port))
+            new_id = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    log_audit(get_db, g.app_user, "miniapp:nas_criar",
+              target_type="nas", target_id=new_id, detail={"nasname": nasname})
+    return jsonify({"ok": True, "id": new_id})
+
+
+@app.route("/api/admin/nas/<int:nas_id>", methods=["PUT", "DELETE"])
+@require_telegram_auth
+def api_admin_nas_one(nas_id):
+    from flask import g
+    if request.method == "DELETE":
+        conn = get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM nas WHERE id=%s", (nas_id,))
+                affected = cur.rowcount
+            conn.commit()
+        finally:
+            conn.close()
+        if affected == 0:
+            return jsonify({"error": "não encontrado"}), 404
+        log_audit(get_db, g.app_user, "miniapp:nas_delete",
+                  target_type="nas", target_id=nas_id)
+        return jsonify({"ok": True})
+
+    body = request.get_json(silent=True) or {}
+    fields, params = [], []
+    for k in ("nasname", "shortname", "secret", "description", "mikrotik_user", "mikrotik_pass"):
+        if k in body:
+            fields.append(f"{k}=%s"); params.append((body[k] or "").strip())
+    if "mikrotik_port" in body:
+        fields.append("mikrotik_port=%s"); params.append(int(body["mikrotik_port"] or 8728))
+    if not fields:
+        return jsonify({"error": "nada a alterar"}), 400
+    params.append(nas_id)
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"UPDATE nas SET {', '.join(fields)} WHERE id=%s", params)
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if affected == 0:
+        return jsonify({"error": "não encontrado"}), 404
+    log_audit(get_db, g.app_user, "miniapp:nas_editar",
+              target_type="nas", target_id=nas_id, detail=body)
+    return jsonify({"ok": True})
+
+
+# ---------- Usuários do painel ----------
+
+@app.route("/api/admin/usuarios", methods=["GET", "POST"])
+@require_telegram_auth
+def api_admin_usuarios():
+    from flask import g
+    if request.method == "GET":
+        conn = get_db()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT id, username, role, ativo, criado_em, ultimo_acesso FROM usuarios ORDER BY username")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        out = []
+        for r in rows:
+            d = dict(r)
+            for k in ("criado_em", "ultimo_acesso"):
+                if d.get(k): d[k] = str(d[k])
+            out.append(d)
+        return jsonify({"usuarios": out})
+
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    senha = (body.get("senha") or "").strip()
+    role = (body.get("role") or "admin").strip()
+    if not username or len(senha) < 6:
+        return jsonify({"error": "username + senha (≥6 chars) obrigatórios"}), 400
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO usuarios (username, senha_hash, role) VALUES (%s, %s, %s) RETURNING id",
+                        (username, generate_password_hash(senha), role))
+            new_id = cur.fetchone()[0]
+        conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback(); conn.close()
+        return jsonify({"error": "username já existe"}), 409
+    finally:
+        try: conn.close()
+        except Exception: pass
+    log_audit(get_db, g.app_user, "miniapp:usuario_criar",
+              target_type="usuario", target_id=new_id, detail={"username": username, "role": role})
+    return jsonify({"ok": True, "id": new_id})
+
+
+@app.route("/api/admin/usuarios/<int:uid>", methods=["DELETE"])
+@require_telegram_auth
+def api_admin_usuario_del(uid):
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM usuarios WHERE id=%s", (uid,))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if affected == 0:
+        return jsonify({"error": "não encontrado"}), 404
+    log_audit(get_db, g.app_user, "miniapp:usuario_delete",
+              target_type="usuario", target_id=uid)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/usuarios/<int:uid>/senha", methods=["POST"])
+@require_telegram_auth
+def api_admin_usuario_senha(uid):
+    from flask import g
+    body = request.get_json(silent=True) or {}
+    senha = (body.get("senha") or "").strip()
+    if len(senha) < 6:
+        return jsonify({"error": "senha mínimo 6 chars"}), 400
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE usuarios SET senha_hash=%s WHERE id=%s",
+                        (generate_password_hash(senha), uid))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if affected == 0:
+        return jsonify({"error": "não encontrado"}), 404
+    log_audit(get_db, g.app_user, "miniapp:usuario_senha",
+              target_type="usuario", target_id=uid)
+    return jsonify({"ok": True})
+
+
+# ---------- API Keys ----------
+
+@app.route("/api/admin/apikeys", methods=["GET", "POST"])
+@require_telegram_auth
+def api_admin_apikeys():
+    from flask import g
+    if request.method == "GET":
+        conn = get_db()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT k.id, k.nome, k.ativo, k.criado_em, k.ultimo_uso,
+                           (SELECT COUNT(*) FROM api_key_ips i WHERE i.api_key_id = k.id) AS ips_distintos
+                      FROM api_keys k ORDER BY k.id
+                """)
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        out = []
+        for r in rows:
+            d = dict(r)
+            for k in ("criado_em", "ultimo_uso"):
+                if d.get(k): d[k] = str(d[k])
+            out.append(d)
+        return jsonify({"apikeys": out})
+
+    body = request.get_json(silent=True) or {}
+    nome = (body.get("nome") or "").strip()
+    if not nome:
+        return jsonify({"error": "nome obrigatório"}), 400
+
+    raw_key = secrets.token_urlsafe(32)
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO api_keys (nome, key_hash) VALUES (%s, %s) RETURNING id",
+                        (nome, key_hash))
+            new_id = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    log_audit(get_db, g.app_user, "miniapp:apikey_criar",
+              target_type="apikey", target_id=new_id, detail={"nome": nome})
+    return jsonify({"ok": True, "id": new_id, "key": raw_key,
+                    "msg": "Guarde esta key — ela só aparece UMA vez"})
+
+
+@app.route("/api/admin/apikeys/<int:kid>", methods=["DELETE"])
+@require_telegram_auth
+def api_admin_apikey_del(kid):
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM api_keys WHERE id=%s", (kid,))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if affected == 0:
+        return jsonify({"error": "não encontrado"}), 404
+    log_audit(get_db, g.app_user, "miniapp:apikey_delete",
+              target_type="apikey", target_id=kid)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/apikeys/<int:kid>/ips")
+@require_telegram_auth
+def api_admin_apikey_ips(kid):
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT ip, primeira_vez, ultima_vez
+                  FROM api_key_ips WHERE api_key_id=%s
+              ORDER BY ultima_vez DESC LIMIT 50
+            """, (kid,))
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        for k in ("primeira_vez", "ultima_vez"):
+            if d.get(k): d[k] = str(d[k])
+        out.append(d)
+    return jsonify({"ips": out})
 
 
 if __name__ == "__main__":
