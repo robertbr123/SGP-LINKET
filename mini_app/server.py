@@ -21,7 +21,7 @@ import psycopg2
 import psycopg2.extras
 
 from auth import validate_init_data, get_authorized_user
-from mikrotik import online_via_mikrotik, online_logins_set
+from mikrotik import online_via_mikrotik, online_logins_set, probe_all_nas
 from audit import log_audit
 
 GENIEACS_NBI_URL = os.environ.get("GENIEACS_NBI_URL", "http://genieacs-nbi:7557").rstrip("/")
@@ -497,6 +497,256 @@ def api_cpe_reboot(cpe_id):
         return jsonify({"ok": False, "msg": f"GenieACS retornou {r.status_code}", "detail": r.text[:300]}), 502
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)}), 502
+
+
+# ---------------------------------------------------------------------------
+# NAS — lista com métricas
+# ---------------------------------------------------------------------------
+
+@app.route("/api/nas")
+@require_telegram_auth
+def api_nas():
+    return jsonify({"nas": probe_all_nas(get_db)})
+
+
+# ---------------------------------------------------------------------------
+# CPEs — lista com filtros
+# ---------------------------------------------------------------------------
+
+@app.route("/api/cpes")
+@require_telegram_auth
+def api_cpes():
+    filtro = (request.args.get("filtro") or "todos").lower()
+    q = (request.args.get("q") or "").strip()
+
+    where = []
+    params = []
+
+    if filtro == "online":
+        where.append("cpe.online = TRUE")
+    elif filtro == "offline":
+        where.append("cpe.online = FALSE")
+    elif filtro == "critico":
+        # Rx Power < -27 dBm OU offline
+        where.append("(cpe.rx_power IS NOT NULL AND cpe.rx_power < -27) OR cpe.online = FALSE")
+
+    if q:
+        where.append("(c.nome ILIKE %s OR cpe.serial_number ILIKE %s OR cpe.modelo ILIKE %s)")
+        like = f"%{q}%"
+        params.extend([like, like, like])
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"""
+                SELECT cpe.id, cpe.modelo, cpe.fabricante, cpe.online, cpe.rx_power,
+                       cpe.ip_wan, cpe.serial_number, cpe.ultima_conexao,
+                       cpe.cliente_id, c.nome AS cliente_nome, c.pppoe_login
+                  FROM cpe_devices cpe
+                  LEFT JOIN clientes c ON c.id = cpe.cliente_id
+                  {where_sql}
+              ORDER BY cpe.online, cpe.rx_power NULLS LAST, cpe.id
+                 LIMIT 200
+            """, params)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    cpes = []
+    for r in rows:
+        d = dict(r)
+        if d.get("ultima_conexao"):
+            d["ultima_conexao"] = str(d["ultima_conexao"])
+        if d.get("rx_power") is not None:
+            d["rx_power"] = float(d["rx_power"])
+        cpes.append(d)
+    return jsonify({"cpes": cpes, "total": len(cpes), "filtro": filtro})
+
+
+@app.route("/api/cpe/<int:cpe_id>/refresh", methods=["POST"])
+@require_telegram_auth
+def api_cpe_refresh(cpe_id):
+    """Força o CPE a se conectar ao ACS imediatamente."""
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT genieacs_id FROM cpe_devices WHERE id=%s", (cpe_id,))
+            cpe = cur.fetchone()
+            if not cpe or not cpe["genieacs_id"]:
+                return jsonify({"error": "CPE sem genieacs_id"}), 404
+    finally:
+        conn.close()
+
+    log_audit(get_db, g.app_user, "miniapp:cpe_refresh", target_type="cpe", target_id=cpe_id)
+
+    encoded = urllib.parse.quote(cpe["genieacs_id"], safe="")
+    try:
+        r = requests.post(
+            f"{GENIEACS_NBI_URL}/devices/{encoded}/tasks?connection_request",
+            json={"name": "getParameterValues", "parameterNames": ["Device.DeviceInfo."]},
+            timeout=12,
+        )
+        if r.ok:
+            return jsonify({"ok": True, "msg": "refresh enviado ao CPE"})
+        return jsonify({"ok": False, "msg": f"GenieACS {r.status_code}"}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 502
+
+
+# ---------------------------------------------------------------------------
+# Chamados
+# ---------------------------------------------------------------------------
+
+@app.route("/api/chamados")
+@require_telegram_auth
+def api_chamados():
+    status_filtro = (request.args.get("status") or "aberto").lower()
+
+    where = ""
+    params = []
+    if status_filtro != "todos":
+        where = "WHERE ch.status = %s"
+        params = [status_filtro]
+
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"""
+                SELECT ch.id, ch.tipo, ch.status, ch.descricao,
+                       ch.criado_em, ch.resolvido_em,
+                       ch.cliente_id, c.nome AS cliente_nome, c.pppoe_login,
+                       ch.cpe_id, cpe.modelo AS cpe_modelo, cpe.rx_power
+                  FROM chamados ch
+                  LEFT JOIN clientes c ON c.id = ch.cliente_id
+                  LEFT JOIN cpe_devices cpe ON cpe.id = ch.cpe_id
+                  {where}
+              ORDER BY ch.criado_em DESC
+                 LIMIT 100
+            """, params)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    chamados = []
+    for r in rows:
+        d = dict(r)
+        for k in ("criado_em", "resolvido_em"):
+            if d.get(k):
+                d[k] = str(d[k])
+        if d.get("rx_power") is not None:
+            d["rx_power"] = float(d["rx_power"])
+        chamados.append(d)
+    return jsonify({"chamados": chamados, "total": len(chamados), "status": status_filtro})
+
+
+@app.route("/api/chamados/<int:chamado_id>/resolver", methods=["POST"])
+@require_telegram_auth
+def api_chamados_resolver(chamado_id):
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE chamados
+                   SET status='resolvido', resolvido_em=NOW(), atualizado_em=NOW()
+                 WHERE id=%s AND status='aberto'
+            """, (chamado_id,))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    if affected == 0:
+        return jsonify({"ok": False, "msg": "chamado não encontrado ou já resolvido"}), 404
+
+    log_audit(get_db, g.app_user, "miniapp:chamado_resolver",
+              target_type="chamado", target_id=chamado_id)
+    return jsonify({"ok": True, "msg": "chamado marcado como resolvido"})
+
+
+# ---------------------------------------------------------------------------
+# Manutenções (silenciar alertas)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/manutencoes")
+@require_telegram_auth
+def api_manutencoes_list():
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, inicio, fim, escopo, motivo, criado_por, criado_em,
+                       (fim > NOW()) AS ativa
+                  FROM maintenance_window
+              ORDER BY criado_em DESC
+                 LIMIT 50
+            """)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        for k in ("inicio", "fim", "criado_em"):
+            if d.get(k):
+                d[k] = str(d[k])
+        out.append(d)
+    return jsonify({"manutencoes": out})
+
+
+@app.route("/api/manutencoes", methods=["POST"])
+@require_telegram_auth
+def api_manutencoes_create():
+    from flask import g
+    body = request.get_json(silent=True) or {}
+    minutos = int(body.get("minutos") or 0)
+    motivo = (body.get("motivo") or "").strip() or None
+
+    if minutos < 1 or minutos > 7 * 24 * 60:
+        return jsonify({"error": "minutos inválido (1..10080)"}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO maintenance_window (inicio, fim, escopo, motivo, criado_por)
+                VALUES (NOW(), NOW() + (%s * INTERVAL '1 minute'), 'all', %s, %s)
+                RETURNING id
+            """, (minutos, motivo, f"miniapp:{g.app_user.get('nome') or g.app_user.get('telegram_user_id')}"))
+            new_id = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+
+    log_audit(get_db, g.app_user, "miniapp:silenciar",
+              target_type="maintenance", target_id=new_id,
+              detail={"minutos": minutos, "motivo": motivo})
+    return jsonify({"ok": True, "id": new_id, "minutos": minutos})
+
+
+@app.route("/api/manutencoes/<int:mid>/encerrar", methods=["POST"])
+@require_telegram_auth
+def api_manutencoes_encerrar(mid):
+    from flask import g
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE maintenance_window SET fim=NOW() WHERE id=%s AND fim > NOW()",
+                        (mid,))
+            affected = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    if affected == 0:
+        return jsonify({"ok": False, "msg": "janela não encontrada ou já expirada"}), 404
+    log_audit(get_db, g.app_user, "miniapp:silenciar_encerrar",
+              target_type="maintenance", target_id=mid)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

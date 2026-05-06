@@ -98,3 +98,105 @@ def online_logins_set(get_db):
         finally:
             conn.close()
     return {s["username"] for s in sessoes if s.get("username")}
+
+
+def probe_nas_metrics(nas):
+    """Coleta CPU/mem/uptime/temp + contagem de sessões PPPoE de UM NAS."""
+    if not MIKROTIK_AVAILABLE:
+        return {"online": False, "error": "librouteros indisponível"}
+    try:
+        api = librouteros.connect(
+            host=nas["nasname"],
+            username=nas["mikrotik_user"],
+            password=nas["mikrotik_pass"],
+            port=int(nas.get("mikrotik_port") or 8728),
+            timeout=6,
+        )
+    except Exception as e:
+        return {"online": False, "error": str(e)}
+
+    try:
+        try:
+            res = list(api("/system/resource/print"))[0]
+        except Exception:
+            res = {}
+        try:
+            ppp = list(api("/ppp/active/print"))
+            sessions = len(ppp)
+        except Exception:
+            sessions = None
+        try:
+            health = list(api("/system/health/print"))
+        except Exception:
+            health = []
+    finally:
+        try: api.close()
+        except Exception: pass
+
+    cpu = int(res.get("cpu-load", 0) or 0)
+    total_mem = int(res.get("total-memory", 0) or 0)
+    free_mem  = int(res.get("free-memory", 0) or 0)
+    mem_pct = round((total_mem - free_mem) / total_mem * 100, 1) if total_mem else 0
+    uptime = res.get("uptime", "")
+
+    temps = {}
+    for h in health:
+        name = str(h.get("name", "")).lower()
+        if "temp" in name:
+            try:
+                temps[name] = float(h.get("value", 0))
+            except Exception:
+                pass
+    temp_max = max(temps.values()) if temps else None
+
+    return {
+        "online": True,
+        "cpu": cpu,
+        "mem_pct": mem_pct,
+        "uptime": uptime,
+        "sessions": sessions,
+        "temp_max": temp_max,
+        "version": res.get("version", ""),
+        "board": res.get("board-name", ""),
+    }
+
+
+def probe_all_nas(get_db):
+    """Lista todos os NAS com métricas. Em paralelo."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, nasname, shortname, description, mikrotik_user, mikrotik_pass, mikrotik_port
+                  FROM nas
+              ORDER BY shortname NULLS LAST, id
+            """)
+            nas_list = cur.fetchall()
+    finally:
+        conn.close()
+
+    results = []
+    has_creds = [n for n in nas_list if n.get("mikrotik_user") and n.get("mikrotik_pass")]
+
+    metrics = {}
+    if has_creds:
+        with ThreadPoolExecutor(max_workers=min(8, len(has_creds))) as pool:
+            futs = {pool.submit(probe_nas_metrics, n): n["id"] for n in has_creds}
+            for fut in as_completed(futs, timeout=20):
+                nas_id = futs[fut]
+                try:
+                    metrics[nas_id] = fut.result()
+                except Exception as e:
+                    metrics[nas_id] = {"online": False, "error": str(e)}
+
+    for n in nas_list:
+        item = {
+            "id":          n["id"],
+            "nasname":     n["nasname"],
+            "shortname":   n.get("shortname") or n["nasname"],
+            "description": n.get("description"),
+            "has_api":     bool(n.get("mikrotik_user") and n.get("mikrotik_pass")),
+        }
+        item.update(metrics.get(n["id"], {"online": None}))
+        results.append(item)
+    return results

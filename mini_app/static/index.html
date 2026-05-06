@@ -17,49 +17,49 @@
     background: var(--tg-theme-secondary-bg-color, #1a1f2e);
     border: 1px solid rgba(255,255,255,0.06);
   }
+  .card-clickable { cursor: pointer; transition: transform .1s, opacity .1s; }
+  .card-clickable:active { transform: scale(0.98); opacity: 0.85; }
   .muted { color: var(--tg-theme-hint-color, #9ca3af); }
   .accent { color: var(--tg-theme-link-color, #60a5fa); }
-  .btn {
+  .btn-primary {
     background: var(--tg-theme-button-color, #2563eb);
-    color:      var(--tg-theme-button-text-color, white);
-    transition: opacity .2s, transform .1s;
+    color: var(--tg-theme-button-text-color, white);
   }
-  .btn:active { transform: scale(0.97); }
-  .btn:disabled { opacity: 0.5; }
-  .btn-secondary {
-    background: rgba(255,255,255,0.08);
-    color: var(--tg-theme-text-color, #f4f4f5);
-  }
+  .btn-secondary { background: rgba(255,255,255,0.08); }
   .btn-danger { background: #dc2626; color: white; }
   .btn-success { background: #16a34a; color: white; }
-  .pulse-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    display: inline-block;
-  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.5; }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .pulse-online  { background: #16a34a; box-shadow: 0 0 0 4px rgba(22,163,74,.2); }
   .pulse-offline { background: #6b7280; }
-  .badge {
-    display: inline-block; padding: 2px 8px; border-radius: 999px;
-    font-size: 11px; font-weight: 600;
-  }
+  .pulse-warn    { background: #facc15; box-shadow: 0 0 0 4px rgba(250,204,21,.2); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
   .badge-ativo    { background: rgba(22,163,74,.15); color: #4ade80; }
   .badge-suspenso { background: rgba(220,38,38,.15); color: #f87171; }
   .badge-pendente { background: rgba(234,179,8,.15);  color: #facc15; }
+  .badge-aberto      { background: rgba(220,38,38,.15); color: #f87171; }
+  .badge-resolvido   { background: rgba(22,163,74,.15); color: #4ade80; }
+  .badge-em_atendimento { background: rgba(234,179,8,.15);  color: #facc15; }
   .toast {
-    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
     padding: 12px 20px; border-radius: 12px; max-width: 90%;
-    box-shadow: 0 10px 25px rgba(0,0,0,.4);
-    z-index: 50;
+    box-shadow: 0 10px 25px rgba(0,0,0,.4); z-index: 50;
   }
-  .toast-ok    { background: #16a34a; color: white; }
-  .toast-err   { background: #dc2626; color: white; }
+  .toast-ok  { background: #16a34a; color: white; }
+  .toast-err { background: #dc2626; color: white; }
+  .progress-bar {
+    background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; height: 6px;
+  }
+  .progress-fill { height: 100%; transition: width .3s; }
+  .swipe-row { transition: transform .2s; }
 </style>
 </head>
 <body class="min-h-screen pb-24" x-data="miniApp()" x-init="boot()">
 
 <div class="max-w-md mx-auto p-4">
 
-  <!-- Loading global com progresso -->
+  <!-- Loading global -->
   <template x-if="state === 'loading'">
     <div class="card rounded-xl p-6 mt-8">
       <p class="text-center font-semibold">Conectando...</p>
@@ -76,27 +76,26 @@
     </div>
   </template>
 
-  <!-- Erro de auth -->
+  <!-- Erro -->
   <template x-if="state === 'error'">
     <div class="card rounded-xl p-6 border-red-500/30 bg-red-500/10 mt-8">
       <p class="font-semibold text-red-400">❌ <span x-text="error.title"></span></p>
-      <p class="text-sm mt-2" x-text="error.message"></p>
+      <p class="text-sm mt-2 whitespace-pre-line" x-text="error.message"></p>
       <template x-if="error.hint">
         <p class="text-xs mt-3 muted font-mono break-all" x-text="error.hint"></p>
       </template>
     </div>
   </template>
 
-  <!-- App autorizado -->
   <template x-if="state === 'ok'">
     <div>
 
-      <!-- ================= DASHBOARD ================= -->
+      <!-- ============ DASHBOARD ============ -->
       <template x-if="view === 'dashboard'">
         <div>
           <header class="mb-4">
-            <h1 class="text-2xl font-bold">📊 Painel</h1>
-            <p class="text-sm muted">Olá, <span x-text="user.first_name"></span>!</p>
+            <h1 class="text-2xl font-bold">SGP-LINKET</h1>
+            <p class="text-sm muted" x-text="'Olá, ' + greetingName() + '!'"></p>
           </header>
 
           <template x-if="!kpis">
@@ -105,7 +104,6 @@
 
           <template x-if="kpis">
             <div class="space-y-3">
-              <!-- Online em destaque -->
               <div class="card rounded-xl p-4">
                 <p class="text-xs muted uppercase tracking-wide">Online agora</p>
                 <p class="text-4xl font-bold mt-1">
@@ -115,7 +113,6 @@
                 <p class="text-xs muted mt-1" x-text="'fonte: ' + (kpis.online_source === 'mikrotik' ? 'MikroTik API' : 'radacct')"></p>
               </div>
 
-              <!-- Grid 2x2 -->
               <div class="grid grid-cols-2 gap-3">
                 <div class="card rounded-xl p-3">
                   <p class="text-xs muted">Ativos</p>
@@ -125,22 +122,29 @@
                   <p class="text-xs muted">Suspensos</p>
                   <p class="text-2xl font-bold text-red-400" x-text="kpis.suspensos"></p>
                 </div>
-                <div class="card rounded-xl p-3">
+                <button @click="setView('cpes', 'offline')" class="card card-clickable rounded-xl p-3 text-left">
                   <p class="text-xs muted">CPEs offline</p>
                   <p class="text-2xl font-bold" :class="kpis.cpes_offline > 0 ? 'text-orange-400' : ''" x-text="kpis.cpes_offline"></p>
-                </div>
-                <div class="card rounded-xl p-3">
-                  <p class="text-xs muted">Chamados</p>
+                </button>
+                <button @click="setView('chamados')" class="card card-clickable rounded-xl p-3 text-left">
+                  <p class="text-xs muted">Chamados abertos</p>
                   <p class="text-2xl font-bold" :class="kpis.chamados_abertos > 0 ? 'text-orange-400' : ''" x-text="kpis.chamados_abertos"></p>
-                </div>
+                </button>
               </div>
 
-              <!-- Alertas firing -->
+              <button @click="setView('nas')" class="card card-clickable rounded-xl p-3 text-left w-full">
+                <p class="text-xs muted">NAS / MikroTiks</p>
+                <p class="text-2xl font-bold" x-text="kpis.nas_total"></p>
+              </button>
+
               <div class="card rounded-xl p-3" :class="kpis.alertas_firing > 0 ? 'border-red-500/30 bg-red-500/5' : ''">
                 <p class="text-xs muted">Alertas firing</p>
                 <p class="text-2xl font-bold" :class="kpis.alertas_firing > 0 ? 'text-red-400' : ''" x-text="kpis.alertas_firing"></p>
               </div>
 
+              <button @click="setView('manut')" class="w-full py-3 rounded-xl btn-secondary font-semibold">
+                🔕 Manutenções
+              </button>
               <button @click="loadDashboard()" class="w-full py-3 rounded-xl btn-secondary font-semibold">
                 🔄 Atualizar
               </button>
@@ -149,7 +153,7 @@
         </div>
       </template>
 
-      <!-- ================= BUSCA ================= -->
+      <!-- ============ BUSCA ============ -->
       <template x-if="view === 'busca'">
         <div>
           <header class="mb-4">
@@ -157,30 +161,25 @@
             <p class="text-sm muted">Por CPF, nome ou login PPPoE</p>
           </header>
 
-          <input type="text"
-                 x-model="busca.q"
-                 @input.debounce.500ms="buscar()"
+          <input type="text" x-model="busca.q" @input.debounce.500ms="buscar()"
                  placeholder="ex: 123.456.789-00 ou João Silva"
-                 class="w-full p-3 rounded-xl bg-black/20 border border-white/10 mb-4 outline-none focus:border-blue-500" />
+                 class="w-full p-3 rounded-xl bg-black/20 border border-white/10 mb-4 outline-none focus:border-blue-500">
 
           <template x-if="busca.loading">
             <p class="muted text-center py-4">Buscando...</p>
           </template>
-
           <template x-if="!busca.loading && busca.resultados.length === 0 && busca.q.length >= 2">
             <p class="muted text-center py-4">Nenhum resultado.</p>
           </template>
 
           <div class="space-y-2">
             <template x-for="c in busca.resultados" :key="c.id">
-              <button @click="abrirCliente(c.id)"
-                      class="w-full text-left card rounded-xl p-3 active:opacity-70">
+              <button @click="abrirCliente(c.id)" class="w-full text-left card card-clickable rounded-xl p-3">
                 <div class="flex justify-between items-start">
                   <div class="flex-1 min-w-0">
                     <p class="font-semibold truncate" x-text="c.nome"></p>
                     <p class="text-sm muted truncate">
-                      <span x-text="c.pppoe_login || '—'"></span>
-                      · <span x-text="c.cpf"></span>
+                      <span x-text="c.pppoe_login || '—'"></span> · <span x-text="c.cpf"></span>
                     </p>
                   </div>
                   <div class="flex flex-col items-end gap-1">
@@ -194,13 +193,12 @@
         </div>
       </template>
 
-      <!-- ================= DETALHE CLIENTE ================= -->
+      <!-- ============ DETALHE CLIENTE ============ -->
       <template x-if="view === 'cliente'">
         <div>
           <template x-if="!cliente.data">
             <p class="muted text-center py-8">Carregando...</p>
           </template>
-
           <template x-if="cliente.data">
             <div class="space-y-3">
               <div class="card rounded-xl p-4">
@@ -216,7 +214,6 @@
                 </p>
               </div>
 
-              <!-- Sessão atual -->
               <template x-if="cliente.data.sessao">
                 <div class="card rounded-xl p-4">
                   <p class="text-xs muted uppercase tracking-wide mb-2">🟢 Sessão ativa</p>
@@ -226,14 +223,12 @@
                   <p class="text-sm" x-text="'Tráfego: ' + fmtBytes(cliente.data.sessao.traffic)"></p>
                 </div>
               </template>
-
               <template x-if="!cliente.data.sessao">
                 <div class="card rounded-xl p-4 text-center">
                   <p class="muted">⚪ Sem sessão ativa</p>
                 </div>
               </template>
 
-              <!-- CPE -->
               <template x-if="cliente.data.cpe">
                 <div class="card rounded-xl p-4">
                   <p class="text-xs muted uppercase tracking-wide mb-2">📡 CPE</p>
@@ -246,16 +241,14 @@
                   </template>
                   <template x-if="cliente.data.cpe.rx_power !== null">
                     <p class="text-sm" x-text="'Rx Power: ' + cliente.data.cpe.rx_power + ' dBm'"
-                       :class="cliente.data.cpe.rx_power < -27 ? 'text-red-400' : (cliente.data.cpe.rx_power < -24 ? 'text-yellow-400' : 'text-green-400')">
-                    </p>
+                       :class="rxColor(cliente.data.cpe.rx_power)"></p>
                   </template>
-                  <button @click="acaoCpe('reboot')" class="mt-3 w-full py-2 rounded-lg btn-secondary text-sm">
+                  <button @click="acaoCpe('reboot', cliente.data.cpe.id)" class="mt-3 w-full py-2 rounded-lg btn-secondary text-sm">
                     🔄 Reiniciar CPE
                   </button>
                 </div>
               </template>
 
-              <!-- Ações -->
               <div class="card rounded-xl p-4">
                 <p class="text-xs muted uppercase tracking-wide mb-3">⚡ Ações</p>
                 <div class="grid grid-cols-2 gap-2">
@@ -278,12 +271,222 @@
         </div>
       </template>
 
+      <!-- ============ NAS ============ -->
+      <template x-if="view === 'nas'">
+        <div>
+          <header class="mb-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">📡 NAS / MikroTiks</h1>
+            <button @click="loadNas()" class="text-sm muted">🔄</button>
+          </header>
+
+          <template x-if="!nas.data">
+            <p class="muted text-center py-8">Carregando...</p>
+          </template>
+
+          <div class="space-y-3" x-show="nas.data">
+            <template x-for="n in (nas.data || [])" :key="n.id">
+              <div class="card rounded-xl p-4">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold truncate" x-text="n.shortname"></p>
+                    <p class="text-xs muted font-mono truncate" x-text="n.nasname"></p>
+                  </div>
+                  <span class="pulse-dot" :class="n.online === true ? 'pulse-online' : (n.online === false ? 'pulse-offline' : 'pulse-warn')"></span>
+                </div>
+
+                <template x-if="n.online === true">
+                  <div class="mt-3 space-y-2">
+                    <div>
+                      <div class="flex justify-between text-xs muted mb-1">
+                        <span>CPU</span><span x-text="n.cpu + '%'"></span>
+                      </div>
+                      <div class="progress-bar">
+                        <div class="progress-fill" :style="'width: ' + n.cpu + '%; background: ' + barColor(n.cpu)"></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="flex justify-between text-xs muted mb-1">
+                        <span>Memória</span><span x-text="n.mem_pct + '%'"></span>
+                      </div>
+                      <div class="progress-bar">
+                        <div class="progress-fill" :style="'width: ' + n.mem_pct + '%; background: ' + barColor(n.mem_pct)"></div>
+                      </div>
+                    </div>
+                    <div class="flex justify-between text-xs muted pt-1">
+                      <span x-text="'Sessões: ' + (n.sessions ?? '?')"></span>
+                      <template x-if="n.temp_max !== null && n.temp_max !== undefined">
+                        <span x-text="'Temp: ' + n.temp_max + '°C'" :class="n.temp_max > 70 ? 'text-orange-400' : ''"></span>
+                      </template>
+                    </div>
+                    <p class="text-xs muted" x-text="'Uptime: ' + (n.uptime || '—') + ' · ' + (n.board || '')"></p>
+                  </div>
+                </template>
+
+                <template x-if="n.online === false">
+                  <p class="mt-2 text-sm text-red-400" x-text="'⚠ ' + (n.error || 'inacessível')"></p>
+                </template>
+                <template x-if="n.online === null">
+                  <p class="mt-2 text-sm muted">sem credenciais MikroTik configuradas</p>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ CPEs ============ -->
+      <template x-if="view === 'cpes'">
+        <div>
+          <header class="mb-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">📶 CPEs</h1>
+            <button @click="loadCpes()" class="text-sm muted">🔄</button>
+          </header>
+
+          <div class="flex gap-2 mb-3">
+            <template x-for="f in ['todos', 'offline', 'critico']">
+              <button @click="cpes.filtro = f; loadCpes()"
+                      class="flex-1 py-2 rounded-lg text-sm"
+                      :class="cpes.filtro === f ? 'btn-primary' : 'btn-secondary'"
+                      x-text="f"></button>
+            </template>
+          </div>
+
+          <template x-if="!cpes.data">
+            <p class="muted text-center py-8">Carregando...</p>
+          </template>
+          <template x-if="cpes.data && cpes.data.length === 0">
+            <p class="muted text-center py-8">Nenhum CPE neste filtro.</p>
+          </template>
+
+          <div class="space-y-2" x-show="cpes.data">
+            <template x-for="c in (cpes.data || [])" :key="c.id">
+              <div class="card rounded-xl p-3">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold truncate" x-text="(c.cliente_nome || '?') + ' #' + c.id"></p>
+                    <p class="text-xs muted truncate" x-text="(c.fabricante || '') + ' ' + (c.modelo || '') + ' · ' + (c.serial_number || '—')"></p>
+                  </div>
+                  <span class="pulse-dot" :class="c.online ? 'pulse-online' : 'pulse-offline'"></span>
+                </div>
+                <div class="flex justify-between items-center mt-2 text-sm">
+                  <template x-if="c.rx_power !== null">
+                    <span :class="rxColor(c.rx_power)" x-text="c.rx_power + ' dBm'"></span>
+                  </template>
+                  <template x-if="c.rx_power === null">
+                    <span class="muted">sem sinal</span>
+                  </template>
+                  <span class="muted text-xs font-mono" x-text="c.ip_wan || '—'"></span>
+                </div>
+                <div class="flex gap-2 mt-2">
+                  <button @click="acaoCpe('reboot', c.id)" class="flex-1 py-2 rounded-lg btn-secondary text-xs">🔄 Reboot</button>
+                  <button @click="acaoCpe('refresh', c.id)" class="flex-1 py-2 rounded-lg btn-secondary text-xs">🔍 Refresh</button>
+                  <template x-if="c.cliente_id">
+                    <button @click="abrirCliente(c.cliente_id)" class="flex-1 py-2 rounded-lg btn-secondary text-xs">👤 Cliente</button>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ CHAMADOS ============ -->
+      <template x-if="view === 'chamados'">
+        <div>
+          <header class="mb-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">🎫 Chamados</h1>
+            <button @click="loadChamados()" class="text-sm muted">🔄</button>
+          </header>
+
+          <div class="flex gap-2 mb-3">
+            <template x-for="s in ['aberto', 'resolvido', 'todos']">
+              <button @click="chamados.filtro = s; loadChamados()"
+                      class="flex-1 py-2 rounded-lg text-sm"
+                      :class="chamados.filtro === s ? 'btn-primary' : 'btn-secondary'"
+                      x-text="s"></button>
+            </template>
+          </div>
+
+          <template x-if="!chamados.data">
+            <p class="muted text-center py-8">Carregando...</p>
+          </template>
+          <template x-if="chamados.data && chamados.data.length === 0">
+            <p class="muted text-center py-8">Nenhum chamado neste filtro.</p>
+          </template>
+
+          <div class="space-y-2" x-show="chamados.data">
+            <template x-for="ch in (chamados.data || [])" :key="ch.id">
+              <div class="card rounded-xl p-3">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold truncate" x-text="ch.cliente_nome || '(sem cliente)'"></p>
+                    <p class="text-xs muted" x-text="'#' + ch.id + ' · ' + ch.tipo"></p>
+                  </div>
+                  <span class="badge" :class="'badge-' + ch.status" x-text="ch.status"></span>
+                </div>
+                <p class="text-sm mt-2" x-text="ch.descricao"></p>
+                <p class="text-xs muted mt-1" x-text="'Aberto: ' + ch.criado_em"></p>
+                <template x-if="ch.status === 'aberto'">
+                  <button @click="resolverChamado(ch.id)" class="mt-2 w-full py-2 rounded-lg btn-success text-xs font-semibold">
+                    ✅ Marcar como resolvido
+                  </button>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ MANUTENÇÕES ============ -->
+      <template x-if="view === 'manut'">
+        <div>
+          <header class="mb-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">🔕 Manutenções</h1>
+            <button @click="loadManutencoes()" class="text-sm muted">🔄</button>
+          </header>
+
+          <div class="card rounded-xl p-4 mb-4">
+            <p class="text-xs muted uppercase tracking-wide mb-2">Silenciar todos os alertas por...</p>
+            <div class="grid grid-cols-4 gap-2">
+              <template x-for="m in [30, 60, 120, 240]">
+                <button @click="silenciar(m)" class="py-3 rounded-lg btn-primary text-sm font-semibold">
+                  <span x-text="m < 60 ? m + 'm' : (m/60) + 'h'"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <template x-if="!manut.data">
+            <p class="muted text-center py-4">Carregando...</p>
+          </template>
+
+          <div class="space-y-2" x-show="manut.data">
+            <template x-for="m in (manut.data || [])" :key="m.id">
+              <div class="card rounded-xl p-3" :class="m.ativa ? 'border-green-500/30 bg-green-500/5' : ''">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold" x-text="(m.ativa ? '🟢 ATIVA · ' : '⚪ ') + (m.motivo || 'sem motivo')"></p>
+                    <p class="text-xs muted" x-text="'#' + m.id + ' · ' + m.criado_por"></p>
+                    <p class="text-xs muted" x-text="m.inicio + ' → ' + m.fim"></p>
+                  </div>
+                  <template x-if="m.ativa">
+                    <button @click="encerrarManutencao(m.id)" class="ml-2 px-3 py-1 rounded-lg btn-danger text-xs">
+                      Encerrar
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- Toast -->
       <template x-if="toast.msg">
         <div class="toast" :class="'toast-' + toast.type" x-text="toast.msg"></div>
       </template>
 
-      <!-- Bottom nav -->
+      <!-- Bottom nav 4 abas -->
       <nav class="fixed bottom-0 left-0 right-0 card border-t flex justify-around"
            :style="'background: var(--tg-theme-secondary-bg-color, #1a1f2e); padding-bottom: env(safe-area-inset-bottom);'">
         <button @click="setView('dashboard')" class="flex-1 py-3 text-center"
@@ -294,6 +497,14 @@
                 :class="view === 'busca' ? 'accent font-semibold' : 'muted'">
           🔍<br><span class="text-xs">Buscar</span>
         </button>
+        <button @click="setView('cpes')" class="flex-1 py-3 text-center"
+                :class="['cpes','nas'].includes(view) ? 'accent font-semibold' : 'muted'">
+          📡<br><span class="text-xs">Equip.</span>
+        </button>
+        <button @click="setView('chamados')" class="flex-1 py-3 text-center"
+                :class="view === 'chamados' ? 'accent font-semibold' : 'muted'">
+          🎫<br><span class="text-xs">Chamados</span>
+        </button>
       </nav>
 
     </div>
@@ -302,22 +513,13 @@
 </div>
 
 <script>
-// Acesso direto, sem Alpine Proxy — BackButton/HapticFeedback têm propriedades
-// não-configuráveis que o Proxy reativo do Alpine não consegue interceptar.
 function tg() { return window.Telegram && window.Telegram.WebApp; }
 
 function miniApp() {
   return {
     state: 'loading',
     loadingStep: 'inicializando...',
-    debug: {
-      hasWebApp: false,
-      readyDone: false,
-      initDataChecked: false,
-      initDataLen: 0,
-      fetchStatus: 'aguardando',
-      lastError: '',
-    },
+    debug: { hasWebApp: false, readyDone: false, initDataChecked: false, initDataLen: 0, fetchStatus: 'aguardando', lastError: '' },
     user: {},
     role: '',
     error: { title: '', message: '', hint: '' },
@@ -325,102 +527,67 @@ function miniApp() {
     kpis: null,
     busca: { q: '', loading: false, resultados: [] },
     cliente: { id: null, data: null },
+    nas: { data: null },
+    cpes: { data: null, filtro: 'todos' },
+    chamados: { data: null, filtro: 'aberto' },
+    manut: { data: null },
     toast: { msg: '', type: 'ok', timer: null },
 
     async boot() {
       try {
-        console.log('[boot] iniciando');
         this.loadingStep = 'verificando Telegram WebApp...';
-
         const t = tg();
         this.debug.hasWebApp = !!t;
         if (!t) {
           this.state = 'error';
-          this.error = {
-            title: 'Não está dentro do Telegram',
-            message: 'Esta página foi aberta no navegador comum. Abra via /menu no Telegram.'
-          };
+          this.error = { title: 'Não está dentro do Telegram', message: 'Abra via /menu no Telegram.' };
           return;
         }
-
-        try {
-          t.ready();
-          t.expand();
-          this.debug.readyDone = true;
-        } catch (e) {
-          this.debug.lastError = 'tg.ready/expand: ' + e.message;
-          throw e;
-        }
+        try { t.ready(); t.expand(); this.debug.readyDone = true; }
+        catch (e) { this.debug.lastError = 'tg.ready/expand: ' + e.message; throw e; }
 
         const initData = t.initData || '';
         this.debug.initDataLen = initData.length;
         this.debug.initDataChecked = true;
-        console.log('[boot] initData length:', initData.length);
-
         if (!initData) {
           this.state = 'error';
-          this.error = {
-            title: 'initData ausente',
-            message: 'O Telegram não enviou dados de autenticação.',
-            hint: '1) Domínio cadastrado em @BotFather? 2) Aberto via /menu? 3) URL HTTPS?'
-          };
+          this.error = { title: 'initData ausente', message: 'O Telegram não enviou autenticação.', hint: 'Domínio em @BotFather?' };
           return;
         }
 
         this.loadingStep = 'autenticando no servidor...';
         this.debug.fetchStatus = 'enviando...';
-
         const ctrl = new AbortController();
-        const timeoutId = setTimeout(() => ctrl.abort(), 15000);
-
+        const tmId = setTimeout(() => ctrl.abort(), 15000);
         const res = await fetch('/api/me', {
           method: 'POST',
           headers: { 'X-Telegram-Init-Data': initData },
           signal: ctrl.signal,
         });
-        clearTimeout(timeoutId);
+        clearTimeout(tmId);
         this.debug.fetchStatus = 'HTTP ' + res.status;
-        console.log('[boot] /api/me status:', res.status);
-
         let data = {};
-        try { data = await res.json(); } catch (_) { data = {}; }
+        try { data = await res.json(); } catch (_) {}
 
         if (res.status === 403) {
           this.state = 'error';
           this.error = { title: 'Acesso não autorizado', message: data.error, hint: data.hint || '' };
           return;
         }
-        if (res.status === 401) {
-          this.state = 'error';
-          this.error = {
-            title: 'initData inválido',
-            message: data.error || 'HMAC não confere.',
-            hint: 'Token do banco diferente do bot que abriu o app?'
-          };
-          return;
-        }
         if (!res.ok) {
           this.state = 'error';
-          this.error = {
-            title: 'Erro do servidor (' + res.status + ')',
-            message: data.error || 'Resposta inesperada.',
-            hint: data.hint || ''
-          };
+          this.error = { title: 'Erro do servidor (' + res.status + ')', message: data.error || 'Resposta inesperada.', hint: data.hint || '' };
           return;
         }
-
-        this.user = data.telegram;
+        this.user = data.telegram || {};
         this.role = data.role;
         this.state = 'ok';
-        console.log('[boot] OK, user:', this.user.username);
 
-        // Hash routing aplicado SÓ depois da auth
         window.addEventListener('hashchange', () => this.applyHash());
         this.applyHash();
         this.loadDashboard();
 
       } catch (e) {
-        console.error('[boot] EXCEPTION:', e);
         this.debug.lastError = (e && e.message) || String(e);
         this.state = 'error';
         const isTimeout = e && e.name === 'AbortError';
@@ -439,30 +606,46 @@ function miniApp() {
         this.cliente.id = id;
         this.view = 'cliente';
         this.loadCliente(id);
+      } else if (h.startsWith('cpes/')) {
+        this.cpes.filtro = h.split('/')[1] || 'todos';
+        this.view = 'cpes';
+        this.loadCpes();
       } else {
         this.view = h || 'dashboard';
+        this.lazyLoadView(this.view);
       }
       this.updateBackButton();
     },
 
-    setView(v) {
-      window.location.hash = '#/' + v;
+    setView(v, arg) {
+      if (v === 'cpes' && arg) {
+        this.cpes.filtro = arg;
+        window.location.hash = '#/cpes/' + arg;
+      } else {
+        window.location.hash = '#/' + v;
+      }
+    },
+
+    lazyLoadView(v) {
+      if (v === 'nas' && !this.nas.data) this.loadNas();
+      if (v === 'cpes' && !this.cpes.data) this.loadCpes();
+      if (v === 'chamados' && !this.chamados.data) this.loadChamados();
+      if (v === 'manut' && !this.manut.data) this.loadManutencoes();
     },
 
     updateBackButton() {
       const bb = tg() && tg().BackButton;
       if (!bb) return;
-      if (this.view === 'cliente') {
+      const inDetail = this.view === 'cliente';
+      if (inDetail) {
         bb.show();
-        bb.onClick(() => this.setView('busca'));
+        bb.onClick(() => window.history.back());
       } else {
         bb.hide();
       }
     },
 
-    abrirCliente(id) {
-      window.location.hash = '#/cliente/' + id;
-    },
+    abrirCliente(id) { window.location.hash = '#/cliente/' + id; },
 
     async fetchAuth(url, opts = {}) {
       const initData = (tg() && tg().initData) || '';
@@ -472,13 +655,13 @@ function miniApp() {
       return { ok: res.ok, status: res.status, data };
     },
 
+    // -------- Loaders --------
     async loadDashboard() {
       this.kpis = null;
       const { ok, data } = await this.fetchAuth('/api/dashboard');
       if (ok) this.kpis = data;
       else this.showToast(data.error || 'Erro', 'err');
     },
-
     async buscar() {
       const q = this.busca.q.trim();
       if (q.length < 2) { this.busca.resultados = []; return; }
@@ -487,14 +670,38 @@ function miniApp() {
       this.busca.loading = false;
       this.busca.resultados = ok ? (data.clientes || []) : [];
     },
-
     async loadCliente(id) {
       this.cliente.data = null;
       const { ok, data } = await this.fetchAuth('/api/clientes/' + id);
       if (ok) this.cliente.data = data;
       else this.showToast(data.error || 'Erro', 'err');
     },
+    async loadNas() {
+      this.nas.data = null;
+      const { ok, data } = await this.fetchAuth('/api/nas');
+      if (ok) this.nas.data = data.nas || [];
+      else this.showToast(data.error || 'Erro', 'err');
+    },
+    async loadCpes() {
+      this.cpes.data = null;
+      const { ok, data } = await this.fetchAuth('/api/cpes?filtro=' + this.cpes.filtro);
+      if (ok) this.cpes.data = data.cpes || [];
+      else this.showToast(data.error || 'Erro', 'err');
+    },
+    async loadChamados() {
+      this.chamados.data = null;
+      const { ok, data } = await this.fetchAuth('/api/chamados?status=' + this.chamados.filtro);
+      if (ok) this.chamados.data = data.chamados || [];
+      else this.showToast(data.error || 'Erro', 'err');
+    },
+    async loadManutencoes() {
+      this.manut.data = null;
+      const { ok, data } = await this.fetchAuth('/api/manutencoes');
+      if (ok) this.manut.data = data.manutencoes || [];
+      else this.showToast(data.error || 'Erro', 'err');
+    },
 
+    // -------- Ações --------
     async acaoCliente(acao, confirmMsg) {
       if (!this.cliente.id) return;
       const ok = await this.confirm(confirmMsg);
@@ -508,16 +715,49 @@ function miniApp() {
         this.showToast(r.data.msg || r.data.error || 'Falhou', 'err');
       }
     },
-
-    async acaoCpe(acao) {
-      const cpe = this.cliente.data?.cpe;
-      if (!cpe) return;
-      const ok = await this.confirm('Reiniciar o CPE deste cliente?');
+    async acaoCpe(acao, cpeId) {
+      const id = cpeId || (this.cliente.data?.cpe?.id);
+      if (!id) return;
+      const ok = await this.confirm(acao === 'reboot' ? 'Reiniciar este CPE?' : 'Forçar refresh do CPE?');
       if (!ok) return;
       try { tg() && tg().HapticFeedback && tg().HapticFeedback.impactOccurred('medium'); } catch (_) {}
-      const r = await this.fetchAuth('/api/cpe/' + cpe.id + '/' + acao, { method: 'POST' });
+      const r = await this.fetchAuth('/api/cpe/' + id + '/' + acao, { method: 'POST' });
+      if (r.ok && r.data.ok !== false) this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
+      else this.showToast(r.data.msg || 'Falhou', 'err');
+    },
+    async resolverChamado(id) {
+      const ok = await this.confirm('Marcar chamado #' + id + ' como resolvido?');
+      if (!ok) return;
+      const r = await this.fetchAuth('/api/chamados/' + id + '/resolver', { method: 'POST' });
       if (r.ok && r.data.ok !== false) {
-        this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
+        this.showToast('✓ resolvido', 'ok');
+        this.loadChamados();
+      } else {
+        this.showToast(r.data.msg || 'Falhou', 'err');
+      }
+    },
+    async silenciar(minutos) {
+      const ok = await this.confirm('Silenciar todos os alertas por ' + minutos + ' min?');
+      if (!ok) return;
+      const r = await this.fetchAuth('/api/manutencoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutos, motivo: 'via Mini App' }),
+      });
+      if (r.ok && r.data.ok !== false) {
+        this.showToast('✓ silenciado por ' + minutos + 'min', 'ok');
+        this.loadManutencoes();
+      } else {
+        this.showToast(r.data.error || 'Falhou', 'err');
+      }
+    },
+    async encerrarManutencao(id) {
+      const ok = await this.confirm('Encerrar janela #' + id + ' agora?');
+      if (!ok) return;
+      const r = await this.fetchAuth('/api/manutencoes/' + id + '/encerrar', { method: 'POST' });
+      if (r.ok && r.data.ok !== false) {
+        this.showToast('✓ encerrada', 'ok');
+        this.loadManutencoes();
       } else {
         this.showToast(r.data.msg || 'Falhou', 'err');
       }
@@ -526,26 +766,39 @@ function miniApp() {
     confirm(msg) {
       return new Promise(resolve => {
         const t = tg();
-        if (t && typeof t.showConfirm === 'function') {
-          t.showConfirm(msg, ok => resolve(!!ok));
-        } else {
-          resolve(window.confirm(msg));
-        }
+        if (t && typeof t.showConfirm === 'function') t.showConfirm(msg, ok => resolve(!!ok));
+        else resolve(window.confirm(msg));
       });
     },
-
     showToast(msg, type = 'ok') {
       this.toast = { msg, type };
       if (this.toast.timer) clearTimeout(this.toast.timer);
       this.toast.timer = setTimeout(() => { this.toast.msg = ''; }, 3000);
     },
 
+    // -------- Helpers --------
     fmtBytes(b) {
       b = Number(b) || 0;
       if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
       if (b >= 1048576)    return (b / 1048576).toFixed(2) + ' MB';
       if (b >= 1024)       return (b / 1024).toFixed(2) + ' KB';
       return b + ' B';
+    },
+    rxColor(rx) {
+      if (rx === null || rx === undefined) return 'muted';
+      if (rx < -27) return 'text-red-400';
+      if (rx < -24) return 'text-yellow-400';
+      return 'text-green-400';
+    },
+    barColor(pct) {
+      if (pct >= 85) return '#dc2626';
+      if (pct >= 70) return '#f59e0b';
+      return '#16a34a';
+    },
+    greetingName() {
+      return this.user.first_name
+          || this.user.username
+          || (this.role ? this.role : 'admin');
     },
   };
 }
