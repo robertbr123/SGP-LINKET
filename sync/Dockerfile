@@ -10,5 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY sync.py .
 COPY notifier.py .
 COPY health_checks.py .
+COPY run_health_check.py .
 
 CMD ["python", "-u", "sync.py"]
