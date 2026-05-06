@@ -164,6 +164,80 @@ class TelegramNotifier:
             return f"{emoji} {msg}\n<i>{ts}</i>"
         return f"{msg}\n<i>{ts}</i>"
 
+    # --------------------------------------------------------- zelador noturno
+
+    def _is_night_now(self, conn):
+        """True se hora atual está dentro da janela noturna configurada."""
+        from datetime import datetime as _dt
+        try:
+            inicio = self._get_cfg(conn, "zelador_inicio", "22:00")
+            fim    = self._get_cfg(conn, "zelador_fim",    "07:00")
+            ih, im = [int(x) for x in inicio.split(":")]
+            fh, fm = [int(x) for x in fim.split(":")]
+            now = _dt.now()
+            cur_min = now.hour * 60 + now.minute
+            ini_min = ih * 60 + im
+            fim_min = fh * 60 + fm
+            if ini_min < fim_min:
+                return ini_min <= cur_min < fim_min
+            # Janela cruza meia-noite (ex: 22:00 → 07:00)
+            return cur_min >= ini_min or cur_min < fim_min
+        except Exception:
+            return False
+
+    def _should_defer_night(self, conn, severity, event_type, msg):
+        """
+        IA decide se alerta noturno deve ser enviado AGORA ou DEFERIDO pro matinal.
+        Críticos sempre passam. Só warning/info são considerados.
+        """
+        if severity == "critical":
+            return False
+        if self._get_cfg(conn, "zelador_noturno_enabled", "false").lower() != "true":
+            return False
+        if not self._is_night_now(conn):
+            return False
+        # Decisão IA
+        try:
+            import os
+            # Tenta importar o módulo LLM (pode estar em qualquer container)
+            try:
+                from ai_llm import _call_llm
+            except ImportError:
+                from ai_summary import _call_llm
+            decision = _call_llm(
+                "Você decide se um alerta de ISP merece acordar o operador no meio da noite. "
+                "Responda APENAS com uma palavra: WAKE (urgente, precisa agir agora) ou DEFER (pode esperar a manhã).",
+                f"Alerta noturno (severity={severity}, tipo={event_type}):\n{msg[:500]}",
+                max_tokens=10,
+            )
+            if decision and "WAKE" in decision.upper():
+                return False  # não deferir = enviar
+            return True  # deferir
+        except Exception as e:
+            log.warning("zelador IA falhou: %s — enviando por segurança", e)
+            return False  # em caso de erro, envia (failsafe: melhor acordar atoa que perder alerta real)
+
+    def _mark_deferred(self, conn, dedup_key, event_type, severity, msg):
+        """Marca alerta como deferred — será mostrado no resumo matinal."""
+        if not dedup_key:
+            return
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO alert_state
+                        (dedup_key, event_type, severity, firing,
+                         primeira_vez, ultima_vez, last_msg, count_total, deferred)
+                    VALUES (%s, %s, %s, TRUE, NOW(), NOW(), %s, 1, TRUE)
+                    ON CONFLICT (dedup_key) DO UPDATE SET
+                        ultima_vez = NOW(),
+                        last_msg = EXCLUDED.last_msg,
+                        count_total = alert_state.count_total + 1,
+                        deferred = TRUE
+                """, (dedup_key, event_type, severity, msg))
+            conn.commit()
+        except Exception as e:
+            log.warning("mark_deferred failed: %s", e)
+
     # --------------------------------------------------------- public API
 
     def send(self, event_type, msg, dedup_key=None, severity="info",
@@ -183,6 +257,11 @@ class TelegramNotifier:
                 return False
             if not force and self._cooldown_active(dedup_key, cooldown):
                 log.info("notifier: suprimido por cooldown (%s)", dedup_key or event_type)
+                return False
+            # Zelador noturno (Fase N) — IA decide acordar ou deferir
+            if not force and self._should_defer_night(conn, severity, event_type, msg):
+                self._mark_deferred(conn, dedup_key, event_type, severity, msg)
+                log.info("notifier: DEFERRED pelo zelador noturno (%s)", dedup_key or event_type)
                 return False
 
             token, chat_id = self._credentials(conn)

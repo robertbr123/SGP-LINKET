@@ -127,6 +127,29 @@ def _morning_summary(conn):
             gb = float(t.get("gb") or 0)
             linhas.append(f"• <code>{t['username']}</code> — {gb:.1f} GB")
 
+    # Alertas deferidos pelo zelador noturno (Fase N)
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT dedup_key, severity, count_total
+                  FROM alert_state
+                 WHERE deferred = TRUE
+                   AND ultima_vez > NOW() - INTERVAL '12 hours'
+              ORDER BY severity, ultima_vez DESC LIMIT 10
+            """)
+            deferred = cur.fetchall()
+        if deferred:
+            linhas.append("")
+            linhas.append("<b>🌙 Eventos da noite (não-críticos, deferidos)</b>")
+            for d in deferred:
+                linhas.append(f"• [{d['severity']}] <code>{d['dedup_key']}</code> ({d['count_total']}x)")
+            # Limpa flag de deferred após exibir
+            with conn.cursor() as cur:
+                cur.execute("UPDATE alert_state SET deferred = FALSE WHERE deferred = TRUE")
+            conn.commit()
+    except Exception as e:
+        log.warning("deferred summary error: %s", e)
+
     return "\n".join(linhas)
 
 

@@ -76,6 +76,17 @@
             <h1 class="text-2xl font-bold">SGP-LINKET</h1>
             <p class="text-sm muted" x-text="'Olá, ' + greetingName() + '!'"></p>
           </header>
+
+          <!-- Briefing IA do dia -->
+          <template x-if="briefing">
+            <div class="card rounded-xl p-3 mb-3 border-blue-500/30 bg-blue-500/5">
+              <div class="flex justify-between items-start">
+                <p class="text-sm flex-1" x-text="briefing"></p>
+                <button @click="briefing=''" class="text-xs muted ml-2">✕</button>
+              </div>
+              <p class="text-xs muted mt-1">🤖 briefing IA</p>
+            </div>
+          </template>
           <template x-if="!kpis"><p class="muted text-center py-8">Carregando...</p></template>
           <template x-if="kpis">
             <div class="space-y-3">
@@ -157,6 +168,7 @@
               <label class="text-xs muted uppercase">CPF</label>
               <div class="flex gap-2">
                 <input type="text" x-model="novoCli.cpf" @blur="lookupSGP()" placeholder="só números" class="input flex-1">
+                <button @click="dictate('novoCli.cpf')" class="px-3 rounded-lg btn-secondary text-sm" title="Ditar">🎙️</button>
                 <button @click="lookupSGP()" class="px-3 rounded-lg btn-secondary text-sm" :disabled="novoCli.lookingUp">
                   <span x-show="!novoCli.lookingUp">🔍 SGP</span>
                   <span x-show="novoCli.lookingUp">...</span>
@@ -166,7 +178,10 @@
             </div>
             <div>
               <label class="text-xs muted uppercase">Nome</label>
-              <input type="text" x-model="novoCli.nome" class="input">
+              <div class="flex gap-2">
+                <input type="text" x-model="novoCli.nome" class="input flex-1">
+                <button @click="dictate('novoCli.nome')" class="px-3 rounded-lg btn-secondary text-sm" title="Ditar">🎙️</button>
+              </div>
             </div>
             <div>
               <label class="text-xs muted uppercase">Login PPPoE</label>
@@ -565,6 +580,7 @@
         <div>
           <h1 class="text-2xl font-bold mb-4">⚙️ Mais</h1>
           <div class="grid grid-cols-2 gap-3">
+            <button @click="setView('ai_search')" class="card card-clickable rounded-xl p-4 text-center border-blue-500/30 bg-blue-500/5">🤖<br><span class="text-sm">Buscar IA</span></button>
             <button @click="setView('nas')" class="card card-clickable rounded-xl p-4 text-center">📡<br><span class="text-sm">NAS</span></button>
             <button @click="setView('alertas')" class="card card-clickable rounded-xl p-4 text-center">🚨<br><span class="text-sm">Alertas</span></button>
             <button @click="setView('audit')" class="card card-clickable rounded-xl p-4 text-center">📋<br><span class="text-sm">Audit</span></button>
@@ -572,6 +588,72 @@
             <button @click="setView('manut')" class="card card-clickable rounded-xl p-4 text-center">🔕<br><span class="text-sm">Manutenções</span></button>
             <button @click="setView('admin')" class="card card-clickable rounded-xl p-4 text-center">🔧<br><span class="text-sm">Admin</span></button>
           </div>
+        </div>
+      </template>
+
+      <!-- ============ BUSCA IA ============ -->
+      <template x-if="view === 'ai_search'">
+        <div>
+          <header class="mb-4">
+            <h1 class="text-2xl font-bold">🤖 Buscar com IA</h1>
+            <p class="text-sm muted">Pergunta em português, resposta em segundos</p>
+          </header>
+
+          <div class="flex gap-2 mb-3">
+            <input type="text" x-model="aiSearch.q" @keydown.enter="execAiSearch()"
+                   placeholder="ex: clientes suspensos há mais de 30 dias"
+                   class="input flex-1">
+            <button @click="dictate('aiSearch.q')" class="px-3 rounded-lg btn-secondary text-sm" title="Ditar">🎙️</button>
+          </div>
+          <button @click="execAiSearch()" class="w-full py-3 rounded-xl btn-primary font-semibold mb-3" :disabled="aiSearch.loading">
+            <span x-show="!aiSearch.loading">Buscar</span>
+            <span x-show="aiSearch.loading">Pensando...</span>
+          </button>
+
+          <div class="text-xs muted mb-3">
+            Exemplos:
+            <button @click="aiSearch.q='CPEs com sinal pior que -25'; execAiSearch()" class="accent block text-left">• CPEs com sinal pior que -25</button>
+            <button @click="aiSearch.q='chamados abertos hoje'; execAiSearch()" class="accent block text-left">• chamados abertos hoje</button>
+            <button @click="aiSearch.q='alertas firing nas últimas 6 horas'; execAiSearch()" class="accent block text-left">• alertas firing nas últimas 6 horas</button>
+            <button @click="aiSearch.q='clientes suspensos com login começando com test'; execAiSearch()" class="accent block text-left">• clientes suspensos com login começando com test</button>
+          </div>
+
+          <template x-if="aiSearch.result">
+            <div>
+              <template x-if="aiSearch.result.error">
+                <div class="card rounded-xl p-3 border-red-500/30 bg-red-500/5">
+                  <p class="text-red-400 text-sm">❌ <span x-text="aiSearch.result.error"></span></p>
+                  <template x-if="aiSearch.result.raw">
+                    <p class="text-xs muted mt-2 font-mono break-all" x-text="aiSearch.result.raw"></p>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!aiSearch.result.error">
+                <div>
+                  <div class="card rounded-xl p-3 mb-2">
+                    <p class="text-xs muted">🤖 <span x-text="aiSearch.result.explanation || 'Resultado'"></span></p>
+                    <p class="text-sm mt-1"><b x-text="aiSearch.result.total"></b> registro(s)</p>
+                    <details class="mt-2">
+                      <summary class="text-xs muted cursor-pointer">Ver SQL gerado</summary>
+                      <pre class="text-xs mt-2 muted font-mono overflow-x-auto" x-text="aiSearch.result.sql"></pre>
+                    </details>
+                  </div>
+                  <div class="space-y-1">
+                    <template x-for="(row, idx) in aiSearch.result.rows" :key="idx">
+                      <div class="card rounded-lg p-2 text-xs">
+                        <template x-for="(val, key) in row" :key="key">
+                          <div class="flex">
+                            <span class="muted w-1/3 truncate" x-text="key"></span>
+                            <span class="font-mono break-all" x-text="val === null ? '—' : String(val)"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
         </div>
       </template>
 
@@ -785,7 +867,7 @@
           📡<br><span class="text-xs">Equip.</span></button>
         <button @click="setView('chamados')" class="flex-1 py-3 text-center" :class="view === 'chamados' ? 'accent font-semibold' : 'muted'">
           🎫<br><span class="text-xs">Chamados</span></button>
-        <button @click="setView('mais')" class="flex-1 py-3 text-center" :class="['mais','alertas','audit','relatorios','manut','admin','admin_planos','admin_pools','admin_nas','admin_usuarios','admin_apikeys'].includes(view) ? 'accent font-semibold' : 'muted'">
+        <button @click="setView('mais')" class="flex-1 py-3 text-center" :class="['mais','ai_search','alertas','audit','relatorios','manut','admin','admin_planos','admin_pools','admin_nas','admin_usuarios','admin_apikeys'].includes(view) ? 'accent font-semibold' : 'muted'">
           ⚙️<br><span class="text-xs">Mais</span></button>
       </nav>
 
@@ -823,6 +905,9 @@ function miniApp() {
     newNas: { nasname: '', shortname: '', secret: '', mikrotik_user: 'admin', mikrotik_pass: '' },
     newUser: { username: '', senha: '', role: 'admin' },
     newApiKey: { nome: '', created: '' },
+    aiSearch: { q: '', loading: false, result: null },
+    briefing: '',
+    dictating: false,
     toast: { msg: '', type: 'ok', timer: null },
 
     async boot() {
@@ -864,6 +949,7 @@ function miniApp() {
         this.applyHash();
         this.loadDashboard();
         this.loadPlanosCache();
+        this.loadBriefing();
       } catch (e) {
         this.debug.lastError = (e && e.message) || String(e);
         this.state = 'error';
@@ -1122,6 +1208,82 @@ function miniApp() {
                   datasets: [{ label: 'MTTR (min)', data: m.data.data.map(x => x.mttr_min.toFixed(0)), backgroundColor: '#facc15' }] },
           options: { plugins: { legend: { display: false } } }
         });
+      }
+    },
+
+    // ============== IA features (Fases L/M/O) ==============
+    async loadBriefing() {
+      try {
+        const r = await this.fetchAuth('/api/ai/briefing');
+        if (r.ok && r.data.briefing) this.briefing = r.data.briefing;
+      } catch (_) {}
+    },
+
+    async execAiSearch() {
+      const q = this.aiSearch.q.trim();
+      if (!q) return;
+      this.aiSearch.loading = true;
+      this.aiSearch.result = null;
+      try {
+        const r = await this.fetchAuth('/api/ai/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q }),
+        });
+        this.aiSearch.result = r.data;
+      } finally {
+        this.aiSearch.loading = false;
+      }
+    },
+
+    async dictate(targetField) {
+      // Verifica suporte
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        this.showToast('Microfone não suportado neste dispositivo', 'err');
+        return;
+      }
+      if (this.dictating) return;
+      this.dictating = true;
+      try { tg() && tg().HapticFeedback && tg().HapticFeedback.impactOccurred('medium'); } catch (_) {}
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e => chunks.push(e.data);
+        const stopped = new Promise(res => { recorder.onstop = res; });
+        recorder.start();
+        this.showToast('🎙️ Gravando... toque em qualquer lugar pra parar', 'ok');
+
+        // Para após 8 segundos OU ao tocar
+        const stopFn = () => { try { recorder.stop(); stream.getTracks().forEach(t => t.stop()); } catch (_) {} };
+        const timeoutId = setTimeout(stopFn, 8000);
+        document.addEventListener('click', stopFn, { once: true, capture: true });
+        await stopped;
+        clearTimeout(timeoutId);
+
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const fd = new FormData();
+        fd.append('audio', blob, 'audio.webm');
+        const r = await fetch('/api/ai/transcribe', {
+          method: 'POST',
+          headers: { 'X-Telegram-Init-Data': (tg() && tg().initData) || '' },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.text) {
+          // Atualiza o campo. targetField pode ser path tipo "novoCli.cpf"
+          const parts = targetField.split('.');
+          let obj = this;
+          for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
+          obj[parts[parts.length - 1]] = data.text;
+          this.showToast('✓ ' + data.text.substring(0, 50), 'ok');
+        } else {
+          this.showToast(data.error || 'Falha na transcrição', 'err');
+        }
+      } catch (e) {
+        this.showToast('Erro: ' + e.message, 'err');
+      } finally {
+        this.dictating = false;
       }
     },
 

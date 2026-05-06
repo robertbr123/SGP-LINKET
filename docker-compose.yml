@@ -220,6 +220,15 @@ services:
       NOC_AAA_WARN_PCT: ${NOC_AAA_WARN_PCT:-2}
       NOC_AAA_CRIT_PCT: ${NOC_AAA_CRIT_PCT:-8}
       GENIEACS_NBI_URL: ${GENIEACS_NBI_URL:-http://genieacs-nbi:7557}
+      # IA — pra busca natural no painel
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_MODEL: ${AI_MODEL:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_AI_TOKEN: ${CF_AI_TOKEN:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     networks:
       - radius_net
       - wg_net
@@ -332,6 +341,15 @@ services:
       DB_USER: radius
       DB_PASS: ${POSTGRES_PASSWORD:-radiuspassword}
       GENIEACS_NBI_URL: ${GENIEACS_NBI_URL:-http://genieacs-nbi:7557}
+      # IA — mesmas vars do sync (auto-detect provider)
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_MODEL: ${AI_MODEL:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_AI_TOKEN: ${CF_AI_TOKEN:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
       - "5001:5001"
     networks:

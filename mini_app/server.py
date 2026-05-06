@@ -1697,5 +1697,133 @@ def api_admin_apikey_ips(kid):
     return jsonify({"ips": out})
 
 
+# ===========================================================================
+# FASE L/M/O — Recursos avançados de IA
+# ===========================================================================
+
+from ai_features import (
+    ai_search, ai_briefing,
+    transcribe_audio, structure_dictation,
+    generate_release_notes,
+)
+import hmac
+import hashlib as _hashlib
+
+
+@app.route("/api/ai/search", methods=["POST"])
+@require_telegram_auth
+def api_ai_search():
+    body = request.get_json(silent=True) or {}
+    pergunta = (body.get("q") or "").strip()
+    if not pergunta:
+        return jsonify({"error": "campo 'q' obrigatório"}), 400
+    result = ai_search(get_db, pergunta)
+    return jsonify(result)
+
+
+@app.route("/api/ai/briefing")
+@require_telegram_auth
+def api_ai_briefing():
+    from flask import g
+    force = request.args.get("force") == "1"
+    text = ai_briefing(get_db, g.app_user.get("telegram_user_id"), force=force)
+    return jsonify({"briefing": text})
+
+
+@app.route("/api/ai/transcribe", methods=["POST"])
+@require_telegram_auth
+def api_ai_transcribe():
+    """Recebe áudio multipart + lista opcional de campos pra estruturar."""
+    if "audio" not in request.files:
+        return jsonify({"error": "campo 'audio' obrigatório"}), 400
+    audio = request.files["audio"].read()
+    if not audio:
+        return jsonify({"error": "áudio vazio"}), 400
+    fields_json = request.form.get("fields", "")
+    text = transcribe_audio(audio)
+    if not text:
+        return jsonify({"error": "transcrição falhou (verifique OPENAI_API_KEY)"}), 502
+    structured = {}
+    if fields_json:
+        try:
+            fields = json.loads(fields_json)
+            structured = structure_dictation(text, fields)
+        except Exception:
+            pass
+    return jsonify({"text": text, "structured": structured})
+
+
+# ===========================================================================
+# FASE P — Webhook GitHub para release notes
+# ===========================================================================
+
+def _verify_github_signature(payload_bytes, signature_header):
+    """Verifica HMAC-SHA256 do GitHub webhook."""
+    secret = ""
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT valor FROM alertas_config WHERE chave='github_webhook_secret'")
+            row = cur.fetchone()
+            secret = row[0] if row else ""
+        conn.close()
+    except Exception:
+        pass
+    if not secret or not signature_header:
+        return False
+    if not signature_header.startswith("sha256="):
+        return False
+    expected = "sha256=" + hmac.new(
+        secret.encode(), payload_bytes, _hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+@app.route("/api/webhooks/github", methods=["POST"])
+def api_webhook_github():
+    """
+    Recebe push events do GitHub. Sem auth Telegram (vem do GitHub direto).
+    Valida HMAC com 'github_webhook_secret' em alertas_config.
+    """
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    if not _verify_github_signature(request.data, sig):
+        return jsonify({"error": "assinatura inválida"}), 401
+
+    event = request.headers.get("X-GitHub-Event", "")
+    if event != "push":
+        return jsonify({"ignored": True, "event": event})
+
+    payload = request.get_json(silent=True) or {}
+    commits = payload.get("commits", [])
+    pusher = payload.get("pusher", {}).get("name", "?")
+    branch = payload.get("ref", "").replace("refs/heads/", "")
+    repo_name = payload.get("repository", {}).get("name", "?")
+
+    # Ignora pushes pra branches que não main
+    if branch not in ("main", "master"):
+        return jsonify({"ignored": True, "branch": branch})
+
+    # Filtra commits ignorando merges
+    real_commits = [c for c in commits if not c.get("message", "").startswith("Merge")]
+    if not real_commits:
+        return jsonify({"ignored": True, "reason": "só merges"})
+
+    # Gera release note via IA
+    notes = generate_release_notes(real_commits)
+    if not notes or not notes.strip():
+        return jsonify({"ok": True, "ignored": True, "reason": "IA não gerou conteúdo"})
+
+    # Posta no Telegram (sem cooldown — release é único)
+    from notifier import TelegramNotifier
+    notifier = TelegramNotifier(get_db)
+    msg = (
+        f"<b>🚀 Atualização do sistema</b>\n"
+        f"<i>{repo_name} · {pusher} · {len(real_commits)} commit(s)</i>\n\n"
+        f"{notes}"
+    )
+    notifier.send("release_note", msg, severity="info", cooldown=0, force=False)
+    return jsonify({"ok": True, "commits": len(real_commits)})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=False)

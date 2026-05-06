@@ -4330,6 +4330,21 @@ def chamados_lista():
     return render_template("chamados.html", chamados=chamados)
 
 
+@app.route("/api/ai/search", methods=["POST"])
+@login_required
+def web_ai_search():
+    """Busca natural pra usar no painel web. Mesmo módulo do mini_app."""
+    try:
+        from ai_features import ai_search
+    except ImportError:
+        return jsonify({"error": "ai_features indisponível"}), 503
+    body = request.get_json(silent=True) or {}
+    pergunta = (body.get("q") or "").strip()
+    if not pergunta:
+        return jsonify({"error": "campo 'q' obrigatório"}), 400
+    return jsonify(ai_search(get_db, pergunta))
+
+
 @app.route("/api/chamados/<int:chamado_id>/resolver", methods=["POST"])
 @login_required
 def resolver_chamado(chamado_id):

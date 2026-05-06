@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T20:56:29.906Z",
+  "timestamp": "2026-05-06T22:51:14.721Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -18,9 +18,61 @@
   "uncommitted_files": [
     {
       "status": "M",
-      "path": "sync/run_summary.py"
+      "path": ".claude/settings.local.json"
+    },
+    {
+      "status": "M",
+      "path": ".planning/HANDOFF.json"
+    },
+    {
+      "status": "M",
+      "path": "docker-compose.yml"
+    },
+    {
+      "status": "M",
+      "path": "mini_app/Dockerfile"
+    },
+    {
+      "status": "M",
+      "path": "mini_app/server.py"
+    },
+    {
+      "status": "M",
+      "path": "mini_app/static/index.html"
+    },
+    {
+      "status": "M",
+      "path": "sync/notifier.py"
+    },
+    {
+      "status": "M",
+      "path": "sync/summaries.py"
+    },
+    {
+      "status": "M",
+      "path": "web/app.py"
+    },
+    {
+      "status": "??",
+      "path": "mini_app/ai_features.py"
+    },
+    {
+      "status": "??",
+      "path": "mini_app/ai_llm.py"
+    },
+    {
+      "status": "??",
+      "path": "web/ai_features.py"
+    },
+    {
+      "status": "??",
+      "path": "web/ai_llm.py"
+    },
+    {
+      "status": "??",
+      "path": "web/alembic/versions/0003_ai_features.py"
     }
   ],
   "next_action": null,
-  "context_notes": "Recent commits:\n0b24f90 update teste e doc\nc4cffd9 UPDATE NOVAS FEATURES\n762c94b correcao de eirunepe mandado mensagem direto\n3dfd605 update novas fazes\n09599e4 update fase C"
+  "context_notes": "Recent commits:\ne3b5a6b IA\n0b24f90 update teste e doc\nc4cffd9 UPDATE NOVAS FEATURES\n762c94b correcao de eirunepe mandado mensagem direto\n3dfd605 update novas fazes"
 }

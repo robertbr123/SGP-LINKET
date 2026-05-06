@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY auth.py .
 COPY mikrotik.py .
 COPY audit.py .
+COPY ai_llm.py .
+COPY ai_features.py .
 COPY server.py .
 COPY static ./static
 COPY entrypoint.sh /entrypoint.sh
