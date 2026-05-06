@@ -759,9 +759,16 @@ if __name__ == "__main__":
     log.info("Serviço de sync iniciado. Intervalo: %ds | CPE poll: %ds", SYNC_INTERVAL, CPE_POLL_INTERVAL)
     time.sleep(15)
 
+    from health_checks import run_health_checks, heartbeat_sync_start
+
     cpe_last_poll = 0
+    last_cycle_started_at = None
 
     while True:
+        cycle_started_at = time.time()
+        r_global = get_redis()
+        heartbeat_sync_start(r_global)
+
         sync_all()
         try:
             conn = get_db()
@@ -774,7 +781,12 @@ if __name__ == "__main__":
                 check_clientes_sem_conexao(conn)
                 cpe_last_poll = time.time()
 
+            # Health checks de infra (NAS, serviços externos, FreeRADIUS, lag de sync)
+            run_health_checks(conn, r_global, notifier, last_cycle_started_at)
+
             conn.close()
         except Exception as e:
             log.warning("Erro ao checar alertas: %s", e)
+
+        last_cycle_started_at = cycle_started_at
         time.sleep(SYNC_INTERVAL)

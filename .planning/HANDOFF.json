@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T02:18:58.510Z",
+  "timestamp": "2026-05-06T02:50:29.112Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -22,11 +22,7 @@
     },
     {
       "status": "M",
-      "path": "sql/init.sql"
-    },
-    {
-      "status": "M",
-      "path": "sql/migrate.sql"
+      "path": ".planning/HANDOFF.json"
     },
     {
       "status": "M",
@@ -34,25 +30,17 @@
     },
     {
       "status": "M",
-      "path": "sync/sync.py"
+      "path": "sync/requirements.txt"
     },
     {
       "status": "M",
-      "path": "web/app.py"
+      "path": "sync/sync.py"
     },
     {
       "status": "??",
-      "path": ".planning/"
-    },
-    {
-      "status": "??",
-      "path": "sync/notifier.py"
-    },
-    {
-      "status": "??",
-      "path": "web/notifier.py"
+      "path": "sync/health_checks.py"
     }
   ],
   "next_action": null,
-  "context_notes": "Recent commits:\nd66f915 update vlan\n4d25f72 update sinal agora\na0cadff update grafana\ncc15fff update prometheus\ne66d94d GRAFANA NAS"
+  "context_notes": "Recent commits:\n1cc318b update notificacoes telegram\nd66f915 update vlan\n4d25f72 update sinal agora\na0cadff update grafana\ncc15fff update prometheus"
 }
