@@ -44,7 +44,8 @@
       "Bash(bash -n /Users/robertalbino/Documents/GitHub/SGP-LINKET/backup/backup.sh)",
       "Bash(bash -n /Users/robertalbino/Documents/GitHub/SGP-LINKET/backup/entrypoint.sh)",
       "Bash(bash -n /Users/robertalbino/Documents/GitHub/SGP-LINKET/web/entrypoint.sh)",
-      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/ai_summary.py)"
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/ai_summary.py)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/run_summary.py)"
     ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T20:49:16.103Z",
+  "timestamp": "2026-05-06T20:56:29.906Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -18,17 +18,9 @@
   "uncommitted_files": [
     {
       "status": "M",
-      "path": ".planning/HANDOFF.json"
-    },
-    {
-      "status": "??",
-      "path": "docs/BACKUP-RESTORE.md"
-    },
-    {
-      "status": "??",
-      "path": "sync/run_ai_test.py"
+      "path": "sync/run_summary.py"
     }
   ],
   "next_action": null,
-  "context_notes": "Recent commits:\nc4cffd9 UPDATE NOVAS FEATURES\n762c94b correcao de eirunepe mandado mensagem direto\n3dfd605 update novas fazes\n09599e4 update fase C\nd634919 UPDATE 2"
+  "context_notes": "Recent commits:\n0b24f90 update teste e doc\nc4cffd9 UPDATE NOVAS FEATURES\n762c94b correcao de eirunepe mandado mensagem direto\n3dfd605 update novas fazes\n09599e4 update fase C"
 }

@@ -52,9 +52,32 @@ if __name__ == "__main__":
         if tipo == "morning":
             msg = _morning_summary(conn)
             event = "summary_morning"
+            # Anexa análise IA (mesmo comportamento do agendador automático)
+            try:
+                from ai_summary import generate_morning_analysis
+                ai_text = generate_morning_analysis(conn)
+                if ai_text:
+                    msg += ai_text
+                    print("[run_summary] análise IA anexada", file=sys.stderr)
+                else:
+                    print("[run_summary] IA retornou None — sem análise", file=sys.stderr)
+            except ImportError:
+                print("[run_summary] ai_summary indisponível", file=sys.stderr)
+            except Exception as e:
+                print(f"[run_summary] erro IA: {e}", file=sys.stderr)
         elif tipo == "shift":
             msg = _shift_summary(conn)
             event = "summary_shift"
+            try:
+                from ai_summary import generate_shift_analysis
+                ai_text = generate_shift_analysis(conn)
+                if ai_text:
+                    msg += ai_text
+                    print("[run_summary] análise IA anexada", file=sys.stderr)
+                else:
+                    print("[run_summary] IA retornou None — sem análise", file=sys.stderr)
+            except Exception as e:
+                print(f"[run_summary] erro IA: {e}", file=sys.stderr)
         else:
             msg = _heartbeat_message(conn, r)
             event = "summary_heartbeat"
