@@ -302,6 +302,10 @@
 </div>
 
 <script>
+// Acesso direto, sem Alpine Proxy — BackButton/HapticFeedback têm propriedades
+// não-configuráveis que o Proxy reativo do Alpine não consegue interceptar.
+function tg() { return window.Telegram && window.Telegram.WebApp; }
+
 function miniApp() {
   return {
     state: 'loading',
@@ -322,16 +326,15 @@ function miniApp() {
     busca: { q: '', loading: false, resultados: [] },
     cliente: { id: null, data: null },
     toast: { msg: '', type: 'ok', timer: null },
-    tg: null,
 
     async boot() {
       try {
         console.log('[boot] iniciando');
         this.loadingStep = 'verificando Telegram WebApp...';
 
-        this.tg = window.Telegram?.WebApp;
-        this.debug.hasWebApp = !!this.tg;
-        if (!this.tg) {
+        const t = tg();
+        this.debug.hasWebApp = !!t;
+        if (!t) {
           this.state = 'error';
           this.error = {
             title: 'Não está dentro do Telegram',
@@ -341,15 +344,15 @@ function miniApp() {
         }
 
         try {
-          this.tg.ready();
-          this.tg.expand();
+          t.ready();
+          t.expand();
           this.debug.readyDone = true;
         } catch (e) {
           this.debug.lastError = 'tg.ready/expand: ' + e.message;
           throw e;
         }
 
-        const initData = this.tg.initData || '';
+        const initData = t.initData || '';
         this.debug.initDataLen = initData.length;
         this.debug.initDataChecked = true;
         console.log('[boot] initData length:', initData.length);
@@ -447,12 +450,13 @@ function miniApp() {
     },
 
     updateBackButton() {
-      if (!this.tg?.BackButton) return;
+      const bb = tg() && tg().BackButton;
+      if (!bb) return;
       if (this.view === 'cliente') {
-        this.tg.BackButton.show();
-        this.tg.BackButton.onClick(() => this.setView('busca'));
+        bb.show();
+        bb.onClick(() => this.setView('busca'));
       } else {
-        this.tg.BackButton.hide();
+        bb.hide();
       }
     },
 
@@ -461,7 +465,8 @@ function miniApp() {
     },
 
     async fetchAuth(url, opts = {}) {
-      const headers = { 'X-Telegram-Init-Data': this.tg.initData, ...(opts.headers || {}) };
+      const initData = (tg() && tg().initData) || '';
+      const headers = { 'X-Telegram-Init-Data': initData, ...(opts.headers || {}) };
       const res = await fetch(url, { ...opts, headers });
       const data = await res.json().catch(() => ({}));
       return { ok: res.ok, status: res.status, data };
@@ -494,7 +499,7 @@ function miniApp() {
       if (!this.cliente.id) return;
       const ok = await this.confirm(confirmMsg);
       if (!ok) return;
-      this.tg.HapticFeedback?.impactOccurred('medium');
+      try { tg() && tg().HapticFeedback && tg().HapticFeedback.impactOccurred('medium'); } catch (_) {}
       const r = await this.fetchAuth('/api/clientes/' + this.cliente.id + '/' + acao, { method: 'POST' });
       if (r.ok && r.data.ok !== false) {
         this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
@@ -509,7 +514,7 @@ function miniApp() {
       if (!cpe) return;
       const ok = await this.confirm('Reiniciar o CPE deste cliente?');
       if (!ok) return;
-      this.tg.HapticFeedback?.impactOccurred('medium');
+      try { tg() && tg().HapticFeedback && tg().HapticFeedback.impactOccurred('medium'); } catch (_) {}
       const r = await this.fetchAuth('/api/cpe/' + cpe.id + '/' + acao, { method: 'POST' });
       if (r.ok && r.data.ok !== false) {
         this.showToast('✓ ' + (r.data.msg || 'OK'), 'ok');
@@ -520,8 +525,9 @@ function miniApp() {
 
     confirm(msg) {
       return new Promise(resolve => {
-        if (this.tg?.showConfirm) {
-          this.tg.showConfirm(msg, ok => resolve(!!ok));
+        const t = tg();
+        if (t && typeof t.showConfirm === 'function') {
+          t.showConfirm(msg, ok => resolve(!!ok));
         } else {
           resolve(window.confirm(msg));
         }
