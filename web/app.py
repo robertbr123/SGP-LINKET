@@ -431,6 +431,8 @@ def get_redis():
 from notifier import TelegramNotifier
 notifier = TelegramNotifier(get_db, get_redis)
 
+import audit as audit_mod
+
 
 def get_online_users() -> set:
     """Retorna set de pppoe_logins ativos.
@@ -519,7 +521,7 @@ def api_key_required(f):
         conn = get_db()
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT id FROM api_keys WHERE key_hash = %s AND ativo = TRUE",
+                "SELECT id, nome FROM api_keys WHERE key_hash = %s AND ativo = TRUE",
                 (key_hash,),
             )
             found = cur.fetchone()
@@ -532,6 +534,14 @@ def api_key_required(f):
         conn.close()
         if not found:
             return jsonify({"error": "API Key inválida ou inativa"}), 401
+        # Rastreia IP — alerta se for primeira vez (best-effort, não bloqueia request)
+        try:
+            audit_mod.audit_api_key_ip(
+                get_db, notifier, request,
+                api_key_id=found["id"], api_key_nome=found.get("nome"),
+            )
+        except Exception:
+            pass
         return f(*args, **kwargs)
     return decorated
 
@@ -807,8 +817,10 @@ def login():
                 session["usuario_id"] = usuario["id"]
                 session["usuario_username"] = usuario["username"]
                 session["usuario_role"] = usuario["role"]
+                audit_mod.audit_login_ok(get_db, notifier, request, usuario)
                 return redirect(next_url or url_for("index"))
             conn.close()
+        audit_mod.audit_login_fail(get_db, get_redis, notifier, request, username)
         flash("Usuário ou senha inválidos.", "danger")
 
     next_url = request.args.get("next", "")
@@ -1221,6 +1233,13 @@ def excluir_cliente(cliente_id):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM clientes WHERE id = %s", (cliente_id,))
         conn.commit()
+        audit_mod.audit_destrutivo(
+            get_db, notifier, request, session,
+            action="delete_cliente",
+            target_type="cliente", target_id=cliente_id,
+            detail={"nome": cliente["nome"], "cpf": cliente["cpf"],
+                    "pppoe_login": cliente["pppoe_login"]},
+        )
         flash("Cliente removido.", "success")
 
     conn.close()
@@ -1288,10 +1307,18 @@ def gerenciar_planos():
 @login_required
 def excluir_plano(plano_id):
     conn = get_db()
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT nome FROM planos WHERE id=%s", (plano_id,))
+        target = cur.fetchone()
         cur.execute("DELETE FROM planos WHERE id = %s", (plano_id,))
     conn.commit()
     conn.close()
+    audit_mod.audit_destrutivo(
+        get_db, notifier, request, session,
+        action="delete_plano",
+        target_type="plano", target_id=plano_id,
+        detail={"nome": target["nome"] if target else None},
+    )
     flash("Plano removido.", "success")
     return redirect(url_for("gerenciar_planos"))
 
@@ -1349,10 +1376,18 @@ def gerenciar_pools():
 @login_required
 def excluir_pool(pool_id):
     conn = get_db()
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT nome FROM pools WHERE id=%s", (pool_id,))
+        target = cur.fetchone()
         cur.execute("DELETE FROM pools WHERE id = %s", (pool_id,))
     conn.commit()
     conn.close()
+    audit_mod.audit_destrutivo(
+        get_db, notifier, request, session,
+        action="delete_pool",
+        target_type="pool", target_id=pool_id,
+        detail={"nome": target["nome"] if target else None},
+    )
     flash("Pool removido.", "success")
     return redirect(url_for("gerenciar_pools"))
 
@@ -1424,10 +1459,19 @@ def editar_nas(nas_id):
 @login_required
 def excluir_nas(nas_id):
     conn = get_db()
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT nasname, shortname FROM nas WHERE id=%s", (nas_id,))
+        target = cur.fetchone()
         cur.execute("DELETE FROM nas WHERE id = %s", (nas_id,))
     conn.commit()
     conn.close()
+    audit_mod.audit_destrutivo(
+        get_db, notifier, request, session,
+        action="delete_nas",
+        target_type="nas", target_id=nas_id,
+        detail={"nasname": target["nasname"] if target else None,
+                "shortname": target["shortname"] if target else None},
+    )
     flash("NAS removido.", "success")
     return redirect(url_for("gerenciar_nas"))
 
@@ -1987,6 +2031,11 @@ def radius_reapply_all():
         count += 1
 
     conn.close()
+    audit_mod.audit_destrutivo(
+        get_db, notifier, request, session,
+        action="radius_reapply_all",
+        detail={"clientes_afetados": count},
+    )
     flash(f"Atributos RADIUS reaplicados para {count} clientes.", "success")
     return redirect(url_for("index"))
 
@@ -2362,10 +2411,18 @@ def excluir_usuario(usuario_id):
         return redirect(url_for("gerenciar_usuarios"))
 
     conn = get_db()
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT username FROM usuarios WHERE id=%s", (usuario_id,))
+        target = cur.fetchone()
         cur.execute("DELETE FROM usuarios WHERE id = %s", (usuario_id,))
     conn.commit()
     conn.close()
+    audit_mod.audit_destrutivo(
+        get_db, notifier, request, session,
+        action="delete_usuario",
+        target_type="usuario", target_id=usuario_id,
+        detail={"username": target["username"] if target else None},
+    )
     flash("Usuário removido.", "success")
     return redirect(url_for("gerenciar_usuarios"))
 
@@ -2380,10 +2437,19 @@ def alterar_senha(usuario_id):
 
     senha_hash = generate_password_hash(nova_senha)
     conn = get_db()
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT username FROM usuarios WHERE id=%s", (usuario_id,))
+        target = cur.fetchone()
         cur.execute("UPDATE usuarios SET senha_hash = %s WHERE id = %s", (senha_hash, usuario_id))
     conn.commit()
     conn.close()
+    audit_mod.audit_destrutivo(
+        get_db, notifier, request, session,
+        action="change_password",
+        target_type="usuario", target_id=usuario_id,
+        detail={"username": target["username"] if target else None,
+                "self": usuario_id == session.get("usuario_id")},
+    )
     flash("Senha alterada com sucesso.", "success")
     return redirect(url_for("gerenciar_usuarios"))
 
@@ -3264,6 +3330,12 @@ def cpe_reboot(cpe_id):
         return jsonify({"error": "CPE não encontrado"}), 404
     try:
         _genieacs.reboot(cpe["genieacs_id"])
+        audit_mod.audit_destrutivo(
+            get_db, notifier, request, session,
+            action="cpe_reboot",
+            target_type="cpe", target_id=cpe_id,
+            detail={"modelo": cpe.get("modelo"), "serial": cpe.get("serial_number")},
+        )
         return jsonify({"ok": True, "msg": "Reboot enviado ao CPE."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3277,6 +3349,12 @@ def cpe_factory_reset(cpe_id):
         return jsonify({"error": "CPE não encontrado"}), 404
     try:
         _genieacs.factory_reset(cpe["genieacs_id"])
+        audit_mod.audit_destrutivo(
+            get_db, notifier, request, session,
+            action="cpe_factory_reset",
+            target_type="cpe", target_id=cpe_id,
+            detail={"modelo": cpe.get("modelo"), "serial": cpe.get("serial_number")},
+        )
         return jsonify({"ok": True, "msg": "Reset de fábrica enviado."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3848,6 +3926,14 @@ def cliente_coa(cliente_id):
         return jsonify({"error": "Cliente não encontrado"}), 404
 
     login = cliente["pppoe_login"]
+
+    audit_mod.audit_destrutivo(
+        get_db, notifier, request, session,
+        action="coa_disconnect",
+        target_type="cliente", target_id=cliente_id,
+        detail={"nome": cliente.get("nome"), "pppoe_login": login,
+                "coa_action": action, "rate": rate},
+    )
 
     if action == "block":
         # CoA disconnect — força reconexão que vai para IP bloqueado

@@ -265,11 +265,9 @@ def check_nas_health(conn, redis_client, notifier):
             running = str(iface.get("running", "")).lower() in ("true", "yes", "1")
             itype = str(iface.get("type", "") or "")
 
-            # Só alerta para interfaces físicas e VLANs em uplinks. Ignora pppoe-out etc.
-            if itype not in ("ether", "sfp", "sfp-sfpplus", "vlan", "wlan", "bonding", "bridge"):
-                continue
-            # Ignora a bridge "bridge1" se não tiver tráfego (geralmente normal estar oscilando)
-            if itype == "bridge" and not running:
+            # Apenas interfaces físicas reais. VLANs/bridges/wlan reportam
+            # running=false mesmo operacionais (flag lógica do RouterOS).
+            if itype not in ("ether", "sfp", "sfp-sfpplus"):
                 continue
 
             _eval_check(
