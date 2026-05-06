@@ -452,6 +452,75 @@ def check_sync_lag(conn, redis_client, notifier, last_cycle_started_at):
 
 
 # ---------------------------------------------------------------------------
+# 5) Sessões PPPoE zumbi (acctstoptime IS NULL + sem update há horas)
+# ---------------------------------------------------------------------------
+
+def check_pppoe_zombies(conn, redis_client, notifier):
+    """
+    Detecta sessões marcadas como ativas no radacct mas que não recebem
+    accounting-update há mais de N horas. Causas comuns:
+    - MikroTik desconectou o cliente mas o accounting-stop nunca chegou
+    - Cliente reconectou e duplicou sessão (duas entradas, uma órfã)
+    - Falha de rede entre MikroTik e FreeRADIUS no momento do disconnect
+    """
+    horas_limiar = float(_get_cfg(conn, "alertas_pppoe_zumbi_horas", "12"))
+
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    ra.username,
+                    ra.nasipaddress::text AS nas_ip,
+                    EXTRACT(EPOCH FROM (
+                        NOW() - COALESCE(ra.acctupdatetime, ra.acctstarttime)
+                    )) / 3600 AS horas_sem_update,
+                    c.nome AS cliente_nome
+                FROM radacct ra
+                LEFT JOIN clientes c ON c.pppoe_login = ra.username
+                WHERE ra.acctstoptime IS NULL
+                  AND COALESCE(ra.acctupdatetime, ra.acctstarttime) < NOW() - (%s * INTERVAL '1 hour')
+                ORDER BY horas_sem_update DESC
+                LIMIT 50
+            """, (horas_limiar,))
+            zombies = cur.fetchall()
+    except Exception as e:
+        log.warning("zombie check error: %s", e)
+        return
+
+    qtd = len(zombies)
+
+    if qtd == 0:
+        # Auto-resolve: se havia firing, manda "voltou ao normal"
+        notifier.resolve(
+            "pppoe_zombies:summary",
+            msg="<b>✅ Sem sessões PPPoE zumbis</b>",
+        )
+        return
+
+    # Top 5 mais antigas
+    top = zombies[:5]
+    lista = "\n".join(
+        f"• <code>{z['username']}</code> ({z['cliente_nome'] or '?'}) — "
+        f"{float(z['horas_sem_update'] or 0):.0f}h sem update, NAS {z['nas_ip']}"
+        for z in top
+    )
+    extra = f"\n<i>+ {qtd - 5} outras...</i>" if qtd > 5 else ""
+
+    notifier.fire(
+        "pppoe_zombies:summary",
+        (
+            f"<b>⚠️ {qtd} sessão(ões) PPPoE zumbi</b>\n"
+            f"<i>Sem accounting-update há &gt; {horas_limiar:.0f}h:</i>\n"
+            f"{lista}{extra}\n\n"
+            f"<i>Limpe via painel ou rode UPDATE radacct SET acctstoptime=NOW() "
+            f"WHERE acctstoptime IS NULL AND acctupdatetime &lt; NOW() - INTERVAL '{horas_limiar:.0f} hours';</i>"
+        ),
+        severity="warning",
+        cooldown=3600,  # 1 hora
+    )
+
+
+# ---------------------------------------------------------------------------
 # Orquestrador principal
 # ---------------------------------------------------------------------------
 
@@ -471,6 +540,11 @@ def run_health_checks(conn, redis_client, notifier, last_cycle_started_at=None):
         check_freeradius(conn, redis_client, notifier)
     except Exception as e:
         log.warning("check_freeradius error: %s", e)
+
+    try:
+        check_pppoe_zombies(conn, redis_client, notifier)
+    except Exception as e:
+        log.warning("check_pppoe_zombies error: %s", e)
 
     try:
         check_sync_lag(conn, redis_client, notifier, last_cycle_started_at)

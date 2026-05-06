@@ -308,6 +308,27 @@ def sync_all():
                 cliente_notif["pppoe_login"] = pppoe_login
                 send_notifications(conn, cliente_notif, old_status, novo_status)
 
+                # Alerta Telegram (severidade depende da direção da transição)
+                if novo_status == "ativo":
+                    titulo, severity = "🟢 Cliente Reativado", "ok"
+                elif novo_status == "suspenso":
+                    titulo, severity = "🔻 Cliente Suspenso", "warning"
+                else:
+                    titulo, severity = "ℹ️ Status do Cliente Alterado", "info"
+
+                notifier.send(
+                    "status_change",
+                    (
+                        f"<b>{titulo}</b>\n"
+                        f"Nome: {c['nome']}\n"
+                        f"PPPoE: <code>{pppoe_login or '—'}</code>\n"
+                        f"Status: {old_status} → <b>{novo_status}</b>"
+                    ),
+                    dedup_key=f"status_change:{c['id']}:{novo_status}",
+                    severity=severity,
+                    cooldown=900,  # 15 min — evita flapping
+                )
+
         now_iso = datetime.now(timezone.utc).isoformat()
         log.info(
             "Sincronização concluída: %d/%d clientes processados, %d alterados.",

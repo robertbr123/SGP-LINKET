@@ -29,7 +29,8 @@
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/health_checks.py)",
       "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/run_health_check.py)",
       "Bash(docker --version)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(python3 -m py_compile /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/sync.py /Users/robertalbino/Documents/GitHub/SGP-LINKET/sync/health_checks.py)"
     ]
   }
 }
