@@ -23,6 +23,13 @@ from datetime import datetime, timezone
 
 import requests
 import psycopg2.extras
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+try:
+    import librouteros
+    MIKROTIK_AVAILABLE = True
+except ImportError:
+    MIKROTIK_AVAILABLE = False
 
 log = logging.getLogger("bot.commands")
 
@@ -115,7 +122,7 @@ def cmd_status(chat_id, args, ctx):
                   (SELECT COUNT(*) FROM clientes)                            AS total,
                   (SELECT COUNT(*) FROM clientes WHERE status='ativo')       AS ativos,
                   (SELECT COUNT(*) FROM clientes WHERE status='suspenso')    AS suspensos,
-                  (SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL)  AS online,
+                  (SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL)  AS online_radacct,
                   (SELECT COUNT(*) FROM cpe_devices WHERE online=FALSE)      AS cpes_off,
                   (SELECT COUNT(*) FROM chamados WHERE status='aberto')      AS chamados,
                   (SELECT COUNT(*) FROM alert_state WHERE firing=TRUE)       AS firing
@@ -124,10 +131,19 @@ def cmd_status(chat_id, args, ctx):
     finally:
         conn.close()
 
+    # Online real vem do MikroTik (radacct pode estar defasado)
+    sessoes_mt = _online_via_mikrotik(ctx["get_db"])
+    if sessoes_mt is not None:
+        online = len(sessoes_mt)
+        fonte = "MikroTik"
+    else:
+        online = k["online_radacct"]
+        fonte = "radacct"
+
     txt = (
         f"<b>📊 Status — {datetime.now().strftime('%d/%m %H:%M')}</b>\n\n"
         f"<b>Clientes</b>: {k['total']} (ativos: {k['ativos']} · suspensos: {k['suspensos']})\n"
-        f"<b>Online agora</b>: {k['online']}\n"
+        f"<b>Online agora</b>: {online} <i>({fonte})</i>\n"
         f"<b>CPEs offline</b>: {k['cpes_off']}\n"
         f"<b>Chamados abertos</b>: {k['chamados']}\n"
         f"<b>Alertas firing</b>: {k['firing']}"
@@ -215,40 +231,153 @@ def cmd_cliente(chat_id, args, ctx):
 
 
 # ---------------------------------------------------------------------------
-# /online — top 20 sessões
+# /online — top 20 sessões (MikroTik API primário, radacct fallback)
 # ---------------------------------------------------------------------------
 
-def cmd_online(chat_id, args, ctx):
-    conn = ctx["get_db"]()
+def _probe_nas_active(nas):
+    """Retorna lista de sessões PPPoE ativas no NAS via API MikroTik."""
+    try:
+        api = librouteros.connect(
+            host=nas["nasname"],
+            username=nas["mikrotik_user"],
+            password=nas["mikrotik_pass"],
+            port=int(nas.get("mikrotik_port") or 8728),
+            timeout=6,
+        )
+    except Exception as e:
+        log.warning("mt connect %s: %s", nas["nasname"], e)
+        return []
+
+    sessoes = []
+    try:
+        try:
+            ppp = list(api("/ppp/active/print"))
+        except Exception:
+            ppp = []
+        for s in ppp:
+            sessoes.append({
+                "username": s.get("name", ""),
+                "ip":       s.get("address", ""),
+                "uptime":   s.get("uptime", ""),
+                "service":  s.get("service", ""),
+                "caller":   s.get("caller-id", ""),
+                "nas_label": nas.get("shortname") or nas["nasname"],
+            })
+    finally:
+        try: api.close()
+        except Exception: pass
+    return sessoes
+
+
+def _online_via_mikrotik(get_db):
+    """Coleta sessões ativas de TODOS os NAS com credenciais. Paralelo."""
+    if not MIKROTIK_AVAILABLE:
+        return None
+
+    conn = get_db()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT ra.username, ra.framedipaddress::text AS ip,
-                       ra.nasipaddress::text AS nas,
+                SELECT id, nasname, shortname, mikrotik_user, mikrotik_pass, mikrotik_port
+                  FROM nas
+                 WHERE mikrotik_user IS NOT NULL AND mikrotik_pass IS NOT NULL
+                   AND mikrotik_pass != ''
+            """)
+            nas_list = cur.fetchall()
+    finally:
+        conn.close()
+
+    if not nas_list:
+        return None
+
+    sessoes = []
+    with ThreadPoolExecutor(max_workers=min(8, len(nas_list))) as pool:
+        futs = {pool.submit(_probe_nas_active, n): n for n in nas_list}
+        for fut in as_completed(futs, timeout=20):
+            try:
+                sessoes.extend(fut.result() or [])
+            except Exception:
+                pass
+
+    return sessoes
+
+
+def _enrich_with_clients(sessoes, get_db):
+    """Cruza com clientes pra adicionar nome."""
+    if not sessoes:
+        return sessoes
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT pppoe_login, nome FROM clientes WHERE pppoe_login IS NOT NULL")
+            mapa = {r["pppoe_login"]: r["nome"] for r in cur.fetchall()}
+    finally:
+        conn.close()
+    for s in sessoes:
+        s["cliente_nome"] = mapa.get(s["username"], "")
+    return sessoes
+
+
+def _online_via_radacct(get_db):
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT ra.username,
+                       ra.framedipaddress::text AS ip,
+                       ra.nasipaddress::text AS nas_label,
                        ra.acctstarttime,
                        (COALESCE(ra.acctinputoctets,0) + COALESCE(ra.acctoutputoctets,0)) AS traffic,
-                       c.nome
+                       c.nome AS cliente_nome
                   FROM radacct ra
                   LEFT JOIN clientes c ON c.pppoe_login = ra.username
                  WHERE ra.acctstoptime IS NULL
               ORDER BY traffic DESC
-                 LIMIT 20
             """)
-            sessoes = cur.fetchall()
+            return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
 
+
+def cmd_online(chat_id, args, ctx):
+    sessoes = _online_via_mikrotik(ctx["get_db"])
+    fonte = "MikroTik API"
     if not sessoes:
-        send_message(ctx["token"], chat_id, "<i>Nenhuma sessão PPPoE ativa.</i>")
+        sessoes = _online_via_radacct(ctx["get_db"])
+        fonte = "radacct (FreeRADIUS)"
+
+    if not sessoes:
+        send_message(ctx["token"], chat_id,
+                     "<i>Nenhuma sessão PPPoE ativa em nenhum NAS.</i>")
         return
 
-    linhas = [f"<b>🟢 Top {len(sessoes)} sessões ativas (por tráfego)</b>", ""]
-    for s in sessoes:
-        nome = (s.get("nome") or "?")[:25]
-        linhas.append(
-            f"<code>{s['username']}</code> ({nome})\n"
-            f"  IP {s['ip']} · {_fmt_bytes(s['traffic'])}"
-        )
+    sessoes = _enrich_with_clients(sessoes, ctx["get_db"])
+    total = len(sessoes)
+
+    # Ordena: se veio do radacct, por traffic; se veio do MikroTik, por uptime (mais antigos primeiro)
+    if "traffic" in sessoes[0]:
+        sessoes.sort(key=lambda s: s.get("traffic") or 0, reverse=True)
+    top = sessoes[:20]
+
+    linhas = [
+        f"<b>🟢 {total} sessão(ões) PPPoE ativa(s)</b>",
+        f"<i>Fonte: {fonte} · top {len(top)} mostrada(s)</i>",
+        "",
+    ]
+    for s in top:
+        nome = (s.get("cliente_nome") or "?")[:30]
+        if s.get("traffic") is not None:  # radacct
+            linhas.append(
+                f"<code>{s['username']}</code> ({nome})\n"
+                f"  IP {s.get('ip','—')} · {_fmt_bytes(s['traffic'])}"
+            )
+        else:  # MikroTik
+            uptime = s.get("uptime", "")
+            extra = f" · {uptime}" if uptime else ""
+            linhas.append(
+                f"<code>{s['username']}</code> ({nome})\n"
+                f"  IP {s.get('ip','—')} · NAS {s['nas_label']}{extra}"
+            )
     send_message(ctx["token"], chat_id, "\n".join(linhas))
 
 
