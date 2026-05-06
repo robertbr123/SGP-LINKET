@@ -21,7 +21,6 @@ docker compose logs -f sync
 # Últimas 100 linhas de um serviço
 docker compose logs --tail=100 freeradius
 
-# teste bom dia esse e mais um teste
 
 # RADIUS Manager — PPPoE para MikroTik com SGP
 
