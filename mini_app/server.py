@@ -1824,8 +1824,15 @@ def api_webhook_github():
     notes = generate_release_notes(real_commits)
     log.info("webhook github: IA gerou %d chars", len(notes or ""))
 
-    # Fallback: se IA achou irrelevante, manda mensagem técnica mínima
-    if not notes or not notes.strip():
+    # Detecta conteúdo "efetivamente vazio" (tags HTML sem texto, espaços, pontuação)
+    import re as _re
+    plain_text = _re.sub(r'<[^>]+>', '', notes or '').strip()
+    plain_text = _re.sub(r'[\s\.\,\;\:\-\—]+', '', plain_text)  # remove pontuação/espaços
+    has_content = len(plain_text) >= 10  # 10 chars úteis = mínimo razoável
+
+    # Fallback: se IA achou irrelevante OU veio texto curto demais
+    if not has_content:
+        log.info("webhook github: IA retornou conteúdo curto demais (%d chars úteis), usando fallback", len(plain_text))
         notes = (
             f"<i>Sem mudanças de impacto direto pro cliente final.</i>\n\n"
             f"<b>Commits:</b>\n{commit_list}"
