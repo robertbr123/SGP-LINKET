@@ -32,10 +32,12 @@ alembic upgrade head || echo "[entrypoint] WARN: alembic upgrade head falhou (co
 exec gunicorn \
     --bind 0.0.0.0:5000 \
     --worker-class gevent \
-    --workers 2 \
-    --worker-connections 100 \
+    --workers 4 \
+    --worker-connections 1000 \
     --timeout 120 \
+    --graceful-timeout 30 \
+    --keep-alive 5 \
     --access-logfile - \
     --error-logfile - \
-    --log-level debug \
+    --log-level info \
     app:app
