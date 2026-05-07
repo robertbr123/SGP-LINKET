@@ -251,25 +251,30 @@ class TelegramNotifier:
         conn = self._db()
         try:
             if not force and not self._enabled(conn):
+                log.warning("notifier: NÃO ENVIADO (telegram_enabled=false) event=%s", event_type)
                 return False
             if not force and self._in_maintenance(conn, dedup_key, event_type):
-                log.info("notifier: suprimido por manutenção (%s)", event_type)
+                log.warning("notifier: NÃO ENVIADO (manutenção ativa) event=%s", event_type)
                 return False
             if not force and self._cooldown_active(dedup_key, cooldown):
-                log.info("notifier: suprimido por cooldown (%s)", dedup_key or event_type)
+                log.warning("notifier: NÃO ENVIADO (cooldown ativo) event=%s key=%s", event_type, dedup_key)
                 return False
             # Zelador noturno (Fase N) — IA decide acordar ou deferir
             if not force and self._should_defer_night(conn, severity, event_type, msg):
                 self._mark_deferred(conn, dedup_key, event_type, severity, msg)
-                log.info("notifier: DEFERRED pelo zelador noturno (%s)", dedup_key or event_type)
+                log.warning("notifier: NÃO ENVIADO (DEFERRED zelador noturno) event=%s", event_type)
                 return False
 
             token, chat_id = self._credentials(conn)
             if not token or not chat_id:
+                log.warning("notifier: NÃO ENVIADO (credenciais vazias) token=%s chat_id=%s",
+                            "OK" if token else "VAZIO", "OK" if chat_id else "VAZIO")
                 return False
 
             text = self._format(severity, msg)
             ok = self._send_http(token, chat_id, text)
+            if not ok:
+                log.warning("notifier: NÃO ENVIADO (Telegram API falhou) event=%s", event_type)
             if ok and dedup_key:
                 self._record_state(conn, dedup_key, event_type, severity, True, msg)
             return ok
