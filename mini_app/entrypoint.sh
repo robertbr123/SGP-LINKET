@@ -10,8 +10,11 @@ fi
 
 exec gunicorn \
     --bind 0.0.0.0:5001 \
+    --worker-class gthread \
     --workers 2 \
-    --timeout 30 \
+    --threads 8 \
+    --timeout 60 \
+    --graceful-timeout 30 \
     --access-logfile - \
     --error-logfile - \
     server:app
