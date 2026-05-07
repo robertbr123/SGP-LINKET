@@ -401,3 +401,349 @@ def generate_release_notes(commits):
     prompt = f"Commits do push:\n{msgs}"
     text = _call_llm(RELEASE_SYSTEM, prompt, max_tokens=250)
     return text or ""
+
+
+# ===========================================================================
+# Fase Q — Diagnóstico cliente + Resumo dashboard
+# ===========================================================================
+
+DIAG_SYSTEM = (
+    "Você é um analista nível 2 de suporte de ISP. Receberá os dados completos de um cliente "
+    "(status, sessão atual, CPE, histórico de eventos, alertas relacionados). "
+    "Sua tarefa: dar um PARECER CURTO (máximo 6 linhas) em português, com:\n"
+    "1) Estado real do cliente (1 linha)\n"
+    "2) Causa provável de qualquer problema detectado (1-2 linhas)\n"
+    "3) AÇÃO SUGERIDA concreta — pode ser técnica (visita, reboot, troca de pigtail) "
+    "ou administrativa (cobrar pagamento). Se nada errado, diga 'tudo normal'.\n"
+    "Tom: direto, sem floreios. Use HTML do Telegram: <b>, <i>. Sem markdown."
+)
+
+
+def ai_diagnose_client(get_db, cliente_id):
+    """Coleta tudo sobre o cliente e devolve parecer da IA."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT c.*, p.nome AS plano_nome
+                  FROM clientes c LEFT JOIN planos p ON p.id = c.plano_id
+                 WHERE c.id = %s
+            """, (cliente_id,))
+            cli = cur.fetchone()
+            if not cli:
+                return {"error": "cliente não encontrado"}
+
+            cur.execute("""
+                SELECT acctstarttime, acctstoptime, acctsessiontime,
+                       acctinputoctets, acctoutputoctets,
+                       framedipaddress::text AS ip, nasipaddress::text AS nas,
+                       acctterminatecause
+                  FROM radacct
+                 WHERE username = %s
+              ORDER BY acctstarttime DESC LIMIT 5
+            """, (cli["pppoe_login"],))
+            sessoes = cur.fetchall()
+
+            cur.execute("""
+                SELECT id, modelo, fabricante, online, rx_power, ip_wan, ultima_conexao
+                  FROM cpe_devices WHERE cliente_id = %s LIMIT 1
+            """, (cliente_id,))
+            cpe = cur.fetchone()
+
+            cpe_eventos = []
+            if cpe:
+                cur.execute("""
+                    SELECT event_type, detail, criado_em
+                      FROM cpe_events WHERE cpe_id = %s
+                  ORDER BY criado_em DESC LIMIT 10
+                """, (cpe["id"],))
+                cpe_eventos = cur.fetchall()
+
+            cur.execute("""
+                SELECT tipo, status, descricao, criado_em
+                  FROM chamados WHERE cliente_id = %s
+              ORDER BY criado_em DESC LIMIT 5
+            """, (cliente_id,))
+            chamados_hist = cur.fetchall()
+    finally:
+        conn.close()
+
+    contexto = {
+        "cliente": {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(cli).items()},
+        "sessoes_recentes": [
+            {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(s).items()}
+            for s in sessoes
+        ],
+        "cpe": {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(cpe).items()} if cpe else None,
+        "cpe_eventos_recentes": [
+            {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(e).items()}
+            for e in cpe_eventos
+        ],
+        "chamados_recentes": [
+            {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(ch).items()}
+            for ch in chamados_hist
+        ],
+    }
+
+    prompt = (
+        "Analise este cliente:\n```json\n"
+        + json.dumps(contexto, ensure_ascii=False, indent=2, default=str)
+        + "\n```"
+    )
+    text = _call_llm(DIAG_SYSTEM, prompt, max_tokens=400)
+    return {"parecer": text or "IA não respondeu", "contexto_enviado": True}
+
+
+DASHBOARD_SUMMARY_SYSTEM = (
+    "Você é um operador de NOC sintetizando o estado de um ISP em UMA frase. "
+    "Máximo 25 palavras. Foque no que IMPORTA agora. "
+    "Se tudo normal, diga isso. Se tem coisa pra atenção, destaque. "
+    "Use 1 emoji no início. Sem HTML."
+)
+
+
+def ai_dashboard_summary(get_db):
+    """Resumo de 1 frase pro topo do dashboard."""
+    try:
+        conn = get_db()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                  (SELECT COUNT(*) FROM clientes) AS total,
+                  (SELECT COUNT(*) FROM clientes WHERE status='suspenso') AS suspensos,
+                  (SELECT COUNT(*) FROM cpe_devices WHERE online=FALSE) AS cpes_off,
+                  (SELECT COUNT(*) FROM chamados WHERE status='aberto') AS chamados,
+                  (SELECT COUNT(*) FROM alert_state WHERE firing=TRUE) AS firing,
+                  (SELECT COUNT(*) FROM consumo_anomalias WHERE ignorado=FALSE
+                     AND detectado_em > NOW() - INTERVAL '24 hours') AS anomalias
+            """)
+            kpis = dict(cur.fetchone())
+        conn.close()
+    except Exception:
+        return None
+
+    prompt = f"Estado agora:\n```json\n{json.dumps(kpis, indent=2)}\n```"
+    return _call_llm(DASHBOARD_SUMMARY_SYSTEM, prompt, max_tokens=80)
+
+
+# ===========================================================================
+# Fase R — Chamados (sugestão + classificação)
+# ===========================================================================
+
+CHAMADO_SUGGEST_SYSTEM = (
+    "Você é um técnico sênior de ISP. Receberá um chamado novo. "
+    "Devolva sugestão CURTA de resolução (máximo 4 linhas):\n"
+    "1) Causa provável (1 linha)\n"
+    "2) Passos pra resolver, ordenados (3 passos no máximo)\n"
+    "Se houver chamados similares já resolvidos, considere o que funcionou neles. "
+    "Use HTML do Telegram: <b>, <i>. Sem markdown. Tom: direto, prático."
+)
+
+
+def ai_suggest_chamado_fix(get_db, chamado_id):
+    """Sugere resolução pra um chamado específico baseado em histórico similar."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT ch.*, c.nome AS cliente_nome, c.pppoe_login,
+                       cpe.modelo, cpe.fabricante, cpe.online AS cpe_online,
+                       cpe.rx_power
+                  FROM chamados ch
+                  LEFT JOIN clientes c ON c.id = ch.cliente_id
+                  LEFT JOIN cpe_devices cpe ON cpe.id = ch.cpe_id
+                 WHERE ch.id = %s
+            """, (chamado_id,))
+            ch = cur.fetchone()
+            if not ch:
+                return {"error": "chamado não encontrado"}
+
+            # Busca chamados similares JÁ RESOLVIDOS (mesmo tipo)
+            cur.execute("""
+                SELECT descricao, EXTRACT(EPOCH FROM (resolvido_em - criado_em))/60 AS mttr_min
+                  FROM chamados
+                 WHERE tipo = %s AND status = 'resolvido'
+              ORDER BY resolvido_em DESC LIMIT 5
+            """, (ch["tipo"],))
+            similares = cur.fetchall()
+    finally:
+        conn.close()
+
+    contexto = {
+        "chamado_atual": {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(ch).items()},
+        "chamados_similares_resolvidos": [
+            {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(s).items()}
+            for s in similares
+        ],
+    }
+    prompt = "Chamado:\n```json\n" + json.dumps(contexto, ensure_ascii=False, indent=2, default=str) + "\n```"
+    text = _call_llm(CHAMADO_SUGGEST_SYSTEM, prompt, max_tokens=300)
+    return {"sugestao": text or "IA não respondeu"}
+
+
+CHAMADO_CLASSIFY_SYSTEM = (
+    "Você é um classificador de chamados de ISP. Receberá descrição + tipo de um chamado. "
+    "Devolva APENAS uma das categorias (1 palavra, lowercase):\n"
+    "- falha-fibra (problemas de sinal óptico, queda fibra, drop)\n"
+    "- equip-cliente (CPE travado, roteador defeituoso, cabo solto na casa)\n"
+    "- config-mikrotik (problema de NAS, routing, autenticação)\n"
+    "- inadimplencia (pagamento atrasado, suspensão)\n"
+    "- demanda-cliente (mudança de plano, cancelamento, pedido de visita)\n"
+    "- outros\n"
+    "Responda SÓ a categoria, sem texto extra, sem aspas."
+)
+
+
+VALID_CATEGORIES = {
+    "falha-fibra", "equip-cliente", "config-mikrotik",
+    "inadimplencia", "demanda-cliente", "outros"
+}
+
+
+def ai_classify_chamado(get_db, chamado_id, persist=True):
+    """Classifica um chamado em categoria pré-definida."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, tipo, descricao, ai_categoria
+                  FROM chamados WHERE id = %s
+            """, (chamado_id,))
+            ch = cur.fetchone()
+            if not ch:
+                return None
+            if ch["ai_categoria"]:
+                return ch["ai_categoria"]  # já classificado
+    finally:
+        conn.close()
+
+    prompt = f"Tipo: {ch['tipo']}\nDescrição: {ch['descricao']}"
+    raw = _call_llm(CHAMADO_CLASSIFY_SYSTEM, prompt, max_tokens=20)
+    if not raw:
+        return None
+    cat = raw.strip().lower().split()[0] if raw.strip() else "outros"
+    if cat not in VALID_CATEGORIES:
+        cat = "outros"
+
+    if persist:
+        try:
+            conn = get_db()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE chamados
+                       SET ai_categoria = %s, ai_classificado_em = NOW()
+                     WHERE id = %s
+                """, (cat, chamado_id))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            log.warning("classify persist failed: %s", e)
+    return cat
+
+
+# ===========================================================================
+# Fase S — Detecção de anomalia de consumo (sem IA, matemática pura)
+# ===========================================================================
+
+def detect_consumo_anomalies(get_db):
+    """
+    Pra cada cliente com pppoe_login:
+    - Calcula GB consumidos nos últimos 7 dias
+    - Calcula média e stddev nos 30 dias anteriores (excluindo os últimos 7)
+    - Se z-score > limiar configurado, registra em consumo_anomalias.
+
+    Roda no sync.py 1x/dia (junto com resumos).
+    Retorna lista de anomalias detectadas nesta execução.
+    """
+    detectadas = []
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT valor FROM alertas_config WHERE chave='anomalia_zscore_min'")
+            row = cur.fetchone()
+            zscore_min = float(row[0]) if row else 3.0
+            cur.execute("SELECT valor FROM alertas_config WHERE chave='anomalia_consumo_min_gb'")
+            row = cur.fetchone()
+            consumo_min = float(row[0]) if row else 20.0
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                WITH consumo_7d AS (
+                    SELECT username,
+                           SUM(COALESCE(acctinputoctets,0)+COALESCE(acctoutputoctets,0))/1073741824.0 AS gb
+                      FROM radacct
+                     WHERE COALESCE(acctupdatetime, acctstarttime) > NOW() - INTERVAL '7 days'
+                  GROUP BY username
+                ),
+                consumo_baseline AS (
+                    SELECT username,
+                           AVG(daily_gb) AS media,
+                           STDDEV(daily_gb) AS stdv
+                      FROM (
+                          SELECT username,
+                                 date_trunc('day', COALESCE(acctupdatetime, acctstarttime)) AS dia,
+                                 SUM(COALESCE(acctinputoctets,0)+COALESCE(acctoutputoctets,0))/1073741824.0 AS daily_gb
+                            FROM radacct
+                           WHERE COALESCE(acctupdatetime, acctstarttime)
+                                 BETWEEN NOW() - INTERVAL '37 days' AND NOW() - INTERVAL '7 days'
+                        GROUP BY username, dia
+                      ) t
+                  GROUP BY username
+                  HAVING COUNT(*) >= 7
+                )
+                SELECT c.id AS cliente_id, c.nome, c.pppoe_login,
+                       c7.gb AS atual_gb,
+                       cb.media * 7 AS esperado_7d,  -- baseline diária * 7
+                       cb.stdv * SQRT(7) AS sigma_7d,
+                       CASE WHEN cb.stdv > 0
+                            THEN (c7.gb - cb.media * 7) / (cb.stdv * SQRT(7))
+                            ELSE 0
+                       END AS zscore
+                  FROM consumo_7d c7
+                  JOIN consumo_baseline cb ON cb.username = c7.username
+                  JOIN clientes c ON c.pppoe_login = c7.username
+                 WHERE c7.gb > %s
+                   AND cb.media > 0
+                   AND (c7.gb - cb.media * 7) / (cb.stdv * SQRT(7)) > %s
+              ORDER BY zscore DESC
+                 LIMIT 50
+            """, (consumo_min, zscore_min))
+            rows = cur.fetchall()
+
+        for r in rows:
+            zscore = float(r["zscore"] or 0)
+            severidade = "critical" if zscore > 5 else "warning"
+            with conn.cursor() as cur:
+                # Evita duplicar — só insere se não houve detecção recente do mesmo cliente
+                cur.execute("""
+                    INSERT INTO consumo_anomalias
+                        (cliente_id, consumo_atual_gb, media_30d_gb, stddev_gb, zscore, severidade)
+                    SELECT %s, %s, %s, %s, %s, %s
+                     WHERE NOT EXISTS (
+                         SELECT 1 FROM consumo_anomalias
+                          WHERE cliente_id = %s
+                            AND ignorado = FALSE
+                            AND detectado_em > NOW() - INTERVAL '7 days'
+                     )
+                    RETURNING id
+                """, (
+                    r["cliente_id"], r["atual_gb"], r["esperado_7d"],
+                    r["sigma_7d"], zscore, severidade,
+                    r["cliente_id"],
+                ))
+                inserted = cur.fetchone()
+                if inserted:
+                    detectadas.append({
+                        "cliente_id": r["cliente_id"],
+                        "nome": r["nome"],
+                        "pppoe_login": r["pppoe_login"],
+                        "atual_gb": float(r["atual_gb"]),
+                        "esperado_gb": float(r["esperado_7d"]),
+                        "zscore": zscore,
+                        "severidade": severidade,
+                    })
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("detect anomalies error: %s", e)
+    return detectadas

@@ -45,6 +45,19 @@
 {% endblock %}
 
 {% block content %}
+<!-- Resumo executivo IA -->
+<div id="aiSummaryCard" class="card border-0 mb-3" style="display:none; background: linear-gradient(135deg, #eff6ff, #f3e8ff); border-left: 4px solid #2563eb !important;">
+    <div class="card-body py-3">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-stars text-primary fs-5"></i>
+            <span id="aiSummaryText" class="text-dark">Carregando análise...</span>
+            <button class="btn btn-sm btn-link ms-auto" onclick="loadAiSummary()" title="Atualizar">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Stats Cards -->
 <div class="row g-3 mb-4">
     <div class="col-xl-2 col-md-4 col-sm-6">
@@ -299,6 +312,19 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
+// Resumo IA
+async function loadAiSummary() {
+    try {
+        const r = await fetch('/api/ai/dashboard-summary');
+        const data = await r.json();
+        if (data.summary) {
+            document.getElementById('aiSummaryText').textContent = data.summary;
+            document.getElementById('aiSummaryCard').style.display = 'block';
+        }
+    } catch (e) { console.warn('ai summary error', e); }
+}
+loadAiSummary();
+
 // Gráfico 24h
 (async function() {
     try {

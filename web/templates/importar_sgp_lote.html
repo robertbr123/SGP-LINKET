@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Importar SGP em Lote{% endblock %}
+{% block page_title %}Importar do SGP em Lote{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Importar SGP</li>{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        Faça upload de um <strong>CSV com 1 CPF por linha</strong>. O sistema vai consultar o SGP
+        e criar/atualizar cada cliente automaticamente. Limite: 500 CPFs por importação.
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Arquivo CSV</label>
+                <input type="file" name="arquivo" accept=".csv,.txt" class="form-control" required>
+                <div class="form-text">1 CPF por linha. Formatos aceitos: <code>123.456.789-00</code> ou <code>12345678900</code></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Plano default</label>
+                <select name="plano_default_id" class="form-select" required>
+                    <option value="">Selecione...</option>
+                    {% for p in planos %}
+                    <option value="{{ p.id }}">{{ p.nome }} ({{ p.velocidade_down }}↓ / {{ p.velocidade_up }}↑ Mbps)</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Aplicado a todos os clientes novos. Edite individualmente depois se precisar.</div>
+            </div>
+            <button class="btn btn-primary">
+                <i class="bi bi-upload"></i> Iniciar Importação
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}{% endblock %}

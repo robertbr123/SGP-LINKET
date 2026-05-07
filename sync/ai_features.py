@@ -12,7 +12,11 @@ import requests
 import psycopg2.extras
 from datetime import datetime, date
 
-from ai_llm import _detect_provider, _call_llm, SYSTEM_PROMPT as _DEFAULT_PROMPT
+try:
+    from ai_llm import _detect_provider, _call_llm, SYSTEM_PROMPT as _DEFAULT_PROMPT
+except ImportError:
+    # No container sync, o módulo equivalente chama-se ai_summary.py
+    from ai_summary import _detect_provider, _call_llm, SYSTEM_PROMPT as _DEFAULT_PROMPT
 
 log = logging.getLogger("ai_features")
 

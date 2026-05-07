@@ -72,12 +72,21 @@ body,.main-content { background: var(--sg-bg) !important; color: var(--text); }
                 &nbsp;·&nbsp; {{ cliente.velocidade_down }}↓ / {{ cliente.velocidade_up }}↑ Mbps
             </div>
         </div>
-        <div style="margin-left:auto">
+        <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+            <button onclick="aiDiagnose()" class="btn btn-primary btn-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);border:0">
+                <i class="bi bi-stars"></i> 🤖 Diagnosticar
+            </button>
             <a href="{{ url_for('editar_cliente', cliente_id=cliente.id) }}"
                style="color:var(--sg-blue);font-size:.8rem;font-weight:700;text-decoration:none">
                 <i class="bi bi-pencil"></i> Editar cliente
             </a>
         </div>
+    </div>
+
+    <!-- AI Diagnose result -->
+    <div id="aiDiagCard" class="sg-card mb-3" style="display:none;background:linear-gradient(135deg,#eff6ff,#f3e8ff);border-left:4px solid #2563eb">
+        <div class="sg-label">🤖 Parecer IA</div>
+        <div id="aiDiagText" style="margin-top:8px;font-size:.92rem;line-height:1.5"></div>
     </div>
 
     <!-- CoA Actions -->
@@ -215,6 +224,21 @@ body,.main-content { background: var(--sg-bg) !important; color: var(--text); }
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 const CLIENTE_ID = {{ cliente.id }};
+
+async function aiDiagnose() {
+    const card = document.getElementById('aiDiagCard');
+    const text = document.getElementById('aiDiagText');
+    card.style.display = 'block';
+    text.innerHTML = '<i class="bi bi-stars"></i> Analisando dados completos do cliente...';
+    try {
+        const r = await fetch(`/api/ai/diagnose/${CLIENTE_ID}`, { method: 'POST' });
+        const data = await r.json();
+        if (data.error) text.innerHTML = '⚠️ ' + data.error;
+        else text.innerHTML = data.parecer.replace(/\n/g, '<br>');
+    } catch (e) {
+        text.innerHTML = '❌ ' + e.message;
+    }
+}
 
 // Gráfico
 const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';

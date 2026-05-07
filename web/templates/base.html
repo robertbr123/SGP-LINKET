@@ -373,6 +373,12 @@
         <a href="{{ url_for('chamados_lista') }}" class="{{ 'active' if request.endpoint == 'chamados_lista' }}">
             <i class="bi bi-ticket-detailed-fill"></i> Chamados
         </a>
+        <a href="{{ url_for('anomalias_consumo_lista') }}" class="{{ 'active' if request.endpoint == 'anomalias_consumo_lista' }}">
+            <i class="bi bi-shield-exclamation"></i> Anomalias 🤖
+        </a>
+        <a href="{{ url_for('importar_sgp_lote') }}" class="{{ 'active' if request.endpoint == 'importar_sgp_lote' }}">
+            <i class="bi bi-cloud-arrow-down-fill"></i> Importar SGP
+        </a>
 
         <div class="nav-label">Sistema</div>
         <a href="{{ url_for('gerenciar_usuarios') }}" class="{{ 'active' if request.endpoint == 'gerenciar_usuarios' }}">
@@ -477,6 +483,130 @@
         {% endfor %}
     {% endwith %}
 </div>
+
+<!-- ============ Floating IA Search ============ -->
+<style>
+.ai-fab {
+    position: fixed; bottom: 24px; right: 24px; z-index: 1050;
+    width: 60px; height: 60px; border-radius: 50%; border: none;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: white; font-size: 26px;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, .4);
+    cursor: pointer; transition: transform .2s;
+}
+.ai-fab:hover { transform: scale(1.05); box-shadow: 0 10px 30px rgba(37, 99, 235, .5); }
+.ai-fab:active { transform: scale(0.95); }
+#aiSearchModal .modal-dialog { max-width: 700px; }
+.ai-result-card {
+    background: #f8fafc; border-radius: 8px; padding: 8px 12px;
+    margin-bottom: 6px; font-size: 13px;
+}
+.ai-result-card .key { color: #64748b; min-width: 100px; display: inline-block; }
+.ai-sql-pre { font-size: 11px; color: #64748b; background: #f1f5f9;
+    padding: 8px; border-radius: 6px; overflow-x: auto; }
+.ai-typing::after { content: '▋'; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+
+<button class="ai-fab" onclick="openAiSearch()" title="Pergunte qualquer coisa (Ctrl+K)">
+    <i class="bi bi-stars"></i>
+</button>
+
+<div class="modal fade" id="aiSearchModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">🤖 Pergunte qualquer coisa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group input-group-lg">
+          <input type="text" id="aiSearchInput" class="form-control"
+                 placeholder="ex: clientes suspensos há mais de 30 dias">
+          <button class="btn btn-primary" onclick="execAiSearch()" id="aiSearchBtn">
+            <i class="bi bi-arrow-right"></i>
+          </button>
+        </div>
+        <div class="text-muted small mt-2">
+          Exemplos:
+          <a href="#" onclick="aiExample('clientes suspensos'); return false">clientes suspensos</a> ·
+          <a href="#" onclick="aiExample('CPEs offline'); return false">CPEs offline</a> ·
+          <a href="#" onclick="aiExample('chamados abertos hoje'); return false">chamados abertos hoje</a> ·
+          <a href="#" onclick="aiExample('alertas firing'); return false">alertas firing</a>
+        </div>
+        <div id="aiSearchResult" class="mt-3" style="max-height: 60vh; overflow-y: auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openAiSearch() {
+    new bootstrap.Modal(document.getElementById('aiSearchModal')).show();
+    setTimeout(() => document.getElementById('aiSearchInput').focus(), 300);
+}
+function aiExample(q) {
+    document.getElementById('aiSearchInput').value = q;
+    execAiSearch();
+}
+async function execAiSearch() {
+    const input = document.getElementById('aiSearchInput');
+    const btn = document.getElementById('aiSearchBtn');
+    const result = document.getElementById('aiSearchResult');
+    const q = input.value.trim();
+    if (!q) return;
+    btn.disabled = true;
+    result.innerHTML = '<div class="text-center text-muted"><i class="bi bi-stars ai-typing"></i> Pensando...</div>';
+    try {
+        const r = await fetch('/api/ai/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q }),
+        });
+        const data = await r.json();
+        renderAiResult(data);
+    } catch (e) {
+        result.innerHTML = '<div class="alert alert-danger">' + e.message + '</div>';
+    } finally {
+        btn.disabled = false;
+    }
+}
+function renderAiResult(data) {
+    const result = document.getElementById('aiSearchResult');
+    if (data.error) {
+        result.innerHTML = `<div class="alert alert-warning">❌ ${data.error}</div>`;
+        if (data.raw) result.innerHTML += `<pre class="ai-sql-pre">${data.raw}</pre>`;
+        return;
+    }
+    let html = `<div class="alert alert-info">🤖 ${data.explanation || 'Resultado'} — <b>${data.total}</b> registro(s)</div>`;
+    html += `<details class="mb-3"><summary class="small text-muted">Ver SQL gerado</summary><pre class="ai-sql-pre">${data.sql}</pre></details>`;
+    if (data.rows && data.rows.length > 0) {
+        for (const row of data.rows) {
+            html += '<div class="ai-result-card">';
+            for (const [k, v] of Object.entries(row)) {
+                html += `<div><span class="key">${k}:</span> <span>${v === null ? '—' : String(v)}</span></div>`;
+            }
+            html += '</div>';
+        }
+    }
+    result.innerHTML = html;
+}
+
+// Atalho Ctrl+K (ou Cmd+K no Mac)
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        openAiSearch();
+    }
+});
+// Enter no input dispara busca
+document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('aiSearchInput');
+    if (inp) inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') execAiSearch();
+    });
+});
+</script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>

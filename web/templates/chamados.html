@@ -74,11 +74,22 @@
             </td>
             <td>
                 {% if ch.status == 'aberto' %}
-                <button class="btn btn-outline-success btn-sm"
-                        onclick="resolver({{ ch.id }})">
+                <button class="btn btn-outline-primary btn-sm" onclick="aiSugest({{ ch.id }})" title="Sugestão IA">
+                    <i class="bi bi-stars"></i>
+                </button>
+                <button class="btn btn-outline-success btn-sm" onclick="resolver({{ ch.id }})">
                     <i class="bi bi-check2"></i> Resolver
                 </button>
                 {% endif %}
+                {% if ch.ai_categoria %}
+                <span class="badge bg-info text-dark">{{ ch.ai_categoria }}</span>
+                {% endif %}
+            </td>
+        </tr>
+        <tr id="ai-row-{{ ch.id }}" style="display:none">
+            <td colspan="9" style="background:linear-gradient(135deg,#eff6ff,#f3e8ff);border-left:4px solid #2563eb;padding:14px">
+                <div style="font-weight:600;margin-bottom:6px"><i class="bi bi-stars text-primary"></i> Sugestão IA pra chamado #{{ ch.id }}</div>
+                <div id="ai-text-{{ ch.id }}" style="font-size:.9rem"></div>
             </td>
         </tr>
         {% endfor %}
@@ -103,7 +114,24 @@ async function resolver(id) {
     if (d.ok) {
         const row = document.getElementById('row-' + id);
         row.querySelector('td:nth-child(2)').innerHTML = '<span class="badge bg-success">Resolvido</span>';
-        row.querySelector('button')?.remove();
+        row.querySelector('button.btn-outline-success')?.remove();
+    }
+}
+
+async function aiSugest(id) {
+    const aiRow = document.getElementById('ai-row-' + id);
+    const aiText = document.getElementById('ai-text-' + id);
+    aiRow.style.display = '';
+    aiText.innerHTML = '<i class="bi bi-stars"></i> Pensando + classificando...';
+    try {
+        // Dispara classificação em paralelo (best-effort)
+        fetch(`/api/ai/chamado/${id}/classificar`, {method:'POST'}).catch(()=>{});
+        const r = await fetch(`/api/ai/chamado/${id}/sugestao`, {method:'POST'});
+        const d = await r.json();
+        if (d.error) aiText.innerHTML = '⚠️ ' + d.error;
+        else aiText.innerHTML = (d.sugestao || '(vazio)').replace(/\n/g, '<br>');
+    } catch (e) {
+        aiText.innerHTML = '❌ ' + e.message;
     }
 }
 </script>

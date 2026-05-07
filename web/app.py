@@ -4345,6 +4345,224 @@ def web_ai_search():
     return jsonify(ai_search(get_db, pergunta))
 
 
+@app.route("/api/ai/diagnose/<int:cliente_id>", methods=["POST"])
+@login_required
+def web_ai_diagnose(cliente_id):
+    try:
+        from ai_features import ai_diagnose_client
+    except ImportError:
+        return jsonify({"error": "ai_features indisponível"}), 503
+    return jsonify(ai_diagnose_client(get_db, cliente_id))
+
+
+@app.route("/api/ai/dashboard-summary")
+@login_required
+def web_ai_dashboard_summary():
+    try:
+        from ai_features import ai_dashboard_summary
+    except ImportError:
+        return jsonify({"summary": None})
+    text = ai_dashboard_summary(get_db)
+    return jsonify({"summary": text})
+
+
+@app.route("/api/ai/chamado/<int:chamado_id>/sugestao", methods=["POST"])
+@login_required
+def web_ai_chamado_sugestao(chamado_id):
+    try:
+        from ai_features import ai_suggest_chamado_fix
+    except ImportError:
+        return jsonify({"error": "ai_features indisponível"}), 503
+    result = ai_suggest_chamado_fix(get_db, chamado_id)
+    # Persiste a sugestão pra reuso
+    if result.get("sugestao") and "error" not in result:
+        try:
+            conn = get_db()
+            with conn.cursor() as cur:
+                cur.execute("UPDATE chamados SET ai_sugestao=%s WHERE id=%s",
+                            (result["sugestao"], chamado_id))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+    return jsonify(result)
+
+
+@app.route("/api/ai/chamado/<int:chamado_id>/classificar", methods=["POST"])
+@login_required
+def web_ai_chamado_classificar(chamado_id):
+    try:
+        from ai_features import ai_classify_chamado
+    except ImportError:
+        return jsonify({"error": "ai_features indisponível"}), 503
+    cat = ai_classify_chamado(get_db, chamado_id, persist=True)
+    return jsonify({"categoria": cat})
+
+
+@app.route("/anomalias")
+@login_required
+def anomalias_consumo_lista():
+    """Tela com clientes com consumo anômalo detectado."""
+    conn = get_db()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT a.*, c.nome AS cliente_nome, c.cpf, c.pppoe_login, c.plano
+              FROM consumo_anomalias a
+              LEFT JOIN clientes c ON c.id = a.cliente_id
+             WHERE a.ignorado = FALSE
+          ORDER BY a.zscore DESC, a.detectado_em DESC
+             LIMIT 100
+        """)
+        anomalias = cur.fetchall()
+    conn.close()
+    return render_template("anomalias.html", anomalias=anomalias)
+
+
+@app.route("/api/anomalias/<int:anomalia_id>/ignorar", methods=["POST"])
+@login_required
+def api_anomalia_ignorar(anomalia_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE consumo_anomalias
+               SET ignorado=TRUE, ignorado_em=NOW(), ignorado_por=%s
+             WHERE id=%s
+        """, (session.get("usuario_username", "?"), anomalia_id))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/anomalias/scan", methods=["POST"])
+@login_required
+def api_anomalias_scan():
+    """Roda detecção sob demanda (sync também roda 1x/dia)."""
+    try:
+        from ai_features import detect_consumo_anomalies
+    except ImportError:
+        return jsonify({"error": "ai_features indisponível"}), 503
+    detectadas = detect_consumo_anomalies(get_db)
+    return jsonify({"ok": True, "detectadas": len(detectadas)})
+
+
+# ===========================================================================
+# Importação SGP em lote (Fase T)
+# ===========================================================================
+
+@app.route("/clientes/importar-sgp", methods=["GET", "POST"])
+@login_required
+def importar_sgp_lote():
+    """Upload CSV com CPFs, consulta SGP, cria/atualiza clientes."""
+    if request.method == "GET":
+        conn = get_db()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id, nome, velocidade_down, velocidade_up FROM planos ORDER BY nome")
+            planos = cur.fetchall()
+        conn.close()
+        return render_template("importar_sgp_lote.html", planos=planos)
+
+    arquivo = request.files.get("arquivo")
+    if not arquivo:
+        flash("Arquivo CSV obrigatório.", "danger")
+        return redirect(url_for("importar_sgp_lote"))
+
+    plano_default_id = request.form.get("plano_default_id")
+    if not plano_default_id:
+        flash("Selecione um plano default.", "danger")
+        return redirect(url_for("importar_sgp_lote"))
+
+    # Lê CSV (1 CPF por linha)
+    try:
+        content = arquivo.read().decode("utf-8", errors="ignore")
+        cpfs_raw = [l.strip() for l in content.splitlines() if l.strip()]
+        cpfs = []
+        for c in cpfs_raw:
+            limpo = re.sub(r"\D", "", c)
+            if len(limpo) == 11 and limpo not in cpfs:
+                cpfs.append(limpo)
+    except Exception as e:
+        flash(f"Erro ao ler CSV: {e}", "danger")
+        return redirect(url_for("importar_sgp_lote"))
+
+    if not cpfs:
+        flash("Nenhum CPF válido encontrado.", "danger")
+        return redirect(url_for("importar_sgp_lote"))
+
+    # Limite de segurança (evita travar)
+    if len(cpfs) > 500:
+        flash(f"Limite de 500 CPFs por importação ({len(cpfs)} no arquivo).", "danger")
+        return redirect(url_for("importar_sgp_lote"))
+
+    return render_template(
+        "importar_sgp_lote_progresso.html",
+        cpfs=cpfs, plano_default_id=plano_default_id, total=len(cpfs),
+    )
+
+
+@app.route("/api/sgp/importar-lote/processar", methods=["POST"])
+@login_required
+def api_sgp_importar_processar():
+    """Processa 1 CPF por chamada (frontend chama em loop com progresso)."""
+    body = request.get_json(silent=True) or {}
+    cpf = re.sub(r"\D", "", body.get("cpf") or "")
+    plano_id = body.get("plano_id")
+    if len(cpf) != 11 or not plano_id:
+        return jsonify({"ok": False, "error": "cpf ou plano_id inválido"}), 400
+
+    contrato = consultar_sgp(cpf)
+    if not contrato:
+        return jsonify({"ok": False, "cpf": cpf, "msg": "não encontrado no SGP"})
+
+    pppoe_login = contrato.get("contratoCentralLogin") or ""
+    nome = contrato.get("contratoNome") or "(sem nome)"
+    ip = contrato.get("servico_ip") or ""
+    novo_status = status_from_sgp(contrato)
+
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM planos WHERE id=%s", (plano_id,))
+            plano = cur.fetchone()
+            if not plano:
+                return jsonify({"ok": False, "error": "plano default inválido"}), 400
+
+            cur.execute("SELECT id FROM clientes WHERE cpf=%s", (cpf,))
+            existing = cur.fetchone()
+
+            if existing:
+                cur.execute("""
+                    UPDATE clientes
+                       SET nome=%s, pppoe_login=%s, ip=%s, status=%s,
+                           atualizado_em=NOW(), ultimo_sync_em=NOW()
+                     WHERE id=%s
+                """, (nome, pppoe_login or None, ip or None, novo_status, existing["id"]))
+                cliente_id = existing["id"]
+                acao = "atualizado"
+            else:
+                cur.execute("""
+                    INSERT INTO clientes (nome, cpf, ip, plano, velocidade_down, velocidade_up,
+                                          plano_id, pppoe_login, status, ultimo_sync_em)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    RETURNING id
+                """, (nome, cpf, ip or None, plano["nome"],
+                      plano["velocidade_down"], plano["velocidade_up"],
+                      plano_id, pppoe_login or None, novo_status))
+                cliente_id = cur.fetchone()["id"]
+                acao = "criado"
+        conn.commit()
+
+        if pppoe_login:
+            upsert_radius_user(conn, pppoe_login, novo_status,
+                               plano["velocidade_down"], plano["velocidade_up"], ip)
+    finally:
+        conn.close()
+
+    return jsonify({
+        "ok": True, "cpf": cpf, "nome": nome,
+        "pppoe_login": pppoe_login, "status": novo_status,
+        "acao": acao, "cliente_id": cliente_id,
+    })
+
+
 @app.route("/api/chamados/<int:chamado_id>/resolver", methods=["POST"])
 @login_required
 def resolver_chamado(chamado_id):

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Importando SGP...{% endblock %}
+{% block page_title %}Importação em Progresso{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Importar SGP</li>{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <h5 class="mb-3">Processando <strong>{{ total }}</strong> CPF(s)...</h5>
+
+            <div class="progress mb-3" style="height: 30px;">
+                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar" style="width: 0%">0%</div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-3"><div class="card bg-success text-white"><div class="card-body py-2 text-center"><div id="cntCriados" class="h3 mb-0">0</div><small>Criados</small></div></div></div>
+                <div class="col-md-3"><div class="card bg-info text-white"><div class="card-body py-2 text-center"><div id="cntAtualizados" class="h3 mb-0">0</div><small>Atualizados</small></div></div></div>
+                <div class="col-md-3"><div class="card bg-warning text-dark"><div class="card-body py-2 text-center"><div id="cntNaoEncontrados" class="h3 mb-0">0</div><small>Não no SGP</small></div></div></div>
+                <div class="col-md-3"><div class="card bg-danger text-white"><div class="card-body py-2 text-center"><div id="cntErros" class="h3 mb-0">0</div><small>Erros</small></div></div></div>
+            </div>
+
+            <div id="logArea" class="font-monospace small p-3" style="background:#f8fafc;border-radius:8px;max-height:400px;overflow-y:auto"></div>
+
+            <div class="mt-3 d-flex gap-2">
+                <button id="btnCancelar" class="btn btn-outline-secondary" onclick="cancelar()">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                <a id="btnVoltar" href="{{ url_for('index') }}" class="btn btn-success" style="display:none">
+                    <i class="bi bi-check2-circle"></i> Concluído — voltar ao painel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CPFS = {{ cpfs | tojson }};
+const PLANO_ID = {{ plano_default_id | tojson }};
+const TOTAL = CPFS.length;
+
+let idx = 0, criados = 0, atualizados = 0, naoEncontrados = 0, erros = 0;
+let cancelado = false;
+
+const log = (linha, classe = '') => {
+    const div = document.createElement('div');
+    div.className = classe;
+    div.textContent = linha;
+    const area = document.getElementById('logArea');
+    area.appendChild(div);
+    area.scrollTop = area.scrollHeight;
+};
+const updateProgress = () => {
+    const pct = Math.round((idx / TOTAL) * 100);
+    const bar = document.getElementById('progressBar');
+    bar.style.width = pct + '%';
+    bar.textContent = pct + '% (' + idx + '/' + TOTAL + ')';
+    document.getElementById('cntCriados').textContent = criados;
+    document.getElementById('cntAtualizados').textContent = atualizados;
+    document.getElementById('cntNaoEncontrados').textContent = naoEncontrados;
+    document.getElementById('cntErros').textContent = erros;
+};
+const cancelar = () => { cancelado = true; };
+
+(async function() {
+    for (const cpf of CPFS) {
+        if (cancelado) { log('🛑 Cancelado pelo usuário', 'text-warning'); break; }
+        try {
+            const r = await fetch('/api/sgp/importar-lote/processar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({cpf, plano_id: PLANO_ID}),
+            });
+            const d = await r.json();
+            if (d.ok) {
+                if (d.acao === 'criado') { criados++; log(`✓ ${cpf} → criou: ${d.nome} (${d.pppoe_login || 's/login'})`, 'text-success'); }
+                else { atualizados++; log(`↻ ${cpf} → atualizou: ${d.nome}`, 'text-info'); }
+            } else {
+                naoEncontrados++;
+                log(`⚠ ${cpf} → ${d.msg || d.error || 'falhou'}`, 'text-warning');
+            }
+        } catch (e) {
+            erros++;
+            log(`❌ ${cpf} → erro: ${e.message}`, 'text-danger');
+        }
+        idx++;
+        updateProgress();
+    }
+    document.getElementById('btnCancelar').style.display = 'none';
+    document.getElementById('btnVoltar').style.display = '';
+    log('=== Importação finalizada ===', 'fw-bold mt-2');
+})();
+</script>
+{% endblock %}

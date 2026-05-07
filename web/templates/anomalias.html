@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Anomalias de Consumo{% endblock %}
+{% block page_title %}Anomalias de Consumo 🤖{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Anomalias</li>{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+
+    <div class="alert alert-info mb-3">
+        <i class="bi bi-info-circle"></i>
+        <strong>Detecção automática</strong> de clientes com consumo fora do padrão histórico.
+        Z-score &gt; 3 indica desvio &gt; 3 vezes o padrão normal — possível repasse de WiFi, fraude ou mudança de uso.
+    </div>
+
+    <div class="d-flex gap-2 mb-3">
+        <button class="btn btn-primary" onclick="rodarScan()">
+            <i class="bi bi-arrow-repeat"></i> Rodar detecção agora
+        </button>
+        <span class="text-muted small align-self-center" id="scanStatus"></span>
+    </div>
+
+    {% if anomalias %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Detectado em</th>
+                <th>Cliente</th>
+                <th>PPPoE</th>
+                <th>Plano</th>
+                <th>Consumo 7d</th>
+                <th>Esperado</th>
+                <th>Z-score</th>
+                <th>Severidade</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for a in anomalias %}
+        <tr id="anom-{{ a.id }}">
+            <td class="small text-muted">{{ a.detectado_em.strftime('%d/%m %H:%M') if a.detectado_em }}</td>
+            <td>
+                {% if a.cliente_id %}
+                <a href="{{ url_for('cliente_sessoes', cliente_id=a.cliente_id) }}">{{ a.cliente_nome or '?' }}</a>
+                {% else %}—{% endif %}
+            </td>
+            <td class="font-monospace small">{{ a.pppoe_login or '—' }}</td>
+            <td class="small">{{ a.plano or '—' }}</td>
+            <td><strong>{{ "%.1f"|format(a.consumo_atual_gb or 0) }} GB</strong></td>
+            <td class="text-muted">{{ "%.1f"|format(a.media_30d_gb or 0) }} GB</td>
+            <td>
+                <span class="badge bg-{{ 'danger' if (a.zscore or 0) > 5 else 'warning text-dark' }}">
+                    {{ "%.1f"|format(a.zscore or 0) }}σ
+                </span>
+            </td>
+            <td>
+                {% if a.severidade == 'critical' %}
+                <span class="badge bg-danger">Crítica</span>
+                {% else %}
+                <span class="badge bg-warning text-dark">Atenção</span>
+                {% endif %}
+            </td>
+            <td>
+                <button class="btn btn-outline-secondary btn-sm" onclick="ignorar({{ a.id }})">
+                    <i class="bi bi-eye-slash"></i> Ignorar
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-check2-circle" style="font-size:3rem;display:block;margin-bottom:12px;color:#16a34a"></i>
+        <div>Nenhuma anomalia ativa.</div>
+        <div class="small mt-2">Rode a detecção pra escanear o consumo dos últimos 7 dias.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function rodarScan() {
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    document.getElementById('scanStatus').textContent = 'Escaneando...';
+    try {
+        const r = await fetch('/api/anomalias/scan', {method:'POST'});
+        const d = await r.json();
+        if (d.ok) {
+            document.getElementById('scanStatus').textContent = `✓ ${d.detectadas} novas detectada(s)`;
+            if (d.detectadas > 0) setTimeout(() => location.reload(), 1500);
+        }
+    } finally {
+        btn.disabled = false;
+    }
+}
+async function ignorar(id) {
+    if (!confirm('Ignorar esta anomalia?')) return;
+    const r = await fetch(`/api/anomalias/${id}/ignorar`, {method:'POST'});
+    if ((await r.json()).ok) document.getElementById('anom-' + id).remove();
+}
+</script>
+{% endblock %}

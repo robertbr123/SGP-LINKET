@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T23:18:13.441Z",
+  "timestamp": "2026-05-07T01:46:12.472Z",
   "source": "auto-postool",
   "partial": false,
   "phase": null,
@@ -15,7 +15,72 @@
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [],
-  "uncommitted_files": [],
+  "uncommitted_files": [
+    {
+      "status": "M",
+      "path": ".claude/settings.local.json"
+    },
+    {
+      "status": "M",
+      "path": ".planning/HANDOFF.json"
+    },
+    {
+      "status": "M",
+      "path": "mini_app/ai_features.py"
+    },
+    {
+      "status": "M",
+      "path": "sync/Dockerfile"
+    },
+    {
+      "status": "M",
+      "path": "sync/summaries.py"
+    },
+    {
+      "status": "M",
+      "path": "web/ai_features.py"
+    },
+    {
+      "status": "M",
+      "path": "web/app.py"
+    },
+    {
+      "status": "M",
+      "path": "web/templates/base.html"
+    },
+    {
+      "status": "M",
+      "path": "web/templates/chamados.html"
+    },
+    {
+      "status": "M",
+      "path": "web/templates/cliente_sessoes.html"
+    },
+    {
+      "status": "M",
+      "path": "web/templates/index.html"
+    },
+    {
+      "status": "??",
+      "path": "sync/ai_features.py"
+    },
+    {
+      "status": "??",
+      "path": "web/alembic/versions/0004_ai_features_extra.py"
+    },
+    {
+      "status": "??",
+      "path": "web/templates/anomalias.html"
+    },
+    {
+      "status": "??",
+      "path": "web/templates/importar_sgp_lote.html"
+    },
+    {
+      "status": "??",
+      "path": "web/templates/importar_sgp_lote_progresso.html"
+    }
+  ],
   "next_action": null,
-  "context_notes": "Recent commits:\ne935ffd update novas brasil\n6d4d3f6 update novas features\nb821504 teste webhook\n5d60801 update IA para todo lugar\ne3b5a6b IA"
+  "context_notes": "Recent commits:\nf194566 revolta\n5f3e95e docker compose\ne935ffd update novas brasil\n6d4d3f6 update novas features\nb821504 teste webhook"
 }

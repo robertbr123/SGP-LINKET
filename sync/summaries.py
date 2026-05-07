@@ -315,13 +315,42 @@ def maybe_send_summaries(conn, redis_client, notifier):
                 msg = _heartbeat_message(conn, redis_client)
             elif chave == "morning":
                 msg = builder(conn)
-                # Anexa análise IA + roda predições no mesmo slot diário
+                # Anexa análise IA + roda predições + detecta anomalias no mesmo slot diário
                 if PREDICTIONS_AVAILABLE:
                     try:
                         check_cpe_predictions(conn, redis_client, notifier)
                         cleanup_old_rx_history(conn, days=30)
                     except Exception as e:
                         log.warning("predictions error: %s", e)
+                # Detecção de fraude (Fase S)
+                try:
+                    from ai_features import detect_consumo_anomalies
+                    import os, psycopg2
+                    def _factory():
+                        return psycopg2.connect(
+                            host=os.environ.get("DB_HOST", "postgres"),
+                            dbname=os.environ.get("DB_NAME", "radius"),
+                            user=os.environ.get("DB_USER", "radius"),
+                            password=os.environ.get("DB_PASS", "radiuspassword"),
+                        )
+                    anomalias_novas = detect_consumo_anomalies(_factory)
+                    if anomalias_novas:
+                        # Notifica top 5 maiores
+                        top = sorted(anomalias_novas, key=lambda a: a.get("zscore") or 0, reverse=True)[:5]
+                        lista = "\n".join(
+                            f"• <b>{a['nome']}</b> ({a['pppoe_login'] or '?'}) — "
+                            f"{a['atual_gb']:.0f} GB (esperado {a['esperado_gb']:.0f}), z={a['zscore']:.1f}σ"
+                            for a in top
+                        )
+                        notifier.send(
+                            "consumo_anomalia",
+                            f"<b>🚨 {len(anomalias_novas)} anomalia(s) de consumo detectada(s)</b>\n"
+                            f"<i>(possível repasse de WiFi ou fraude — confira no painel)</i>\n\n{lista}",
+                            severity="warning",
+                            cooldown=21600,  # 6h
+                        )
+                except Exception as e:
+                    log.warning("anomalias error: %s", e)
                 ai_text = generate_morning_analysis(conn) if AI_AVAILABLE else None
                 if ai_text: msg += ai_text
             elif chave == "shift":
