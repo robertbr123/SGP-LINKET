@@ -2,7 +2,7 @@
 {% block title %}Sessões — {{ cliente.nome }}{% endblock %}
 {% block page_title %}Histórico de Sessões{% endblock %}
 {% block breadcrumb %}
-<li class="breadcrumb-item"><a href="{{ url_for('listar_clientes') }}">Clientes</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('index') }}">Clientes</a></li>
 <li class="breadcrumb-item"><a href="{{ url_for('editar_cliente', cliente_id=cliente.id) }}">{{ cliente.nome }}</a></li>
 <li class="breadcrumb-item active">Sessões</li>
 {% endblock %}
